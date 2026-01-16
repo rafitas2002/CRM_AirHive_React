@@ -24,8 +24,8 @@ export default function TopBar() {
                     <Image
                         src='/airhive_logo_azul_sinfondo.svg'
                         alt='Air Hive'
-                        width={210}
-                        height={70}
+                        width={240}
+                        height={80}
                         priority
                     />
                 </div>
