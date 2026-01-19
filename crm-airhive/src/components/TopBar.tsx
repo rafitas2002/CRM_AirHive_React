@@ -58,15 +58,21 @@ export default function TopBar() {
                 {/* Chip usuario */}
                 <div className='flex items-center gap-6 mr-8'>
                     <div className='h-7 px-3 rounded-full border border-white/20 bg-white/15 text-white text-xs font-bold flex items-center'>
-                        👤 {auth.username}
+                        👤 {auth.loading ? 'Cargando...' : auth.username}
                     </div>
 
                     <button
                         type='button'
-                        className='relative text-white font-semibold text-base px-2 py-2 group'
-                        onClick={auth.logout}
+                        disabled={auth.busy || auth.loading}
+                        className={[
+                            'relative text-white font-semibold text-base px-2 py-2 group',
+                            (auth.busy || auth.loading) ? 'opacity-50 cursor-not-allowed' : ''
+                        ].join(' ')}
+                        onClick={async () => {
+                            await auth.logout()
+                        }}
                     >
-                        Salir
+                        {auth.busy ? 'Saliendo...' : 'Salir'}
                         <span
                             className='absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF] transition-all duration-300 ease-out w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
                         />

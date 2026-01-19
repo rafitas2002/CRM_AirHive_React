@@ -1,67 +1,171 @@
 'use client'
 
-import React, { createContext, useContext, useMemo, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from './supabase'
+import { Session, User } from '@supabase/supabase-js'
+
+type Profile = {
+    id: string
+    username: string | null
+    role: string | null
+    full_name: string | null
+}
 
 type AuthState = {
     loggedIn: boolean
     username: string
+    profile: Profile | null
+    loading: boolean
     busy: boolean
     lastError: string
     login: (username: string, password: string) => Promise<void>
-    logout: () => void
+    logout: () => Promise<void>
     clearError: () => void
+    user: User | null
 }
 
 const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter()
+    const [supabase] = useState(() => createClient())
 
-    const [loggedIn, setLoggedIn] = useState(false)
-    const [username, setUsername] = useState('')
-    const [busy, setBusy] = useState(false)
+    const [user, setUser] = useState<User | null>(null)
+    const [profile, setProfile] = useState<Profile | null>(null)
+    const [loading, setLoading] = useState(true) // Initial loading state
+    const [busy, setBusy] = useState(false) // Action busy state (login/logout)
     const [lastError, setLastError] = useState('')
 
     const clearError = () => setLastError('')
 
-    const login = async (u: string, p: string) => {
+    // Initial session check
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session?.user) {
+                    // Don't block loading on profile fetch? 
+                    // Better to block to avoid flicker, but with timeout.
+                    await handleUserSession(session.user)
+                } else {
+                    setLoading(false)
+                }
+            } catch (error) {
+                console.error('Error checking session:', error)
+                setLoading(false)
+            }
+        }
+
+        init()
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                if (session.user.id !== user?.id) {
+                    setLoading(true)
+                    await handleUserSession(session.user)
+                }
+            } else {
+                setUser(null)
+                setProfile(null)
+                setLoading(false)
+            }
+        })
+
+        return () => subscription.unsubscribe()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    const handleUserSession = async (authUser: User) => {
+        setUser(authUser)
+        try {
+            // Fetch profile with timeout
+            const profilePromise = supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', authUser.id)
+                .single()
+
+            const { data, error } = await Promise.race([
+                profilePromise,
+                new Promise<any>(resolve => setTimeout(() => resolve({ error: { message: 'Timeout' } }), 5000))
+            ])
+
+            if (data) {
+                setProfile(data)
+            } else if (error) {
+                console.warn('Error fetching profile (or timeout):', error)
+            }
+        } catch (err) {
+            console.error('Unexpected error fetching profile:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Login... (remains mostly same, uses setBusy)
+    const login = async (usernameInput: string, p: string) => {
         setBusy(true)
         setLastError('')
 
-        const user = u.trim()
-        setUsername(user)
+        const domain = process.env.NEXT_PUBLIC_AUTH_DOMAIN || 'airhive.local'
+        const email = usernameInput.includes('@')
+            ? usernameInput
+            : `${usernameInput}@${domain}`
 
-        // ✅ Mock temporal para clonar Qt: luego lo conectamos a Supabase real
-        await new Promise(resolve => setTimeout(resolve, 450))
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: p
+        })
 
-        if (!user || !p || p.length < 2) {
-            setLastError('Usuario y/o contraseña incorrectos')
+        if (error) {
+            console.error('Login error:', error)
+            let msg = 'Error al iniciar sesión'
+            if (error.message.includes('Invalid login credentials')) {
+                msg = 'Usuario o contraseña incorrectos'
+            } else if (error.message.includes('Email not confirmed')) {
+                msg = 'Por favor verifica tu correo electrónico'
+            }
+            setLastError(msg)
             setBusy(false)
             return
         }
 
-        setLoggedIn(true)
         setBusy(false)
-        router.push('/home')
+        router.push('/')
     }
 
-    const logout = () => {
-        setLoggedIn(false)
-        setUsername('')
-        setLastError('')
-        router.push('/login')
+    const logout = async () => {
+        console.log('Logging out...')
+        setBusy(true) // Explicitly busy for action
+        try {
+            await Promise.race([
+                supabase.auth.signOut(),
+                new Promise(resolve => setTimeout(resolve, 2000))
+            ])
+        } catch (err) {
+            console.error('Unexpected error signing out:', err)
+        }
+
+        setUser(null)
+        setProfile(null)
+        setBusy(false)
+
+        window.location.href = '/login'
     }
 
     const value = useMemo(() => ({
-        loggedIn,
-        username,
+        loggedIn: !!user,
+        username: profile?.username || user?.email || '',
+        profile,
+        loading,
         busy,
         lastError,
         login,
         logout,
-        clearError
-    }), [loggedIn, username, busy, lastError])
+        clearError,
+        user
+    }), [user, profile, loading, busy, lastError])
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

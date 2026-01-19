@@ -7,12 +7,16 @@ import Image from 'next/image'
 export default function LoginPage() {
     const auth = useAuth()
 
-    const [user, setUser] = useState('')
+    const [username, setUsername] = useState('')
     const [pass, setPass] = useState('')
 
     useEffect(() => {
-        if (auth.loggedIn) auth.logout() // opcional: si entras a /login ya logeado, “resetea”
-        // si no quieres eso, quítalo
+        // Opción: si entras a /login ya logeado, el middleware redirige, 
+        // pero por si acaso el cliente también puede manejarlo.
+        if (auth.loggedIn) {
+            // Ya está manejado por middleware o router.push en auth, 
+            // pero podemos forzar redirect si se quiere.
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
@@ -20,7 +24,7 @@ export default function LoginPage() {
         e.preventDefault()
         auth.clearError()
 
-        const u = user.trim()
+        const u = username.trim()
         const p = pass
 
         if (!u || !p) return
@@ -64,10 +68,11 @@ export default function LoginPage() {
                                 <input
                                     className='w-full rounded-[10px] bg-[#F3F4F6] px-4 py-3 text-sm text-black outline-none border border-transparent focus:border-[#2048FF]'
                                     placeholder='Usuario'
-                                    value={user}
+                                    type='text'
+                                    value={username}
                                     onChange={(e) => {
                                         auth.clearError()
-                                        setUser(e.target.value)
+                                        setUsername(e.target.value)
                                     }}
                                     autoComplete='username'
                                 />
