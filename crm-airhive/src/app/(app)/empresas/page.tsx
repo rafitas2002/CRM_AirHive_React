@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase'
 import CompaniesTable from '@/components/CompaniesTable'
 import { CompanyData } from '@/components/CompanyModal'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
+import ConfirmModal from '@/components/ConfirmModal'
 
 export default function EmpresasPage() {
     const auth = useAuth()
@@ -15,6 +16,8 @@ export default function EmpresasPage() {
     const [loading, setLoading] = useState(true)
     const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+    const [companyToDelete, setCompanyToDelete] = useState<string | null>(null)
     const supabase = createClient()
 
     useEffect(() => {
@@ -47,6 +50,30 @@ export default function EmpresasPage() {
     const handleRowClick = (company: CompanyData) => {
         setSelectedCompany(company)
         setIsDetailOpen(true)
+    }
+
+    const handleDeleteClick = (id: string) => {
+        setCompanyToDelete(id)
+        setIsDeleteModalOpen(true)
+    }
+
+    const confirmDelete = async () => {
+        if (!companyToDelete) return
+
+        const { error } = await supabase
+            .from('empresas')
+            .delete()
+            .eq('id', companyToDelete)
+
+        if (error) {
+            console.error('Error deleting company:', error)
+            alert('Error al eliminar la empresa')
+        } else {
+            await fetchCompanies()
+        }
+
+        setIsDeleteModalOpen(false)
+        setCompanyToDelete(null)
     }
 
     if (auth.loading || loading) {
@@ -91,6 +118,7 @@ export default function EmpresasPage() {
                     <CompaniesTable
                         companies={companies}
                         onRowClick={handleRowClick}
+                        onDelete={handleDeleteClick}
                     />
                 </div>
             </div>
@@ -103,6 +131,16 @@ export default function EmpresasPage() {
                     company={selectedCompany}
                 />
             )}
+
+            {/* Delete Confirmation */}
+            <ConfirmModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={confirmDelete}
+                title="Eliminar Empresa"
+                message="¿Estás seguro de que deseas eliminar esta empresa? Los leads asociados no se eliminarán, pero ya no estarán vinculados a esta empresa."
+                isDestructive={true}
+            />
         </div>
     )
 }

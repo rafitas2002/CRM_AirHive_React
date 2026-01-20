@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
@@ -61,6 +61,17 @@ export default function LeadsPage() {
     const [newlySavedCompany, setNewlySavedCompany] = useState<{ id: string, nombre: string } | null>(null)
     const [companiesList, setCompaniesList] = useState<{ id: string, nombre: string, industria?: string, ubicacion?: string }[]>([])
 
+    // Memoized initial data to avoid reference changes on every render
+    const memoizedInitialLead = useMemo(() => {
+        if (!isModalOpen) return null
+        return currentLead ? normalizeLead(currentLead) : null
+    }, [isModalOpen, currentLead])
+
+    const memoizedInitialCompany = useMemo(() => {
+        if (!isCompanyModalOpen) return null
+        return currentCompany ? normalizeCompany(currentCompany) : null
+    }, [isCompanyModalOpen, currentCompany])
+
     const fetchLeads = async () => {
         setLoading(true)
         const { data, error } = await supabase
@@ -111,9 +122,21 @@ export default function LeadsPage() {
         // 3. currentLead?.empresa_id (existing link if any)
         const finalEmpresaId = leadData.empresa_id || linkedCompanyId || (modalMode === 'edit' ? currentLead?.empresa_id : undefined)
 
+        let finalEmpresaName = leadData.empresa
+        if (finalEmpresaId) {
+            // Find the official name from our lists
+            const officialCompany = companiesList.find(c => c.id === finalEmpresaId) ||
+                (newlySavedCompany?.id === finalEmpresaId ? newlySavedCompany : null)
+
+            if (officialCompany) {
+                finalEmpresaName = officialCompany.nombre
+            }
+        }
+
         if (modalMode === 'create') {
             const payload: LeadInsert = {
                 ...leadData,
+                empresa: finalEmpresaName,
                 owner_id: currentUser.id,
                 owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
                 empresa_id: finalEmpresaId as string
@@ -131,6 +154,7 @@ export default function LeadsPage() {
         } else if (modalMode === 'edit' && currentLead) {
             const payload: LeadUpdate = {
                 ...leadData,
+                empresa: finalEmpresaName,
                 empresa_id: finalEmpresaId as string
             }
 
@@ -269,6 +293,11 @@ export default function LeadsPage() {
             console.error('Error deleting lead:', error)
             alert('Error al eliminar el lead')
         } else {
+            // Clear selected lead if it's the one being deleted
+            if (selectedLead?.id === clientToDelete) {
+                setSelectedLead(null)
+                setIsDetailViewOpen(false)
+            }
             await fetchLeads()
         }
         setClientToDelete(null)
@@ -335,7 +364,7 @@ export default function LeadsPage() {
                         clientes={leads}
                         isEditingMode={isEditingMode}
                         onEdit={openEditModal}
-                        onDelete={handleRowClick as any} // This looks like it was wrong before or I need to be careful
+                        onDelete={handleDeleteClick}
                         onRowClick={handleRowClick}
                     />
                 )}
@@ -346,7 +375,7 @@ export default function LeadsPage() {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onSave={(data) => handleSaveLead(data as any)}
-                initialData={currentLead ? normalizeLead(currentLead) : null}
+                initialData={memoizedInitialLead}
                 mode={modalMode}
                 onOpenAdvanced={handleOpenAdvanced}
                 companies={companiesList}
@@ -358,7 +387,7 @@ export default function LeadsPage() {
                 isOpen={isCompanyModalOpen}
                 onClose={() => setIsCompanyModalOpen(false)}
                 onSave={handleSaveCompany}
-                initialData={currentCompany ? normalizeCompany(currentCompany) : null}
+                initialData={memoizedInitialCompany}
                 companies={companiesList as any}
             />
 

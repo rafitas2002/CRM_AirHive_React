@@ -50,24 +50,28 @@ export default function ClientModal({
     const [filteredCompanies, setFilteredCompanies] = useState<{ id: string, nombre: string }[]>([])
     const [showSuggestions, setShowSuggestions] = useState(false)
     const wrapperRef = useRef<HTMLDivElement>(null)
+    const wasOpen = useRef(false)
 
     useEffect(() => {
-        if (isOpen && initialData) {
-            setFormData(initialData)
-        } else if (isOpen && !initialData) {
-            // Reset form for create mode
-            setFormData({
-                empresa: '',
-                nombre: '',
-                contacto: '',
-                etapa: 'Prospección',
-                valor_estimado: 0,
-                oportunidad: '',
-                calificacion: 3,
-                notas: '',
-                empresa_id: undefined
-            })
+        if (isOpen && !wasOpen.current) {
+            // Modal is opening, initialize/reset form
+            if (initialData) {
+                setFormData(initialData)
+            } else {
+                setFormData({
+                    empresa: '',
+                    nombre: '',
+                    contacto: '',
+                    etapa: 'Prospección',
+                    valor_estimado: 0,
+                    oportunidad: '',
+                    calificacion: 3,
+                    notas: '',
+                    empresa_id: undefined
+                })
+            }
         }
+        wasOpen.current = isOpen
     }, [isOpen, initialData])
 
     // Sync from Advanced Details

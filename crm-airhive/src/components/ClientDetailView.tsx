@@ -143,14 +143,14 @@ export default function ClientDetailView({
                                     <div>
                                         <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Calificación</label>
                                         <div className='flex text-yellow-400 mt-1'>
-                                            {'★'.repeat(client.calificacion)}{'☆'.repeat(5 - client.calificacion)}
+                                            {'★'.repeat(Math.max(0, Math.min(5, client?.calificacion || 0)))}{'☆'.repeat(Math.max(0, 5 - (client?.calificacion || 0)))}
                                         </div>
                                     </div>
                                 </div>
                                 <div>
                                     <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Valor Estimado</label>
                                     <p className='text-[#0A1635] font-bold text-xl'>
-                                        ${client.valor_estimado.toLocaleString()}
+                                        ${client?.valor_estimado?.toLocaleString() || '0'}
                                     </p>
                                 </div>
                                 <div className='pt-2 border-t border-gray-100'>
@@ -215,13 +215,13 @@ export default function ClientDetailView({
                                                 href={company.website.match(/^https?:\/\//) ? company.website : `https://${company.website}`}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
-                                                className='text-[#2048FF] hover:underline text-sm flex items-center gap-1'
+                                                className='text-[#2048FF] hover:underline text-sm flex items-center gap-1 break-all justify-center'
                                             >
-                                                🔗 {company.website}
+                                                🔗 <span className='truncate'>{company.website}</span>
                                             </a>
                                         ) : (
-                                            <span className='text-gray-600 text-sm flex items-center gap-1'>
-                                                {company.website && '🔗'} {company.website || 'Sin sitio web'}
+                                            <span className='text-gray-600 text-sm flex items-center gap-1 break-all justify-center'>
+                                                {company.website && '🔗'} <span className='truncate'>{company.website || 'Sin sitio web'}</span>
                                             </span>
                                         )}
                                     </div>
