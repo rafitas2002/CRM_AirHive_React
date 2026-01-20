@@ -20,7 +20,7 @@ export default function TopBar() {
     return (
         <header className='h-[70px] bg-black border-b-2 border-black'>
             <div className='h-full px-3 flex items-center gap-6'>
-                <div className='flex items-center'>
+                <Link href='/home' className='flex items-center hover:opacity-80 transition-opacity'>
                     <Image
                         src='/airhive_logo_azul_sinfondo.svg'
                         alt='Air Hive'
@@ -28,7 +28,7 @@ export default function TopBar() {
                         height={80}
                         priority
                     />
-                </div>
+                </Link>
 
                 <nav className='flex items-center gap-10'>
                     {links.map(l => {

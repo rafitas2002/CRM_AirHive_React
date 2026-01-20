@@ -23,7 +23,8 @@ const normalizeLead = (lead: Lead) => ({
     oportunidad: lead.oportunidad || '',
     calificacion: lead.calificacion || 3,
     notas: lead.notas || '',
-    empresa_id: lead.empresa_id || undefined
+    empresa_id: lead.empresa_id || undefined,
+    probabilidad: (lead as any).probabilidad || 0
 })
 
 export default function LeadsPage() {
@@ -48,11 +49,37 @@ export default function LeadsPage() {
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
     const [companiesList, setCompaniesList] = useState<{ id: string, nombre: string, industria?: string, ubicacion?: string }[]>([])
 
+    // Filtering State
+    const [filterSearch, setFilterSearch] = useState('')
+    const [filterStage, setFilterStage] = useState('All')
+    const [filterOwner, setFilterOwner] = useState('All')
+
     // Memoized initial data to avoid reference changes on every render
     const memoizedInitialLead = useMemo(() => {
         if (!isModalOpen) return null
         return currentLead ? normalizeLead(currentLead) : null
     }, [isModalOpen, currentLead])
+
+    // Filter Logic
+    const filteredLeads = useMemo(() => {
+        return leads.filter(lead => {
+            const matchesSearch = !filterSearch ||
+                lead.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
+                lead.empresa?.toLowerCase().includes(filterSearch.toLowerCase()) ||
+                lead.contacto?.toLowerCase().includes(filterSearch.toLowerCase())
+
+            const matchesStage = filterStage === 'All' || lead.etapa === filterStage
+            const matchesOwner = filterOwner === 'All' || lead.owner_username === filterOwner
+
+            return matchesSearch && matchesStage && matchesOwner
+        })
+    }, [leads, filterSearch, filterStage, filterOwner])
+
+    // Get unique owners for filter dropdown
+    const uniqueOwners = useMemo(() => {
+        const owners = new Set(leads.map(l => l.owner_username).filter((o): o is string => !!o))
+        return Array.from(owners).sort()
+    }, [leads])
 
     const fetchLeads = async () => {
         setLoading(true)
@@ -211,36 +238,98 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-6 overflow-hidden bg-gray-50'>
-            <div className='w-full mx-auto flex flex-col h-full gap-6'>
+        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#E9ECEF]'>
+            <div className='w-full mx-auto flex flex-col h-full gap-8'>
                 {/* Header - Fixed */}
-                <div className='shrink-0 flex items-center justify-between'>
-                    <h1 className='text-3xl font-bold text-[#0A1635]'>
-                        Leads
-                    </h1>
+                <div className='shrink-0 space-y-4'>
+                    <div className='flex items-center justify-between'>
+                        <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>
+                            Leads
+                        </h1>
 
-                    <div className='flex gap-3'>
-                        <button
-                            onClick={() => setIsEditingMode(!isEditingMode)}
-                            className={`px-4 py-2 text-white rounded-lg font-medium transition-colors shadow-sm ${isEditingMode
-                                ? 'bg-[#1700AC] hover:bg-[#0F2A44]'
-                                : 'bg-[#0A1635] hover:bg-[#0F2A44]'
-                                }`}
-                        >
-                            {isEditingMode ? 'Terminar Edición' : 'Editar'}
-                        </button>
-                        <button
-                            onClick={openCreateModal}
-                            className='px-4 py-2 bg-[#8B5CF6] text-white rounded-lg font-medium hover:bg-violet-700 transition-colors shadow-sm'
-                        >
-                            Nuevo Lead
-                        </button>
-                        <button
-                            onClick={fetchLeads}
-                            className='px-4 py-2 bg-[#2048FF] text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm'
-                        >
-                            Refrescar
-                        </button>
+                        <div className='flex gap-3'>
+                            <button
+                                onClick={() => setIsEditingMode(!isEditingMode)}
+                                className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 ${isEditingMode
+                                    ? 'bg-[#1700AC] text-white hover:bg-[#0F2A44]'
+                                    : 'bg-white border border-gray-200 text-[#0A1635] hover:bg-gray-50'
+                                    }`}
+                            >
+                                <span>{isEditingMode ? '✅' : '✏️'}</span> {isEditingMode ? 'Terminar Edición' : 'Editar'}
+                            </button>
+                            <button
+                                onClick={openCreateModal}
+                                className='px-6 py-2.5 bg-[#8B5CF6] text-white rounded-xl font-bold hover:bg-violet-700 transition-all shadow-md flex items-center gap-2 transform active:scale-95 uppercase text-xs tracking-widest'
+                            >
+                                <span>➕</span> Nuevo Lead
+                            </button>
+                            <button
+                                onClick={fetchLeads}
+                                className='px-5 py-2.5 bg-[#2048FF] text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md flex items-center gap-2 transform active:scale-95 uppercase text-xs tracking-widest'
+                            >
+                                <span>🔄</span> Refrescar
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Filter Bar */}
+                    <div className='bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center gap-6'>
+                        <div className='flex-1 min-w-[300px] relative font-medium'>
+                            <span className='absolute left-4 top-1/2 -translate-y-1/2 text-gray-500'>🔍</span>
+                            <input
+                                type="text"
+                                placeholder="Buscar por nombre, empresa o contacto..."
+                                value={filterSearch}
+                                onChange={(e) => setFilterSearch(e.target.value)}
+                                className='w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] text-sm text-[#0A1635] font-semibold transition-all placeholder:text-gray-400 hover:border-gray-400'
+                            />
+                        </div>
+
+                        <div className='flex items-center gap-3'>
+                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Etapa:</label>
+                            <select
+                                value={filterStage}
+                                onChange={(e) => setFilterStage(e.target.value)}
+                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                            >
+                                <option value="All">Todas</option>
+                                <option value="Prospección">Prospección</option>
+                                <option value="Negociación">Negociación</option>
+                                <option value="Cerrado">Cerrado</option>
+                                <option value="Ganada">Ganada</option>
+                            </select>
+                        </div>
+
+                        <div className='flex items-center gap-3'>
+                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Vendedor:</label>
+                            <select
+                                value={filterOwner}
+                                onChange={(e) => setFilterOwner(e.target.value)}
+                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                            >
+                                <option value="All">Cualquiera</option>
+                                {uniqueOwners.map(owner => (
+                                    <option key={owner} value={owner!}>{owner}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {(filterSearch || filterStage !== 'All' || filterOwner !== 'All') && (
+                            <button
+                                onClick={() => {
+                                    setFilterSearch('')
+                                    setFilterStage('All')
+                                    setFilterOwner('All')
+                                }}
+                                className='text-[10px] font-black text-red-500 uppercase tracking-tighter hover:text-red-700 transition-colors'
+                            >
+                                Limpiar Filtros
+                            </button>
+                        )}
+
+                        <div className='ml-auto text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]'>
+                            Mostrando {filteredLeads.length} de {leads.length}
+                        </div>
                     </div>
                 </div>
 
@@ -252,7 +341,7 @@ export default function LeadsPage() {
                         </div>
                     ) : (
                         <ClientsTable
-                            clientes={leads}
+                            clientes={filteredLeads}
                             isEditingMode={isEditingMode}
                             onEdit={openEditModal}
                             onDelete={handleDeleteClick}

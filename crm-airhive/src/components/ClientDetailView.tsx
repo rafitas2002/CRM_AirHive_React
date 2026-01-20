@@ -15,6 +15,7 @@ type ClientData = {
     notas: string
     empresa_id?: string
     owner_username?: string
+    probabilidad?: number
 }
 
 type CompanyData = {
@@ -132,11 +133,11 @@ export default function ClientDetailView({
                                 <div className='grid grid-cols-2 gap-4'>
                                     <div>
                                         <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Etapa</label>
-                                        <span className={`inline-block px-2 py-1 rounded text-sm font-medium mt-1
-                                            ${client.etapa === 'Ganada' ? 'bg-green-100 text-green-700' :
-                                                client.etapa === 'Negociación' ? 'bg-orange-100 text-orange-700' :
-                                                    client.etapa === 'Cerrado' ? 'bg-red-100 text-red-700' :
-                                                        'bg-blue-100 text-blue-700'}`}>
+                                        <span className={`inline-block px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest mt-1 border
+                                            ${client.etapa === 'Ganada' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                client.etapa === 'Negociación' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                                                    client.etapa === 'Cerrado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
+                                                        'bg-blue-100 text-blue-700 border-blue-200'}`}>
                                             {client.etapa}
                                         </span>
                                     </div>
@@ -145,6 +146,20 @@ export default function ClientDetailView({
                                         <div className='flex text-yellow-400 mt-1'>
                                             {'★'.repeat(Math.max(0, Math.min(5, client?.calificacion || 0)))}{'☆'.repeat(Math.max(0, 5 - (client?.calificacion || 0)))}
                                         </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Probabilidad de Cierre</label>
+                                    <div className='flex items-center gap-3 mt-1'>
+                                        <div className='flex-1 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-100 shadow-inner'>
+                                            <div
+                                                className={`h-full transition-all duration-700 ${(client as any).probabilidad >= 70 ? 'bg-emerald-500' : (client as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
+                                                style={{ width: `${(client as any).probabilidad || 0}%` }}
+                                            />
+                                        </div>
+                                        <span className={`text-sm font-black ${(client as any).probabilidad >= 70 ? 'text-emerald-600' : (client as any).probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                            {(client as any).probabilidad || 0}%
+                                        </span>
                                     </div>
                                 </div>
                                 <div>

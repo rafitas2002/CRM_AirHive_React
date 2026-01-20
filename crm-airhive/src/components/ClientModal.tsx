@@ -12,6 +12,7 @@ export type ClientData = {
     calificacion: number
     notas: string
     empresa_id?: string
+    probabilidad?: number
 }
 
 interface ClientModalProps {
@@ -42,7 +43,8 @@ export default function ClientModal({
         oportunidad: '',
         calificacion: 3,
         notas: '',
-        empresa_id: undefined
+        empresa_id: undefined,
+        probabilidad: 50
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [filteredCompanies, setFilteredCompanies] = useState<{ id: string, nombre: string }[]>([])
@@ -65,7 +67,8 @@ export default function ClientModal({
                     oportunidad: '',
                     calificacion: 3,
                     notas: '',
-                    empresa_id: undefined
+                    empresa_id: undefined,
+                    probabilidad: 50
                 })
             }
         }
@@ -309,14 +312,39 @@ export default function ClientModal({
                             />
                         </div>
 
-                        {/* Calificación and Notas */}
+                        {/* Probabilidad, Calificación and Notas */}
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                             <div className='space-y-1.5'>
                                 <div className='flex justify-between items-center'>
-                                    <label className='block text-sm font-medium text-[#0F2A44]'>
+                                    <label className='block text-sm font-black text-[#0F2A44] uppercase tracking-tighter'>
+                                        Probabilidad de Cierre
+                                    </label>
+                                    <span className={`font-black text-xs ${formData.probabilidad && formData.probabilidad >= 70 ? 'text-emerald-600' : formData.probabilidad && formData.probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                        {formData.probabilidad || 0}%
+                                    </span>
+                                </div>
+                                <input
+                                    type='range'
+                                    min='0'
+                                    max='100'
+                                    step='5'
+                                    value={formData.probabilidad || 0}
+                                    onChange={(e) => setFormData({ ...formData, probabilidad: Number(e.target.value) })}
+                                    className='w-full h-2 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF]'
+                                />
+                                <div className='flex justify-between text-[8px] font-bold text-gray-400 uppercase tracking-widest'>
+                                    <span>Baja</span>
+                                    <span>Media</span>
+                                    <span>Alta</span>
+                                </div>
+                            </div>
+
+                            <div className='space-y-1.5'>
+                                <div className='flex justify-between items-center'>
+                                    <label className='block text-sm font-black text-[#0F2A44] uppercase tracking-tighter'>
                                         Calificación
                                     </label>
-                                    <span className='font-bold text-[#0F2A44] text-xs'>
+                                    <span className='font-black text-[#0F2A44] text-xs'>
                                         {formData.calificacion}/5
                                     </span>
                                 </div>
@@ -327,20 +355,20 @@ export default function ClientModal({
                                     step='1'
                                     value={formData.calificacion}
                                     onChange={(e) => setFormData({ ...formData, calificacion: Number(e.target.value) })}
-                                    className='w-full h-1.5 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF]'
+                                    className='w-full h-2 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF]'
                                 />
                             </div>
 
-                            <div className='space-y-1.5'>
-                                <label className='block text-sm font-medium text-[#0F2A44]'>
+                            <div className='col-span-1 md:col-span-2 space-y-1.5'>
+                                <label className='block text-sm font-black text-[#0F2A44] uppercase tracking-tighter'>
                                     Notas Internas
                                 </label>
                                 <textarea
-                                    rows={1}
-                                    placeholder='Extras...'
+                                    rows={2}
+                                    placeholder='Detalles adicionales del seguimiento...'
                                     value={formData.notas}
                                     onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                                    className='w-full px-3 py-1.5 border border-[#BDBBC7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[#000000] placeholder-[#BDBBC7] transition-all resize-none text-xs'
+                                    className='w-full px-3 py-2 border border-[#BDBBC7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[#000000] placeholder-[#BDBBC7] transition-all resize-none text-sm shadow-inner italic'
                                 />
                             </div>
                         </div>

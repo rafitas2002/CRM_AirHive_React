@@ -32,10 +32,11 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             <th className='w-[12%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Nombre</th>
                             <th className='w-[12%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Contacto</th>
                             <th className='w-[10%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Etapa</th>
+                            <th className='w-[5%] px-3 py-3 font-semibold text-xs tracking-wide truncate text-center font-mono'>%</th>
                             <th className='w-[8%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Valor</th>
                             <th className='w-[12%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Oportunidad</th>
-                            <th className='w-[10%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Calif.</th>
-                            <th className='w-[14%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Notas</th>
+                            <th className='w-[8%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Calif.</th>
+                            <th className='w-[12%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Notas</th>
                             {isEditingMode && (
                                 <th className='w-[8%] px-3 py-3 font-semibold text-xs tracking-wide truncate text-center'>Acciones</th>
                             )}
@@ -54,12 +55,12 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                 </td>
 
                                 {/* Empresa */}
-                                <td className='px-3 py-3 font-semibold text-gray-800 truncate' title={cliente.empresa || ''}>
+                                <td className='px-3 py-3 font-medium text-gray-500 truncate' title={cliente.empresa || ''}>
                                     {cliente.empresa || '-'}
                                 </td>
 
                                 {/* Nombre */}
-                                <td className='px-3 py-3 text-[#EA580C] font-medium truncate' title={cliente.nombre || ''}>
+                                <td className='px-3 py-3 text-[#2048FF] font-bold truncate' title={cliente.nombre || ''}>
                                     {cliente.nombre || '-'}
                                 </td>
 
@@ -73,6 +74,21 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wide truncate max-w-full ${getStageStyles(cliente.etapa)}`}>
                                         {cliente.etapa || 'N/A'}
                                     </span>
+                                </td>
+
+                                {/* Probabilidad */}
+                                <td className='px-3 py-3 text-center'>
+                                    <div className='flex flex-col items-center gap-1'>
+                                        <span className={`text-[10px] font-black ${(cliente as any).probabilidad >= 70 ? 'text-emerald-600' : (cliente as any).probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                            {(cliente as any).probabilidad || 0}%
+                                        </span>
+                                        <div className='w-full h-1 bg-gray-100 rounded-full overflow-hidden'>
+                                            <div
+                                                className={`h-full transition-all duration-500 ${(cliente as any).probabilidad >= 70 ? 'bg-emerald-500' : (cliente as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
+                                                style={{ width: `${(cliente as any).probabilidad || 0}%` }}
+                                            />
+                                        </div>
+                                    </div>
                                 </td>
 
                                 {/* Valor */}
@@ -142,9 +158,13 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
 // Helper para colores de etapa
 function getStageStyles(stage: string | null) {
     const s = (stage || '').toLowerCase()
-    if (s === 'cerrado') return 'bg-blue-100 text-blue-700 border-blue-200'
+    // Cerrado: More vibrant Aqua-Green (Emerald-Cyan mix)
+    if (s === 'cerrado') return 'bg-cyan-50 text-[#00A38B] border-cyan-100'
+    // Prospección: Purple (como estaba)
     if (s === 'prospección' || s === 'prospeccion') return 'bg-purple-100 text-purple-700 border-purple-200'
-    if (s === 'negociación' || s === 'negociacion') return 'bg-orange-100 text-orange-700 border-orange-200'
+    // Negociación: Warm Orange-Amber
+    if (s === 'negociación' || s === 'negociacion') return 'bg-amber-100 text-amber-700 border-amber-200'
+    // Ganada: Emerald
     if (s === 'ganada') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
     return 'bg-gray-100 text-gray-600 border-gray-200'
 }
