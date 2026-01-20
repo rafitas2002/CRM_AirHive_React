@@ -79,9 +79,9 @@ export default function ClientesPage() {
             }
 
             // Cast to any to avoid generic type inference issues with library
-            const { error } = await supabase
-                .from('clientes')
-                .insert([payload as any])
+            const { error } = await (supabase
+                .from('clientes') as any)
+                .insert([payload])
 
             if (error) {
                 console.error('Error creating client:', error)
@@ -92,9 +92,9 @@ export default function ClientesPage() {
                 ...clientData
             }
 
-            const { error } = await supabase
-                .from('clientes')
-                .update(payload as any)
+            const { error } = await (supabase
+                .from('clientes') as any)
+                .update(payload)
                 .eq('id', currentClient.id)
 
             if (error) {
@@ -114,8 +114,8 @@ export default function ClientesPage() {
     const confirmDelete = async () => {
         if (!clientToDelete) return
 
-        const { error } = await supabase
-            .from('clientes')
+        const { error } = await (supabase
+            .from('clientes') as any)
             .delete()
             .eq('id', clientToDelete)
 
