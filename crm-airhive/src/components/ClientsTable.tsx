@@ -4,7 +4,14 @@ import { Database } from '@/lib/supabase'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
-export default function ClientsTable({ clientes }: { clientes: Cliente[] }) {
+interface ClientsTableProps {
+    clientes: Cliente[]
+    isEditingMode?: boolean
+    onEdit?: (cliente: Cliente) => void
+    onDelete?: (id: number) => void
+}
+
+export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete }: ClientsTableProps) {
     if (!clientes || clientes.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm'>
@@ -28,6 +35,9 @@ export default function ClientsTable({ clientes }: { clientes: Cliente[] }) {
                             <th className='w-[12%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Oportunidad</th>
                             <th className='w-[10%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Calif.</th>
                             <th className='w-[14%] px-3 py-3 font-semibold text-xs tracking-wide truncate'>Notas</th>
+                            {isEditingMode && (
+                                <th className='w-[8%] px-3 py-3 font-semibold text-xs tracking-wide truncate text-center'>Acciones</th>
+                            )}
                         </tr>
                     </thead>
                     <tbody className='divide-y divide-gray-100'>
@@ -84,6 +94,34 @@ export default function ClientsTable({ clientes }: { clientes: Cliente[] }) {
                                 <td className='px-3 py-3 text-xs text-gray-400 italic truncate' title={cliente.notas || ''}>
                                     {cliente.notas || '-'}
                                 </td>
+
+                                {/* Acciones */}
+                                {isEditingMode && (
+                                    <td className='px-3 py-3 text-center'>
+                                        <div className='flex items-center justify-center gap-2'>
+                                            <button
+                                                onClick={() => onEdit?.(cliente)}
+                                                className='p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors'
+                                                title='Editar'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                onClick={() => onDelete?.(cliente.id)}
+                                                className='p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors'
+                                                title='Eliminar'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M3 6h18" />
+                                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>
