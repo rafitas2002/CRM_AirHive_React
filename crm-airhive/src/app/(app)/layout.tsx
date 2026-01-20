@@ -16,11 +16,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!auth.loggedIn) return null
 
     return (
-        <div className='min-h-screen bg-gray-50'>
+        <div className='h-screen flex flex-col bg-gray-50 overflow-hidden'>
             <TopBar />
-            <div className='min-h-[calc(100vh-70px)] bg-gray-100'>
+            <main className='flex-1 overflow-hidden bg-gray-100'>
                 {children}
-            </div>
+            </main>
         </div>
     )
 }

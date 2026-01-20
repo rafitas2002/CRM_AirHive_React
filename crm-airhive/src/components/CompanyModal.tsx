@@ -28,6 +28,7 @@ export default function CompanyModal({
     onClose,
     onSave,
     initialData,
+    mode = 'create',
     companies = []
 }: CompanyModalProps) {
     const [formData, setFormData] = useState<CompanyData>({

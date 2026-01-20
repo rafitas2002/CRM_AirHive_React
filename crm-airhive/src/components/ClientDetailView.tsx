@@ -103,7 +103,7 @@ export default function ClientDetailView({
                             onClick={() => onEditCompany(company)}
                             className='px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors shadow-sm font-medium border border-white/20'
                         >
-                            Editar Empresa
+                            🏢 Ver en Catálogo
                         </button>
                     )}
                 </div>

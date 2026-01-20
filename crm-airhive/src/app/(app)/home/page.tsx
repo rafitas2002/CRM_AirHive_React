@@ -6,7 +6,7 @@ export default function HomePage() {
     const auth = useAuth()
 
     return (
-        <div className='min-h-[calc(100vh-70px)] bg-gray-50 flex items-center justify-center'>
+        <div className='h-full flex items-center justify-center bg-gray-50'>
             <h1 className='text-4xl font-extrabold text-black'>
                 Bienvenido {auth.username ? auth.username : ''} 🥳🥳
             </h1>

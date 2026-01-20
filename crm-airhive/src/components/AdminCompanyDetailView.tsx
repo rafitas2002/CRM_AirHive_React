@@ -12,12 +12,14 @@ interface AdminCompanyDetailViewProps {
     isOpen: boolean
     onClose: () => void
     company: CompanyData
+    currentUserProfile?: any | null
 }
 
 export default function AdminCompanyDetailView({
     isOpen,
     onClose,
-    company
+    company,
+    currentUserProfile
 }: AdminCompanyDetailViewProps) {
     const [clients, setClients] = useState<Cliente[]>([])
     const [loadingClients, setLoadingClients] = useState(false)
@@ -33,11 +35,20 @@ export default function AdminCompanyDetailView({
 
     const fetchAssociatedClients = async (companyId: string) => {
         setLoadingClients(true)
-        const { data, error } = await supabase
+
+        let query = supabase
             .from('clientes')
             .select('*')
             .eq('empresa_id', companyId)
             .order('nombre', { ascending: true })
+
+        // 🛡️ SECURITY FILTER
+        // If not admin, only see leads owned by current user
+        if (currentUserProfile && currentUserProfile.role !== 'admin') {
+            query = (query as any).eq('owner_id', currentUserProfile.id)
+        }
+
+        const { data, error } = await query
 
         if (error) {
             console.error('Error fetching associated clients:', error)

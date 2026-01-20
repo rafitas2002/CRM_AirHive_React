@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import CompanyModal, { CompanyData } from '@/components/CompanyModal'
 import ClientDetailView from '@/components/ClientDetailView'
 import { Database } from '@/lib/supabase'
 
@@ -26,20 +26,11 @@ const normalizeLead = (lead: Lead) => ({
     empresa_id: lead.empresa_id || undefined
 })
 
-const normalizeCompany = (company: CompanyData) => ({
-    nombre: company.nombre || '',
-    tamano: company.tamano || 1,
-    ubicacion: company.ubicacion || '',
-    logo_url: company.logo_url || '',
-    industria: company.industria || '',
-    website: company.website || '',
-    descripcion: company.descripcion || ''
-})
-
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
+    const router = useRouter()
 
     // Modal & Editing State
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -53,12 +44,8 @@ export default function LeadsPage() {
     const [clientToDelete, setClientToDelete] = useState<number | null>(null)
 
     // Company Module State
-    const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
-    const [currentCompany, setCurrentCompany] = useState<CompanyData | null>(null)
     const [isDetailViewOpen, setIsDetailViewOpen] = useState(false)
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-    const [linkedCompanyId, setLinkedCompanyId] = useState<string | null>(null)
-    const [newlySavedCompany, setNewlySavedCompany] = useState<{ id: string, nombre: string } | null>(null)
     const [companiesList, setCompaniesList] = useState<{ id: string, nombre: string, industria?: string, ubicacion?: string }[]>([])
 
     // Memoized initial data to avoid reference changes on every render
@@ -66,11 +53,6 @@ export default function LeadsPage() {
         if (!isModalOpen) return null
         return currentLead ? normalizeLead(currentLead) : null
     }, [isModalOpen, currentLead])
-
-    const memoizedInitialCompany = useMemo(() => {
-        if (!isCompanyModalOpen) return null
-        return currentCompany ? normalizeCompany(currentCompany) : null
-    }, [isCompanyModalOpen, currentCompany])
 
     const fetchLeads = async () => {
         setLoading(true)
@@ -118,15 +100,13 @@ export default function LeadsPage() {
 
         // Priority:
         // 1. empresa_id directly from the form (autocomplete selection)
-        // 2. linkedCompanyId (newly created company session)
-        // 3. currentLead?.empresa_id (existing link if any)
-        const finalEmpresaId = leadData.empresa_id || linkedCompanyId || (modalMode === 'edit' ? currentLead?.empresa_id : undefined)
+        // 2. currentLead?.empresa_id (existing link if any)
+        const finalEmpresaId = leadData.empresa_id || (modalMode === 'edit' ? currentLead?.empresa_id : undefined)
 
         let finalEmpresaName = leadData.empresa
         if (finalEmpresaId) {
             // Find the official name from our lists
-            const officialCompany = companiesList.find(c => c.id === finalEmpresaId) ||
-                (newlySavedCompany?.id === finalEmpresaId ? newlySavedCompany : null)
+            const officialCompany = companiesList.find(c => c.id === finalEmpresaId)
 
             if (officialCompany) {
                 finalEmpresaName = officialCompany.nombre
@@ -170,92 +150,7 @@ export default function LeadsPage() {
         }
 
         setIsModalOpen(false)
-        setLinkedCompanyId(null) // Reset linked company after save
-        setNewlySavedCompany(null)
         await fetchLeads()
-    }
-
-    const handleSaveCompany = async (companyData: CompanyData) => {
-        if (!currentUser) return
-
-        let savedCompanyId = companyData.id
-
-        // Case 1: Company already exists in catalog (selected via autocomplete)
-        // If we have an ID but currentCompany is null, it's a selection from catalog.
-        if (companyData.id && !currentCompany) {
-            console.log('Company selected from catalog, linking ID:', companyData.id)
-            setLinkedCompanyId(companyData.id)
-            setNewlySavedCompany({ id: companyData.id, nombre: companyData.nombre })
-            setIsCompanyModalOpen(false)
-            return
-        }
-
-        // Case 2: Update existing company
-        if (currentCompany) {
-            const { error } = await (supabase
-                .from('empresas') as any)
-                .update(companyData)
-                .eq('id', currentCompany.id)
-
-            if (error) {
-                console.error('Error updating company', error)
-                alert('Error al actualizar empresa')
-                return
-            }
-            savedCompanyId = currentCompany.id
-        }
-        // Case 3: Create new company
-        else {
-            const { data, error } = await (supabase
-                .from('empresas') as any)
-                .insert([{
-                    ...companyData,
-                    owner_id: currentUser.id
-                }])
-                .select()
-                .single()
-
-            if (error) {
-                console.error('Error creating company', error)
-                alert('Error al crear empresa')
-                return
-            }
-            savedCompanyId = data.id
-        }
-
-        if (savedCompanyId) {
-            setLinkedCompanyId(savedCompanyId)
-            setNewlySavedCompany({ id: savedCompanyId, nombre: companyData.nombre })
-        }
-
-        setIsCompanyModalOpen(false)
-        await fetchLeads() // Refresh to show potential changes if linked
-        await fetchCompaniesList() // Refresh autocomplete list
-    }
-
-    const handleOpenAdvanced = (companyId?: string) => {
-        // Use the passed ID (from modal state), or fall back to linked/current
-        const targetId = companyId || linkedCompanyId || currentLead?.empresa_id
-
-        if (targetId) {
-            fetchCompanyForModal(targetId)
-        } else {
-            setCurrentCompany(null)
-            setIsCompanyModalOpen(true)
-        }
-    }
-
-    const fetchCompanyForModal = async (id: string) => {
-        const { data, error } = await supabase
-            .from('empresas')
-            .select('*')
-            .eq('id', id)
-            .single()
-
-        if (!error && data) {
-            setCurrentCompany(data)
-            setIsCompanyModalOpen(true)
-        }
     }
 
     const handleRowClick = (lead: Lead) => {
@@ -268,10 +163,9 @@ export default function LeadsPage() {
         openEditModal(lead)
     }
 
-    const handleEditCompanyFromDetail = (company: CompanyData) => {
+    const handleEditCompanyFromDetail = () => {
         setIsDetailViewOpen(false)
-        setCurrentCompany(company)
-        setIsCompanyModalOpen(true)
+        router.push('/empresas')
     }
 
     const handleDeleteClick = (id: number) => {
@@ -307,24 +201,20 @@ export default function LeadsPage() {
     const openCreateModal = () => {
         setModalMode('create')
         setCurrentLead(null)
-        setLinkedCompanyId(null)
-        setNewlySavedCompany(null)
         setIsModalOpen(true)
     }
 
     const openEditModal = (lead: Lead) => {
         setModalMode('edit')
         setCurrentLead(lead)
-        setLinkedCompanyId(null)
-        setNewlySavedCompany(null)
         setIsModalOpen(true)
     }
 
     return (
-        <div className='min-h-[calc(100vh-70px)] bg-gray-50 p-4'>
-            <div className='w-full mx-auto space-y-6'>
-                {/* Header */}
-                <div className='flex items-center justify-between'>
+        <div className='h-full flex flex-col p-6 overflow-hidden bg-gray-50'>
+            <div className='w-full mx-auto flex flex-col h-full gap-6'>
+                {/* Header - Fixed */}
+                <div className='shrink-0 flex items-center justify-between'>
                     <h1 className='text-3xl font-bold text-[#0A1635]'>
                         Leads
                     </h1>
@@ -354,20 +244,22 @@ export default function LeadsPage() {
                     </div>
                 </div>
 
-                {/* Table */}
-                {loading ? (
-                    <div className='w-full h-64 flex items-center justify-center bg-white rounded-2xl border border-gray-200'>
-                        <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
-                    </div>
-                ) : (
-                    <ClientsTable
-                        clientes={leads}
-                        isEditingMode={isEditingMode}
-                        onEdit={openEditModal}
-                        onDelete={handleDeleteClick}
-                        onRowClick={handleRowClick}
-                    />
-                )}
+                {/* Table Area - Scrollable */}
+                <div className='flex-1 overflow-y-auto custom-scrollbar bg-white rounded-2xl border border-gray-200 shadow-sm'>
+                    {loading ? (
+                        <div className='w-full h-full flex items-center justify-center'>
+                            <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
+                        </div>
+                    ) : (
+                        <ClientsTable
+                            clientes={leads}
+                            isEditingMode={isEditingMode}
+                            onEdit={openEditModal}
+                            onDelete={handleDeleteClick}
+                            onRowClick={handleRowClick}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Modal */}
@@ -377,19 +269,10 @@ export default function LeadsPage() {
                 onSave={(data) => handleSaveLead(data as any)}
                 initialData={memoizedInitialLead}
                 mode={modalMode}
-                onOpenAdvanced={handleOpenAdvanced}
+                onNavigateToCompanies={() => router.push('/empresas')}
                 companies={companiesList}
-                newlySavedCompany={newlySavedCompany}
             />
 
-            {/* Company Modal */}
-            <CompanyModal
-                isOpen={isCompanyModalOpen}
-                onClose={() => setIsCompanyModalOpen(false)}
-                onSave={handleSaveCompany}
-                initialData={memoizedInitialCompany}
-                companies={companiesList as any}
-            />
 
             {/* Detail View */}
             <ClientDetailView

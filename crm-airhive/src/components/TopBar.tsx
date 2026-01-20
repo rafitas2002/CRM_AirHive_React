@@ -51,7 +51,7 @@ export default function TopBar() {
                             </Link>
                         )
                     })}
-                    {auth.profile?.role === 'admin' && (
+                    {(auth.profile?.role === 'admin' || auth.profile?.role === 'seller') && (
                         <Link
                             href='/empresas'
                             className={`relative text-white font-semibold text-base px-2 py-2 group`}
