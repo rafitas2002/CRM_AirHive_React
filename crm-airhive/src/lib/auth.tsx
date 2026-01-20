@@ -127,7 +127,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 msg = 'Por favor verifica tu correo electrónico'
             } else {
                 // Show raw error for debugging (e.g. missing env vars)
-                msg = `Error: ${error.message}`
+                const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'No definida'
+                msg = `Error: ${error.message} (Intento conectar a: ${url})`
             }
             setLastError(msg)
             setBusy(false)
