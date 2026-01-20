@@ -140,7 +140,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const logout = async () => {
-        console.log('Logging out...')
         setBusy(true) // Explicitly busy for action
         try {
             await Promise.race([
