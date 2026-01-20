@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 
 const links = [
     { href: '/home', label: 'Home' },
-    { href: '/clientes', label: 'Clientes' },
+    { href: '/clientes', label: 'Leads' },
     { href: '/tareas', label: 'Tareas' },
     { href: '/calendario', label: 'Calendario' },
     { href: '/otros', label: 'Otros' }
@@ -51,6 +51,22 @@ export default function TopBar() {
                             </Link>
                         )
                     })}
+                    {auth.profile?.role === 'admin' && (
+                        <Link
+                            href='/empresas'
+                            className={`relative text-white font-semibold text-base px-2 py-2 group`}
+                        >
+                            Empresas
+                            <span
+                                className={[
+                                    'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                    'transition-all duration-300 ease-out',
+                                    pathname === '/empresas' ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    'group-hover:w-full group-hover:opacity-100'
+                                ].join(' ')}
+                            />
+                        </Link>
+                    )}
                 </nav>
 
                 <div className='flex-1' />

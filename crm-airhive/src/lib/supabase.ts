@@ -52,6 +52,7 @@ export type Database = {
                     notas: string | null
                     owner_id: string | null
                     owner_username: string | null
+                    empresa_id: string | null
                 }
                 Insert: {
                     id?: number
@@ -66,6 +67,7 @@ export type Database = {
                     notas?: string | null
                     owner_id?: string | null
                     owner_username?: string | null
+                    empresa_id?: string | null
                 }
                 Update: {
                     id?: number
@@ -80,6 +82,7 @@ export type Database = {
                     notas?: string | null
                     owner_id?: string | null
                     owner_username?: string | null
+                    empresa_id?: string | null
                 }
             }
         }

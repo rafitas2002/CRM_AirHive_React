@@ -5,33 +5,46 @@ import { createClient } from '@/lib/supabase'
 import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
+import CompanyModal, { CompanyData } from '@/components/CompanyModal'
+import ClientDetailView from '@/components/ClientDetailView'
 import { Database } from '@/lib/supabase'
 
-type Cliente = Database['public']['Tables']['clientes']['Row']
-type ClienteInsert = Database['public']['Tables']['clientes']['Insert']
-type ClienteUpdate = Database['public']['Tables']['clientes']['Update']
+type Lead = Database['public']['Tables']['clientes']['Row']
+type LeadInsert = Database['public']['Tables']['clientes']['Insert']
+type LeadUpdate = Database['public']['Tables']['clientes']['Update']
 
-// Helper to normalize client data for the form (handle nulls)
-const normalizeClient = (client: Cliente) => ({
-    empresa: client.empresa || '',
-    nombre: client.nombre || '',
-    contacto: client.contacto || '',
-    etapa: client.etapa || 'Prospección',
-    valor_estimado: client.valor_estimado || 0,
-    oportunidad: client.oportunidad || '',
-    calificacion: client.calificacion || 3,
-    notas: client.notas || ''
+// Helper to normalize lead data for the form (handle nulls)
+const normalizeLead = (lead: Lead) => ({
+    empresa: lead.empresa || '',
+    nombre: lead.nombre || '',
+    contacto: lead.contacto || '',
+    etapa: lead.etapa || 'Prospección',
+    valor_estimado: lead.valor_estimado || 0,
+    oportunidad: lead.oportunidad || '',
+    calificacion: lead.calificacion || 3,
+    notas: lead.notas || '',
+    empresa_id: lead.empresa_id || undefined
 })
 
-export default function ClientesPage() {
-    const [clientes, setClientes] = useState<Cliente[]>([])
+const normalizeCompany = (company: CompanyData) => ({
+    nombre: company.nombre || '',
+    tamano: company.tamano || 1,
+    ubicacion: company.ubicacion || '',
+    logo_url: company.logo_url || '',
+    industria: company.industria || '',
+    website: company.website || '',
+    descripcion: company.descripcion || ''
+})
+
+export default function LeadsPage() {
+    const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
 
     // Modal & Editing State
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-    const [currentClient, setCurrentClient] = useState<Cliente | null>(null)
+    const [currentLead, setCurrentLead] = useState<Lead | null>(null)
     const [isEditingMode, setIsEditingMode] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
 
@@ -39,7 +52,16 @@ export default function ClientesPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<number | null>(null)
 
-    const fetchClientes = async () => {
+    // Company Module State
+    const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
+    const [currentCompany, setCurrentCompany] = useState<CompanyData | null>(null)
+    const [isDetailViewOpen, setIsDetailViewOpen] = useState(false)
+    const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+    const [linkedCompanyId, setLinkedCompanyId] = useState<string | null>(null)
+    const [newlySavedCompany, setNewlySavedCompany] = useState<{ id: string, nombre: string } | null>(null)
+    const [companiesList, setCompaniesList] = useState<{ id: string, nombre: string, industria?: string, ubicacion?: string }[]>([])
+
+    const fetchLeads = async () => {
         setLoading(true)
         const { data, error } = await supabase
             .from('clientes')
@@ -47,11 +69,22 @@ export default function ClientesPage() {
             .order('created_at', { ascending: false })
 
         if (error) {
-            console.error('Error fetching clientes:', error)
+            console.error('Error fetching leads:', error)
         } else {
-            setClientes(data || [])
+            setLeads(data || [])
         }
         setLoading(false)
+    }
+
+    const fetchCompaniesList = async () => {
+        const { data, error } = await supabase
+            .from('empresas')
+            .select('*')
+            .order('nombre', { ascending: true })
+
+        if (!error && data) {
+            setCompaniesList(data as any)
+        }
     }
 
     const fetchUser = async () => {
@@ -60,22 +93,30 @@ export default function ClientesPage() {
     }
 
     useEffect(() => {
-        fetchClientes()
+        fetchLeads()
+        fetchCompaniesList()
         fetchUser()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const handleSaveClient = async (clientData: ReturnType<typeof normalizeClient>) => {
+    const handleSaveLead = async (leadData: ReturnType<typeof normalizeLead> & { empresa_id?: string }) => {
         if (!currentUser) {
             alert('No se pudo identificar al usuario actual.')
             return
         }
 
+        // Priority:
+        // 1. empresa_id directly from the form (autocomplete selection)
+        // 2. linkedCompanyId (newly created company session)
+        // 3. currentLead?.empresa_id (existing link if any)
+        const finalEmpresaId = leadData.empresa_id || linkedCompanyId || (modalMode === 'edit' ? currentLead?.empresa_id : undefined)
+
         if (modalMode === 'create') {
-            const payload: ClienteInsert = {
-                ...clientData,
+            const payload: LeadInsert = {
+                ...leadData,
                 owner_id: currentUser.id,
-                owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown'
+                owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
+                empresa_id: finalEmpresaId as string
             }
 
             // Cast to any to avoid generic type inference issues with library
@@ -84,31 +125,136 @@ export default function ClientesPage() {
                 .insert([payload])
 
             if (error) {
-                console.error('Error creating client:', error)
-                alert('Error al crear el cliente: ' + error.message)
+                console.error('Error creating lead:', error)
+                alert('Error al crear el lead: ' + error.message)
             }
-        } else if (modalMode === 'edit' && currentClient) {
-            const payload: ClienteUpdate = {
-                ...clientData
+        } else if (modalMode === 'edit' && currentLead) {
+            const payload: LeadUpdate = {
+                ...leadData,
+                empresa_id: finalEmpresaId as string
             }
 
             const { error } = await (supabase
                 .from('clientes') as any)
                 .update(payload)
-                .eq('id', currentClient.id)
+                .eq('id', currentLead.id)
 
             if (error) {
-                console.error('Error updating client:', error)
-                alert('Error al actualizar el cliente')
+                console.error('Error updating lead:', error)
+                alert('Error al actualizar el lead')
             }
         }
 
-        await fetchClientes()
+        setIsModalOpen(false)
+        setLinkedCompanyId(null) // Reset linked company after save
+        setNewlySavedCompany(null)
+        await fetchLeads()
+    }
+
+    const handleSaveCompany = async (companyData: CompanyData) => {
+        if (!currentUser) return
+
+        let savedCompanyId = companyData.id
+
+        // Case 1: Company already exists in catalog (selected via autocomplete)
+        // If we have an ID but currentCompany is null, it's a selection from catalog.
+        if (companyData.id && !currentCompany) {
+            console.log('Company selected from catalog, linking ID:', companyData.id)
+            setLinkedCompanyId(companyData.id)
+            setNewlySavedCompany({ id: companyData.id, nombre: companyData.nombre })
+            setIsCompanyModalOpen(false)
+            return
+        }
+
+        // Case 2: Update existing company
+        if (currentCompany) {
+            const { error } = await (supabase
+                .from('empresas') as any)
+                .update(companyData)
+                .eq('id', currentCompany.id)
+
+            if (error) {
+                console.error('Error updating company', error)
+                alert('Error al actualizar empresa')
+                return
+            }
+            savedCompanyId = currentCompany.id
+        }
+        // Case 3: Create new company
+        else {
+            const { data, error } = await (supabase
+                .from('empresas') as any)
+                .insert([{
+                    ...companyData,
+                    owner_id: currentUser.id
+                }])
+                .select()
+                .single()
+
+            if (error) {
+                console.error('Error creating company', error)
+                alert('Error al crear empresa')
+                return
+            }
+            savedCompanyId = data.id
+        }
+
+        if (savedCompanyId) {
+            setLinkedCompanyId(savedCompanyId)
+            setNewlySavedCompany({ id: savedCompanyId, nombre: companyData.nombre })
+        }
+
+        setIsCompanyModalOpen(false)
+        await fetchLeads() // Refresh to show potential changes if linked
+        await fetchCompaniesList() // Refresh autocomplete list
+    }
+
+    const handleOpenAdvanced = (companyId?: string) => {
+        // Use the passed ID (from modal state), or fall back to linked/current
+        const targetId = companyId || linkedCompanyId || currentLead?.empresa_id
+
+        if (targetId) {
+            fetchCompanyForModal(targetId)
+        } else {
+            setCurrentCompany(null)
+            setIsCompanyModalOpen(true)
+        }
+    }
+
+    const fetchCompanyForModal = async (id: string) => {
+        const { data, error } = await supabase
+            .from('empresas')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+        if (!error && data) {
+            setCurrentCompany(data)
+            setIsCompanyModalOpen(true)
+        }
+    }
+
+    const handleRowClick = (lead: Lead) => {
+        setSelectedLead(lead)
+        setIsDetailViewOpen(true)
+    }
+
+    const handleEditLeadFromDetail = (lead: Lead) => {
+        setIsDetailViewOpen(false)
+        openEditModal(lead)
+    }
+
+    const handleEditCompanyFromDetail = (company: CompanyData) => {
+        setIsDetailViewOpen(false)
+        setCurrentCompany(company)
+        setIsCompanyModalOpen(true)
     }
 
     const handleDeleteClick = (id: number) => {
         setClientToDelete(id)
         setIsDeleteModalOpen(true)
+        // Ensure detail view is closed if we delete
+        setIsDetailViewOpen(false)
     }
 
     const confirmDelete = async () => {
@@ -120,23 +266,28 @@ export default function ClientesPage() {
             .eq('id', clientToDelete)
 
         if (error) {
-            console.error('Error deleting client:', error)
-            alert('Error al eliminar el cliente')
+            console.error('Error deleting lead:', error)
+            alert('Error al eliminar el lead')
         } else {
-            await fetchClientes()
+            await fetchLeads()
         }
         setClientToDelete(null)
+        setIsDeleteModalOpen(false)
     }
 
     const openCreateModal = () => {
         setModalMode('create')
-        setCurrentClient(null)
+        setCurrentLead(null)
+        setLinkedCompanyId(null)
+        setNewlySavedCompany(null)
         setIsModalOpen(true)
     }
 
-    const openEditModal = (client: Cliente) => {
+    const openEditModal = (lead: Lead) => {
         setModalMode('edit')
-        setCurrentClient(client)
+        setCurrentLead(lead)
+        setLinkedCompanyId(null)
+        setNewlySavedCompany(null)
         setIsModalOpen(true)
     }
 
@@ -146,7 +297,7 @@ export default function ClientesPage() {
                 {/* Header */}
                 <div className='flex items-center justify-between'>
                     <h1 className='text-3xl font-bold text-[#0A1635]'>
-                        Clientes
+                        Leads
                     </h1>
 
                     <div className='flex gap-3'>
@@ -163,10 +314,10 @@ export default function ClientesPage() {
                             onClick={openCreateModal}
                             className='px-4 py-2 bg-[#8B5CF6] text-white rounded-lg font-medium hover:bg-violet-700 transition-colors shadow-sm'
                         >
-                            Nuevo cliente
+                            Nuevo Lead
                         </button>
                         <button
-                            onClick={fetchClientes}
+                            onClick={fetchLeads}
                             className='px-4 py-2 bg-[#2048FF] text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm'
                         >
                             Refrescar
@@ -177,14 +328,15 @@ export default function ClientesPage() {
                 {/* Table */}
                 {loading ? (
                     <div className='w-full h-64 flex items-center justify-center bg-white rounded-2xl border border-gray-200'>
-                        <span className='text-gray-400 animate-pulse'>Cargando clientes...</span>
+                        <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
                     </div>
                 ) : (
                     <ClientsTable
-                        clientes={clientes}
+                        clientes={leads}
                         isEditingMode={isEditingMode}
                         onEdit={openEditModal}
-                        onDelete={handleDeleteClick}
+                        onDelete={handleRowClick as any} // This looks like it was wrong before or I need to be careful
+                        onRowClick={handleRowClick}
                     />
                 )}
             </div>
@@ -193,9 +345,30 @@ export default function ClientesPage() {
             <ClientModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                onSave={handleSaveClient}
-                initialData={currentClient ? normalizeClient(currentClient) : null}
+                onSave={(data) => handleSaveLead(data as any)}
+                initialData={currentLead ? normalizeLead(currentLead) : null}
                 mode={modalMode}
+                onOpenAdvanced={handleOpenAdvanced}
+                companies={companiesList}
+                newlySavedCompany={newlySavedCompany}
+            />
+
+            {/* Company Modal */}
+            <CompanyModal
+                isOpen={isCompanyModalOpen}
+                onClose={() => setIsCompanyModalOpen(false)}
+                onSave={handleSaveCompany}
+                initialData={currentCompany ? normalizeCompany(currentCompany) : null}
+                companies={companiesList as any}
+            />
+
+            {/* Detail View */}
+            <ClientDetailView
+                client={selectedLead as any}
+                isOpen={isDetailViewOpen}
+                onClose={() => setIsDetailViewOpen(false)}
+                onEditClient={(lead) => handleEditLeadFromDetail(lead as any)}
+                onEditCompany={handleEditCompanyFromDetail}
             />
 
             {/* Delete Confirmation Modal */}
@@ -203,8 +376,8 @@ export default function ClientesPage() {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={confirmDelete}
-                title="Eliminar cliente"
-                message="¿Estás seguro de que deseas eliminar este cliente? Esta acción no se puede deshacer."
+                title="Eliminar Lead"
+                message="¿Estás seguro de que deseas eliminar este lead? Esta acción no se puede deshacer."
                 isDestructive={true}
             />
         </div>

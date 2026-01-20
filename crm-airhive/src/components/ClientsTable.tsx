@@ -9,13 +9,14 @@ interface ClientsTableProps {
     isEditingMode?: boolean
     onEdit?: (cliente: Cliente) => void
     onDelete?: (id: number) => void
+    onRowClick?: (cliente: Cliente) => void
 }
 
-export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete }: ClientsTableProps) {
+export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick }: ClientsTableProps) {
     if (!clientes || clientes.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm'>
-                <p className='text-gray-500 text-lg'>No hay clientes registrados.</p>
+                <p className='text-gray-500 text-lg'>No hay leads registrados.</p>
             </div>
         )
     }
@@ -44,7 +45,8 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                         {clientes.map((cliente) => (
                             <tr
                                 key={cliente.id}
-                                className='group hover:bg-blue-50/50 transition-colors duration-200'
+                                onClick={() => onRowClick?.(cliente)}
+                                className='group hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer'
                             >
                                 {/* Vendedor */}
                                 <td className='px-3 py-3 font-medium text-gray-900 truncate' title={cliente.owner_username || ''}>
@@ -100,7 +102,10 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                     <td className='px-3 py-3 text-center'>
                                         <div className='flex items-center justify-center gap-2'>
                                             <button
-                                                onClick={() => onEdit?.(cliente)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    onEdit?.(cliente)
+                                                }}
                                                 className='p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors'
                                                 title='Editar'
                                             >
@@ -109,7 +114,10 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => onDelete?.(cliente.id)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    onDelete?.(cliente.id)
+                                                }}
                                                 className='p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors'
                                                 title='Eliminar'
                                             >
