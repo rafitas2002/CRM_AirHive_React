@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import Image from 'next/image'
+import Link from 'next/link'
 
 export default function LoginPage() {
     const auth = useAuth()
@@ -90,12 +91,12 @@ export default function LoginPage() {
                                 />
 
                                 <div className='flex justify-end'>
-                                    <a
+                                    <Link
                                         href='/forgot-password'
                                         className='text-[13px] text-[#2048FF] hover:underline font-medium'
                                     >
                                         ¿Olvidaste tu contraseña?
-                                    </a>
+                                    </Link>
                                 </div>
 
                                 {/* Error box igual a QML */}

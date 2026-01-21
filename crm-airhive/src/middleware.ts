@@ -35,7 +35,10 @@ export async function middleware(request: NextRequest) {
         } = await supabase.auth.getUser()
 
         // Redirect to login if not authenticated
-        if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+        const publicPaths = ['/login', '/forgot-password', '/reset-password']
+        const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
+
+        if (!user && !isPublicPath) {
             return NextResponse.redirect(new URL('/login', request.url))
         }
 
