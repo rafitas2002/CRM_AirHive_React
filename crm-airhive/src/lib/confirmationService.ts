@@ -169,7 +169,7 @@ export async function getPendingConfirmations(userId: string) {
         }
 
         // 2. Fetch clients for these meetings
-        const leadIds = Array.from(new Set(meetings.map(m => m.lead_id)))
+        const leadIds = Array.from(new Set((meetings as Meeting[]).map(m => m.lead_id)))
         const { data: clients, error: clientsError } = await supabase
             .from('clientes')
             .select('id, empresa, etapa')
