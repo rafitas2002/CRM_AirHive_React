@@ -16,6 +16,11 @@ type ClientData = {
     empresa_id?: string
     owner_username?: string
     probabilidad?: number
+    fecha_registro?: string
+    forecast_logloss?: number | null
+    forecast_evaluated_probability?: number | null
+    forecast_outcome?: number | null
+    forecast_scored_at?: string | null
 }
 
 type CompanyData = {
@@ -78,7 +83,7 @@ export default function ClientDetailView({
     if (!isOpen || !client) return null
 
     return (
-        <div className='fixed inset-0 z-40 bg-white flex flex-col animate-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-0 z-40 bg-[#DDE2E5] flex flex-col animate-in slide-in-from-bottom duration-300'>
             {/* Header */}
             <div className='bg-[#0F2A44] px-8 py-4 flex items-center justify-between shadow-md shrink-0'>
                 <div className='flex items-center gap-4'>
@@ -134,9 +139,9 @@ export default function ClientDetailView({
                                     <div>
                                         <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Etapa</label>
                                         <span className={`inline-block px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest mt-1 border
-                                            ${client.etapa === 'Ganada' ? 'bg-green-100 text-green-700 border-green-200' :
+                                            ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
                                                 client.etapa === 'Negociación' ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                                                    client.etapa === 'Cerrado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
+                                                    client.etapa === 'Cerrado Perdido' ? 'bg-red-100 text-red-700 border-red-200' :
                                                         'bg-blue-100 text-blue-700 border-blue-200'}`}>
                                             {client.etapa}
                                         </span>
@@ -168,14 +173,54 @@ export default function ClientDetailView({
                                         ${client?.valor_estimado?.toLocaleString() || '0'}
                                     </p>
                                 </div>
-                                <div className='pt-2 border-t border-gray-100'>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Vendedor</label>
-                                    <p className='text-[#0A1635] font-medium flex items-center gap-1 mt-1'>
-                                        👤 {client.owner_username || 'Sistema'}
-                                    </p>
+                                <div className='grid grid-cols-2 gap-4'>
+                                    <div>
+                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Vendedor</label>
+                                        <p className='text-[#0A1635] font-medium flex items-center gap-1 mt-1'>
+                                            👤 {client.owner_username || 'Sistema'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Fecha Registro</label>
+                                        <p className='text-[#0A1635] font-medium mt-1'>
+                                            📅 {client.fecha_registro ? new Date(client.fecha_registro).toLocaleDateString() : 'N/A'}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+
+                        {/* Forecast Scoring Section (Admin / Closed Only) */}
+                        {client.forecast_scored_at && (
+                            <div className='bg-blue-50 p-6 rounded-2xl shadow-sm border border-blue-100'>
+                                <h2 className='text-lg font-bold text-[#1700AC] mb-4 border-b border-blue-100 pb-2'>
+                                    Auditoría de Pronóstico
+                                </h2>
+                                <div className='space-y-4'>
+                                    <div className='flex justify-between items-center'>
+                                        <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Log Loss</label>
+                                        <span className={`text-lg font-black ${(client.forecast_logloss ?? 1) < 0.2 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {client.forecast_logloss?.toFixed(4) || '0.0000'}
+                                        </span>
+                                    </div>
+                                    <div className='grid grid-cols-2 gap-4'>
+                                        <div>
+                                            <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Prob. Evaluada</label>
+                                            <p className='text-blue-900 font-bold'>{client.forecast_evaluated_probability}%</p>
+                                        </div>
+                                        <div>
+                                            <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Resultado</label>
+                                            <p className={`font-bold ${client.forecast_outcome === 1 ? 'text-emerald-700' : 'text-red-700'}`}>
+                                                {client.forecast_outcome === 1 ? 'GANADA' : 'PERDIDA'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className='text-[10px] text-blue-400 font-medium italic text-right'>
+                                        Evaluado el {new Date(client.forecast_scored_at).toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
                             <h2 className='text-lg font-bold text-[#0F2A44] mb-4 border-b pb-2'>

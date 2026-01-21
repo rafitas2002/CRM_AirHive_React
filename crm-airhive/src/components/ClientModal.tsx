@@ -273,7 +273,8 @@ export default function ClientModal({
                                     >
                                         <option value='Prospección'>Prospección</option>
                                         <option value='Negociación'>Negociación</option>
-                                        <option value='Cerrado'>Cerrado</option>
+                                        <option value='Cerrado Ganado'>Cerrado Ganado</option>
+                                        <option value='Cerrado Perdido'>Cerrado Perdido</option>
                                     </select>
                                     <div className='absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#667085]'>
                                         ▼
@@ -325,10 +326,10 @@ export default function ClientModal({
                                 </div>
                                 <input
                                     type='range'
-                                    min='0'
-                                    max='100'
+                                    min='5'
+                                    max='95'
                                     step='5'
-                                    value={formData.probabilidad || 0}
+                                    value={formData.probabilidad || 50}
                                     onChange={(e) => setFormData({ ...formData, probabilidad: Number(e.target.value) })}
                                     className='w-full h-2 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF]'
                                 />

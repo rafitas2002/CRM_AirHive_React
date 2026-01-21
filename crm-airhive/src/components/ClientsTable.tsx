@@ -158,14 +158,14 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
 // Helper para colores de etapa
 function getStageStyles(stage: string | null) {
     const s = (stage || '').toLowerCase()
-    // Cerrado: More vibrant Aqua-Green (Emerald-Cyan mix)
-    if (s === 'cerrado') return 'bg-cyan-50 text-[#00A38B] border-cyan-100'
-    // Prospección: Purple (como estaba)
+    // Cerrado Ganado: More vibrant Aqua-Green (Emerald-Cyan mix)
+    if (s === 'cerrado ganado') return 'bg-cyan-50 text-[#00A38B] border-cyan-100'
+    // Cerrado Perdido: Reddish
+    if (s === 'cerrado perdido') return 'bg-red-50 text-red-600 border-red-100'
+    // Prospección: Purple
     if (s === 'prospección' || s === 'prospeccion') return 'bg-purple-100 text-purple-700 border-purple-200'
     // Negociación: Warm Orange-Amber
     if (s === 'negociación' || s === 'negociacion') return 'bg-amber-100 text-amber-700 border-amber-200'
-    // Ganada: Emerald
-    if (s === 'ganada') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
     return 'bg-gray-100 text-gray-600 border-gray-200'
 }
 

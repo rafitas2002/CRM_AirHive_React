@@ -53,6 +53,12 @@ export type Database = {
                     owner_id: string | null
                     owner_username: string | null
                     empresa_id: string | null
+                    fecha_registro: string
+                    forecast_logloss: number | null
+                    forecast_evaluated_probability: number | null
+                    forecast_outcome: number | null
+                    forecast_scored_at: string | null
+                    probabilidad: number | null
                 }
                 Insert: {
                     id?: number
@@ -68,6 +74,12 @@ export type Database = {
                     owner_id?: string | null
                     owner_username?: string | null
                     empresa_id?: string | null
+                    fecha_registro?: string
+                    forecast_logloss?: number | null
+                    forecast_evaluated_probability?: number | null
+                    forecast_outcome?: number | null
+                    forecast_scored_at?: string | null
+                    probabilidad?: number | null
                 }
                 Update: {
                     id?: number
@@ -83,6 +95,41 @@ export type Database = {
                     owner_id?: string | null
                     owner_username?: string | null
                     empresa_id?: string | null
+                    fecha_registro?: string
+                    forecast_logloss?: number | null
+                    forecast_evaluated_probability?: number | null
+                    forecast_outcome?: number | null
+                    forecast_scored_at?: string | null
+                    probabilidad?: number | null
+                }
+            }
+            lead_history: {
+                Row: {
+                    id: number
+                    lead_id: number | null
+                    changed_by: string | null
+                    field_name: string
+                    old_value: string | null
+                    new_value: string | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: number
+                    lead_id?: number | null
+                    changed_by?: string | null
+                    field_name: string
+                    old_value?: string | null
+                    new_value?: string | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: number
+                    lead_id?: number | null
+                    changed_by?: string | null
+                    field_name?: string
+                    old_value?: string | null
+                    new_value?: string | null
+                    created_at?: string
                 }
             }
         }

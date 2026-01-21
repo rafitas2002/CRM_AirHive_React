@@ -212,9 +212,10 @@ export default function AdminCompanyDetailView({
                                                             {client.contacto || '-'}
                                                         </td>
                                                         <td className='px-8 py-5'>
-                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${client.etapa === 'Cerrado' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                                                client.etapa === 'Negociación' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                                    'bg-blue-50 text-blue-700 border-blue-100'
+                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
+                                                                client.etapa === 'Cerrado Perdido' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                                    client.etapa === 'Negociación' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                                        'bg-blue-50 text-blue-700 border-blue-100'
                                                                 }`}>
                                                                 {client.etapa}
                                                             </span>

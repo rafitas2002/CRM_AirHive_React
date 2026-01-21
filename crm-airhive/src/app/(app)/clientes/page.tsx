@@ -54,15 +54,39 @@ export default function LeadsPage() {
     const [filterStage, setFilterStage] = useState('All')
     const [filterOwner, setFilterOwner] = useState('All')
 
+    // Sorting State
+    const [sortBy, setSortBy] = useState('fecha_registro-desc')
+
+    // Persistence
+    useEffect(() => {
+        const savedFilters = localStorage.getItem('leads_filters')
+        if (savedFilters) {
+            const { search, stage, owner, sort } = JSON.parse(savedFilters)
+            if (search) setFilterSearch(search)
+            if (stage) setFilterStage(stage)
+            if (owner) setFilterOwner(owner)
+            if (sort) setSortBy(sort)
+        }
+    }, [])
+
+    useEffect(() => {
+        localStorage.setItem('leads_filters', JSON.stringify({
+            search: filterSearch,
+            stage: filterStage,
+            owner: filterOwner,
+            sort: sortBy
+        }))
+    }, [filterSearch, filterStage, filterOwner, sortBy])
+
     // Memoized initial data to avoid reference changes on every render
     const memoizedInitialLead = useMemo(() => {
         if (!isModalOpen) return null
         return currentLead ? normalizeLead(currentLead) : null
     }, [isModalOpen, currentLead])
 
-    // Filter Logic
-    const filteredLeads = useMemo(() => {
-        return leads.filter(lead => {
+    // Sort & Filter Logic
+    const sortedAndFilteredLeads = useMemo(() => {
+        const result = leads.filter(lead => {
             const matchesSearch = !filterSearch ||
                 lead.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
                 lead.empresa?.toLowerCase().includes(filterSearch.toLowerCase()) ||
@@ -73,7 +97,50 @@ export default function LeadsPage() {
 
             return matchesSearch && matchesStage && matchesOwner
         })
-    }, [leads, filterSearch, filterStage, filterOwner])
+
+        // Apply Sorting
+        const [field, direction] = sortBy.split('-')
+        const isAsc = direction === 'asc'
+
+        return result.sort((a, b) => {
+            let comparison = 0
+
+            switch (field) {
+                case 'empresa':
+                    comparison = (a.empresa || '').localeCompare(b.empresa || '')
+                    break
+                case 'nombre':
+                    comparison = (a.nombre || '').localeCompare(b.nombre || '')
+                    break
+                case 'valor_estimado':
+                    comparison = (a.valor_estimado || 0) - (b.valor_estimado || 0)
+                    break
+                case 'calificacion':
+                    comparison = (a.calificacion || 0) - (b.calificacion || 0)
+                    break
+                case 'probabilidad':
+                    comparison = (a.probabilidad || 0) - (b.probabilidad || 0)
+                    break
+                case 'fecha_registro':
+                    comparison = new Date(a.fecha_registro || 0).getTime() - new Date(b.fecha_registro || 0).getTime()
+                    break
+                case 'owner_username':
+                    comparison = (a.owner_username || '').localeCompare(b.owner_username || '')
+                    break
+                case 'etapa':
+                    const etapaOrder: Record<string, number> = {
+                        'Negociación': 1,
+                        'Prospección': 2,
+                        'Cerrado Ganado': 3,
+                        'Cerrado Perdido': 4
+                    }
+                    comparison = (etapaOrder[a.etapa || ''] || 99) - (etapaOrder[b.etapa || ''] || 99)
+                    break
+            }
+
+            return isAsc ? comparison : -comparison
+        })
+    }, [leads, filterSearch, filterStage, filterOwner, sortBy])
 
     // Get unique owners for filter dropdown
     const uniqueOwners = useMemo(() => {
@@ -125,19 +192,11 @@ export default function LeadsPage() {
             return
         }
 
-        // Priority:
-        // 1. empresa_id directly from the form (autocomplete selection)
-        // 2. currentLead?.empresa_id (existing link if any)
         const finalEmpresaId = leadData.empresa_id || (modalMode === 'edit' ? currentLead?.empresa_id : undefined)
-
         let finalEmpresaName = leadData.empresa
         if (finalEmpresaId) {
-            // Find the official name from our lists
             const officialCompany = companiesList.find(c => c.id === finalEmpresaId)
-
-            if (officialCompany) {
-                finalEmpresaName = officialCompany.nombre
-            }
+            if (officialCompany) finalEmpresaName = officialCompany.nombre
         }
 
         if (modalMode === 'create') {
@@ -149,20 +208,53 @@ export default function LeadsPage() {
                 empresa_id: finalEmpresaId as string
             }
 
-            // Cast to any to avoid generic type inference issues with library
-            const { error } = await (supabase
+            const { data, error } = await (supabase
                 .from('clientes') as any)
                 .insert([payload])
+                .select()
 
             if (error) {
                 console.error('Error creating lead:', error)
                 alert('Error al crear el lead: ' + error.message)
+            } else if (data && data[0]) {
+                // Initial history entry
+                await (supabase.from('lead_history') as any).insert([
+                    { lead_id: data[0].id, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
+                    { lead_id: data[0].id, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
+                ])
             }
         } else if (modalMode === 'edit' && currentLead) {
+            // Check for changes to log
+            const historyEntries: any[] = []
+            if (leadData.etapa !== currentLead.etapa) {
+                historyEntries.push({ lead_id: currentLead.id, field_name: 'etapa', old_value: currentLead.etapa, new_value: leadData.etapa, changed_by: currentUser.id })
+            }
+            if (leadData.probabilidad !== currentLead.probabilidad) {
+                historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String(currentLead.probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
+            }
+
             const payload: LeadUpdate = {
                 ...leadData,
                 empresa: finalEmpresaName,
                 empresa_id: finalEmpresaId as string
+            }
+
+            // SCORING LOGIC
+            const isClosing = (leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrado Perdido') &&
+                (currentLead.etapa !== 'Cerrado Ganado' && currentLead.etapa !== 'Cerrado Perdido')
+
+            if (isClosing) {
+                const y = leadData.etapa === 'Cerrado Ganado' ? 1 : 0
+                const pValue = leadData.probabilidad || currentLead.probabilidad || 50
+                const p = pValue / 100
+
+                // Log Loss = -(y*ln(p) + (1-y)*ln(1-p))
+                const logLoss = -(y * Math.log(p) + (1 - y) * Math.log(1 - p))
+
+                payload.forecast_logloss = logLoss
+                payload.forecast_evaluated_probability = pValue
+                payload.forecast_outcome = y
+                payload.forecast_scored_at = new Date().toISOString()
             }
 
             const { error } = await (supabase
@@ -171,8 +263,9 @@ export default function LeadsPage() {
                 .eq('id', currentLead.id)
 
             if (error) {
-                console.error('Error updating lead:', error)
-                alert('Error al actualizar el lead')
+                alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
+            } else if (historyEntries.length > 0) {
+                await (supabase.from('lead_history') as any).insert(historyEntries)
             }
         }
 
@@ -238,7 +331,7 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#E9ECEF]'>
+        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#DDE2E5]'>
             <div className='w-full mx-auto flex flex-col h-full gap-8'>
                 {/* Header - Fixed */}
                 <div className='shrink-0 space-y-4'>
@@ -295,8 +388,8 @@ export default function LeadsPage() {
                                 <option value="All">Todas</option>
                                 <option value="Prospección">Prospección</option>
                                 <option value="Negociación">Negociación</option>
-                                <option value="Cerrado">Cerrado</option>
-                                <option value="Ganada">Ganada</option>
+                                <option value="Cerrado Ganado">Cerrado Ganado</option>
+                                <option value="Cerrado Perdido">Cerrado Perdido</option>
                             </select>
                         </div>
 
@@ -314,12 +407,31 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        {(filterSearch || filterStage !== 'All' || filterOwner !== 'All') && (
+                        <div className='flex items-center gap-3'>
+                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Ordenar por:</label>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                            >
+                                <option value="fecha_registro-desc">Reciente → Antiguo</option>
+                                <option value="fecha_registro-asc">Antiguo → Reciente</option>
+                                <option value="valor_estimado-desc">Valor (Mayor → Menor)</option>
+                                <option value="calificacion-desc">Calificación (Mayor → Menor)</option>
+                                <option value="etapa-asc">Etapa (Negociación → Cerrado)</option>
+                                <option value="probabilidad-desc">Probabilidad (Mayor → Menor)</option>
+                                <option value="empresa-asc">Empresa (A → Z)</option>
+                                <option value="owner_username-asc">Vendedor (A → Z)</option>
+                            </select>
+                        </div>
+
+                        {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
                             <button
                                 onClick={() => {
                                     setFilterSearch('')
                                     setFilterStage('All')
                                     setFilterOwner('All')
+                                    setSortBy('fecha_registro-desc')
                                 }}
                                 className='text-[10px] font-black text-red-500 uppercase tracking-tighter hover:text-red-700 transition-colors'
                             >
@@ -328,7 +440,7 @@ export default function LeadsPage() {
                         )}
 
                         <div className='ml-auto text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]'>
-                            Mostrando {filteredLeads.length} de {leads.length}
+                            Mostrando {sortedAndFilteredLeads.length} de {leads.length}
                         </div>
                     </div>
                 </div>
@@ -341,7 +453,7 @@ export default function LeadsPage() {
                         </div>
                     ) : (
                         <ClientsTable
-                            clientes={filteredLeads}
+                            clientes={sortedAndFilteredLeads}
                             isEditingMode={isEditingMode}
                             onEdit={openEditModal}
                             onDelete={handleDeleteClick}
