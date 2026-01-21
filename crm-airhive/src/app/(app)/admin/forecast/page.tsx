@@ -4,16 +4,22 @@ import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import ConfirmModal from '@/components/ConfirmModal'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
+type History = {
+    lead_id: number
+    field_name: string
+    old_value: string | null
+    new_value: string | null
+    created_at: string
+}
 
 export default function ForecastDashboard() {
     const auth = useAuth()
     const [leads, setLeads] = useState<Lead[]>([])
+    const [history, setHistory] = useState<History[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
-    const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
     // Filters
     const [dateRange, setDateRange] = useState('all') // 30, 90, 180, all
@@ -25,50 +31,40 @@ export default function ForecastDashboard() {
 
     const fetchLeads = async () => {
         setLoading(true)
+        // Fetch ALL leads to have a complete view of the pipeline
         const { data, error } = await supabase
             .from('clientes')
             .select('*')
-            .not('forecast_logloss', 'is', null)
 
         if (!error && data) {
             setLeads(data)
         }
+
+        // Fetch history to recover probabilities for old leads
+        const { data: histData } = await (supabase
+            .from('lead_history') as any)
+            .select('*')
+            .eq('field_name', 'probabilidad')
+            .order('created_at', { ascending: false })
+
+        if (histData) setHistory(histData as any)
+
         setLoading(false)
-    }
-
-    const handleClearHistory = async () => {
-        let query = (supabase.from('clientes') as any).update({
-            forecast_logloss: null,
-            forecast_evaluated_probability: null,
-            forecast_outcome: null,
-            forecast_scored_at: null
-        })
-
-        if (filterSeller !== 'All') {
-            query = query.eq('owner_username', filterSeller)
-        } else {
-            query = query.not('forecast_logloss', 'is', null)
-        }
-
-        const { error } = await query
-
-        if (error) {
-            console.error('Error clearing history:', error)
-            alert('Error al borrar el historial')
-        } else {
-            await fetchLeads()
-        }
     }
 
     const filteredLeads = useMemo(() => {
         let result = leads
 
-        // Date Filter
+        // Date Filter (only applies to scored leads or all for general view?)
+        // Let's keep it applying to scored leads for the "Historical" part
         if (dateRange !== 'all') {
             const days = parseInt(dateRange)
             const cutoff = new Date()
             cutoff.setDate(cutoff.getDate() - days)
-            result = result.filter(l => l.forecast_scored_at && new Date(l.forecast_scored_at) >= cutoff)
+            result = result.filter(l => {
+                if (l.forecast_scored_at) return new Date(l.forecast_scored_at) >= cutoff
+                return true // Keep open leads always? Or filter them too? Let's keep open leads.
+            })
         }
 
         // Seller Filter
@@ -89,16 +85,20 @@ export default function ForecastDashboard() {
         const map: Record<string, {
             name: string,
             leads: Lead[],
+            historicalLeads: Lead[],
+            activeLeads: Lead[],
             avgLogLoss: number,
             winRate: number,
             avgProb: number,
-            score: number
+            score: number,
+            pipelineExpectedValue: number,
+            pipelineAdjustedValue: number
         }> = {}
 
-        // Global Win Rate for baseline
-        const closedLeads = leads.filter(l => l.forecast_outcome !== null)
-        const globalWinRate = closedLeads.length > 0
-            ? closedLeads.filter(l => l.forecast_outcome === 1).length / closedLeads.length
+        // Global Win Rate for baseline (only from closed leads)
+        const allClosedLeads = leads.filter(l => l.etapa?.toLowerCase().includes('cerrado'))
+        const globalWinRate = allClosedLeads.length > 0
+            ? allClosedLeads.filter(l => l.etapa === 'Cerrado Ganado').length / allClosedLeads.length
             : 0.3
 
         const r = Math.max(0.01, Math.min(0.99, globalWinRate))
@@ -107,46 +107,128 @@ export default function ForecastDashboard() {
         filteredLeads.forEach(lead => {
             const seller = lead.owner_username || 'Unknown'
             if (!map[seller]) {
-                map[seller] = { name: seller, leads: [], avgLogLoss: 0, winRate: 0, avgProb: 0, score: 0 }
+                map[seller] = {
+                    name: seller,
+                    leads: [],
+                    historicalLeads: [],
+                    activeLeads: [],
+                    avgLogLoss: 0,
+                    winRate: 0,
+                    avgProb: 0,
+                    score: 0,
+                    pipelineExpectedValue: 0,
+                    pipelineAdjustedValue: 0
+                }
             }
             map[seller].leads.push(lead)
+
+            // Check if lead is closed based on Stage (etapa)
+            const isClosed = lead.etapa?.toLowerCase().includes('cerrado')
+            if (isClosed) {
+                map[seller].historicalLeads.push(lead)
+            } else {
+                map[seller].activeLeads.push(lead)
+            }
         })
 
         return Object.values(map).map(s => {
-            const n = s.leads.length
-            const sumLogLoss = s.leads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0)
-            const sumWins = s.leads.filter(l => l.forecast_outcome === 1).length
-            const sumProb = s.leads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0)
+            const histN = s.historicalLeads.length
 
-            const avgLogLoss = sumLogLoss / n
-            const reliabilityScore = Math.max(0, 1 - (avgLogLoss / L_base)) * 100
+            // Win Rate based on etapa
+            const sumWins = s.historicalLeads.filter(l => l.etapa === 'Cerrado Ganado').length
+            const winRate = histN > 0 ? (sumWins / histN) * 100 : 0
+
+            // Reliability Score - Recover log loss if missing
+            const scoredLeads = s.historicalLeads.map(l => {
+                if (l.forecast_logloss !== null) return l
+
+                // Try to RECOVER from history
+                // Find latest probability set (since we ordered by created_at desc in fetch)
+                const leadHist = history.filter(h => h.lead_id === l.id)
+                const recoveredProbStr = leadHist[0]?.new_value
+
+                if (recoveredProbStr) {
+                    const p = parseInt(recoveredProbStr) / 100
+                    const y = l.etapa === 'Cerrado Ganado' ? 1 : 0
+                    // Prevent Math.log(0)
+                    const pSafe = Math.max(0.01, Math.min(0.99, p))
+                    const logLoss = -(y * Math.log(pSafe) + (1 - y) * Math.log(1 - pSafe))
+                    return {
+                        ...l,
+                        forecast_logloss: logLoss,
+                        forecast_evaluated_probability: parseInt(recoveredProbStr)
+                    }
+                }
+                return l
+            }).filter(l => l.forecast_logloss !== null)
+
+            const scoredN = scoredLeads.length
+            const sumLogLoss = scoredLeads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0)
+            const sumProbHist = scoredLeads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0)
+
+            const avgLogLoss = scoredN > 0 ? sumLogLoss / scoredN : 0
+            const reliabilityScore = scoredN > 0 ? Math.max(0, 1 - (avgLogLoss / L_base)) * 100 : 0
+
+            // Pipeline Forecast (Only Negotiation leads)
+            const negotiationLeads = s.activeLeads.filter(l => l.etapa === 'Negociación')
+            const pipelineEV = negotiationLeads.reduce((acc, l) => {
+                const prob = (l.probabilidad || 0) / 100
+                const val = l.valor_estimado || 0
+                return acc + (prob * val)
+            }, 0)
+
+            // Adjusted Forecast (Weight by reliability)
+            const pipelineAdj = pipelineEV * (reliabilityScore / 100)
 
             return {
                 ...s,
                 avgLogLoss,
-                winRate: (sumWins / n) * 100,
-                avgProb: sumProb / n,
-                score: reliabilityScore
+                winRate,
+                avgProb: scoredN > 0 ? sumProbHist / scoredN : 0,
+                score: reliabilityScore,
+                pipelineExpectedValue: pipelineEV,
+                pipelineAdjustedValue: pipelineAdj
             }
         }).sort((a, b) => b.score - a.score)
-    }, [leads, filteredLeads])
+    }, [leads, filteredLeads, history])
 
+    // Global Stats for the top cards
+    const globalStats = useMemo(() => {
+        const historical = filteredLeads.filter(l => l.etapa?.toLowerCase().includes('cerrado'))
+        const active = filteredLeads.filter(l => !l.etapa?.toLowerCase().includes('cerrado'))
+
+        // Only average log loss for leads that actually HAVE it
+        const scoredLeads = historical.filter(l => l.forecast_logloss !== null)
+        const avgLogLoss = scoredLeads.length > 0
+            ? scoredLeads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0) / scoredLeads.length
+            : 0
+
+        const pipelineForecast = active.filter(l => l.etapa === 'Negociación').reduce((acc, l) => {
+            return acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0))
+        }, 0)
+
+        // Global adjusted sum
+        const adjustedTotal = statsPerSeller.reduce((acc, s) => acc + s.pipelineAdjustedValue, 0)
+
+        return {
+            totalLeads: filteredLeads.length,
+            historicalCount: historical.length,
+            activeCount: active.length,
+            negotiationCount: active.filter(l => l.etapa === 'Negociación').length,
+            avgLogLoss,
+            pipelineForecast,
+            adjustedTotal
+        }
+    }, [filteredLeads, statsPerSeller])
+    burial:
     return (
         <div className='h-full flex flex-col p-8 bg-[#DDE2E5] overflow-y-auto'>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 <div className='flex justify-between items-center'>
                     <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>
-                        Confiabilidad de Vendedores
+                        Pronóstico & Confiabilidad
                     </h1>
                     <div className='flex gap-4 items-center'>
-                        {auth.profile?.role === 'admin' && (
-                            <button
-                                onClick={() => setIsConfirmOpen(true)}
-                                className='bg-red-50 text-red-600 border border-red-200 rounded-xl px-4 py-2 text-sm font-bold shadow-sm hover:bg-red-100 transition-colors whitespace-nowrap'
-                            >
-                                🗑️ {filterSeller === 'All' ? 'Borrar Todo el Historial' : `Borrar Historial de ${filterSeller}`}
-                            </button>
-                        )}
                         <select
                             value={dateRange}
                             onChange={(e) => setDateRange(e.target.value)}
@@ -169,20 +251,39 @@ export default function ForecastDashboard() {
                 </div>
 
                 {/* Dashboard Cards */}
-                <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+                <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
                     <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Muestra Analizada</label>
-                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{filteredLeads.length} Leads</p>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Pipeline Seleccionado</label>
+                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{globalStats.totalLeads} <span className='text-sm font-normal text-gray-400'>Leads</span></p>
                     </div>
                     <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Promedio Log Loss</label>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Histórico Analizado</label>
+                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{globalStats.historicalCount} <span className='text-sm font-normal text-gray-400'>Cerrados</span></p>
+                    </div>
+                    <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Log Loss Histórico</label>
                         <p className='text-3xl font-black text-[#2048FF] mt-2'>
-                            {(filteredLeads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0) / (filteredLeads.length || 1)).toFixed(4)}
+                            {globalStats.avgLogLoss.toFixed(4)}
                         </p>
                     </div>
                     <div className='bg-[#1700AC] p-6 rounded-2xl border border-[#1700AC] shadow-lg'>
-                        <label className='text-[10px] font-black text-white/50 uppercase tracking-[0.2em]'>Puntuación de Red</label>
-                        <p className='text-3xl font-black text-white mt-2'>Accuracy Pro</p>
+                        <label className='text-[10px] font-black text-white/50 uppercase tracking-[0.2em]'>Forecast Ajustado (Total)</label>
+                        <p className='text-3xl font-black text-white mt-1'>
+                            ${globalStats.adjustedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </p>
+                        <p className='text-[10px] text-white/60 font-medium mt-1'>Pipeline real ponderado por confiabilidad</p>
+                    </div>
+                </div>
+
+                <div className='bg-blue-900/10 p-4 rounded-xl border border-blue-900/20 flex items-center justify-between'>
+                    <div>
+                        <p className='text-xs font-bold text-blue-900 uppercase tracking-widest'>Filtro Activo: Solo Negociación</p>
+                        <p className='text-[10px] text-blue-900/60'>
+                            El forecast solo incluye {globalStats.negotiationCount} leads en etapa de Negociación.
+                        </p>
+                    </div>
+                    <div className='text-right'>
+                        <p className='text-xs font-bold text-blue-900'>Total Bruto: ${globalStats.pipelineForecast.toLocaleString('es-MX')}</p>
                     </div>
                 </div>
 
@@ -192,11 +293,11 @@ export default function ForecastDashboard() {
                         <thead className='bg-gray-50 border-b border-gray-100'>
                             <tr>
                                 <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest'>Vendedor</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Reliability Score</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Avg Log Loss</th>
+                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Conf. (Score)</th>
+                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Forecast Negoc.</th>
+                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center bg-blue-50/50'>Forecast Real (Adj)</th>
                                 <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Tasa Cierre</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Prob. Media</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Nº Leads</th>
+                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Muestra</th>
                             </tr>
                         </thead>
                         <tbody className='divide-y divide-gray-50'>
@@ -213,7 +314,7 @@ export default function ForecastDashboard() {
                                     <td className='px-6 py-4 text-center'>
                                         <div className='flex flex-col items-center gap-1'>
                                             <span className={`text-lg font-black ${s.score > 80 ? 'text-emerald-600' : s.score > 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                {s.score.toFixed(1)}
+                                                {s.score > 0 ? s.score.toFixed(1) : (s.historicalLeads.length > 0 ? 'Sin datos' : 'N/A')}
                                             </span>
                                             <div className='w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden'>
                                                 <div
@@ -223,12 +324,18 @@ export default function ForecastDashboard() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className='px-6 py-4 text-center font-medium text-gray-600'>{s.avgLogLoss.toFixed(4)}</td>
-                                    <td className='px-6 py-4 text-center font-bold text-[#0A1635]'>{s.winRate.toFixed(1)}%</td>
-                                    <td className='px-6 py-4 text-center font-bold text-[#2048FF]'>{s.avgProb.toFixed(1)}%</td>
                                     <td className='px-6 py-4 text-center'>
-                                        <span className={`px-2 py-1 rounded text-[10px] font-black ${s.leads.length < 20 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
-                                            {s.leads.length} {s.leads.length < 20 && '⚠️'}
+                                        <p className='font-bold text-gray-400'>${s.pipelineExpectedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                        <p className='text-[10px] text-gray-400'>{s.leads.filter(l => l.etapa === 'Negociación').length} en negoc.</p>
+                                    </td>
+                                    <td className='px-6 py-4 text-center bg-blue-50/20'>
+                                        <p className='font-black text-[#1700AC] text-lg'>${s.pipelineAdjustedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                        <p className='text-[10px] text-blue-600/60 uppercase font-black tracking-tighter'>Ponderado</p>
+                                    </td>
+                                    <td className='px-6 py-4 text-center font-bold text-[#0A1635]'>{s.winRate.toFixed(1)}%</td>
+                                    <td className='px-6 py-4 text-center'>
+                                        <span className={`px-2 py-1 rounded text-[10px] font-black ${s.historicalLeads.length < 10 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
+                                            {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}
                                         </span>
                                     </td>
                                 </tr>
@@ -237,29 +344,25 @@ export default function ForecastDashboard() {
                     </table>
                 </div>
 
-                {/* Warnings */}
-                {statsPerSeller.some(s => s.leads.length < 20) && (
-                    <div className='bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-4'>
-                        <span className='text-2xl'>⚠️</span>
-                        <div>
-                            <p className='text-amber-800 font-bold'>Validez Estadística Limitada</p>
-                            <p className='text-amber-700/80 text-sm'>Algunos vendedores tienen menos de 20 leads evaluados. Los puntajes pueden variar significativamente con nuevos datos.</p>
-                        </div>
+                {/* Guidance */}
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                    <div className='bg-blue-50 p-6 rounded-2xl border border-blue-100'>
+                        <p className='text-blue-800 font-bold mb-2'>¿Cómo leer el Forecast del Pipeline?</p>
+                        <p className='text-blue-700/80 text-sm leading-relaxed'>
+                            Es el valor que esperamos cerrar pronto. Se calcula sumando el (Valor Estimado × Probabilidad %) de cada lead abierto.
+                            Combínalo con el **Score de Confiabilidad** para saber qué tan realistas son las promesas de cada vendedor.
+                        </p>
                     </div>
-                )}
+                    {statsPerSeller.some(s => s.historicalLeads.length < 10) && (
+                        <div className='bg-amber-50 p-6 rounded-2xl border border-amber-100'>
+                            <p className='text-amber-800 font-bold mb-2'>Validez Estadística Limitada</p>
+                            <p className='text-amber-700/80 text-sm leading-relaxed'>
+                                Algunos vendedores tienen pocos cierres registrados. El Score de Confiabilidad será más preciso a medida que cierren más leads y comparemos sus predicciones con la realidad.
+                            </p>
+                        </div>
+                    )}
+                </div>
             </div>
-
-            <ConfirmModal
-                isOpen={isConfirmOpen}
-                onClose={() => setIsConfirmOpen(false)}
-                onConfirm={handleClearHistory}
-                title={filterSeller === 'All' ? "Borrar Todo el Historial" : `Borrar Historial de ${filterSeller}`}
-                message={filterSeller === 'All'
-                    ? "Esta acción borrará todas las métricas de precisión de TODOS los vendedores de forma permanente. ¿Deseas continuar?"
-                    : `Esta acción borrará todas las métricas de precisión de ${filterSeller} de forma permanente. ¿Deseas continuar?`
-                }
-                isDestructive={true}
-            />
         </div>
     )
 }

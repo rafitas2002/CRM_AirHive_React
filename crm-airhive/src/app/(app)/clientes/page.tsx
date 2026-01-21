@@ -240,21 +240,26 @@ export default function LeadsPage() {
             }
 
             // SCORING LOGIC
-            const isClosing = (leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrado Perdido') &&
-                (currentLead.etapa !== 'Cerrado Ganado' && currentLead.etapa !== 'Cerrado Perdido')
+            const isClosedNow = leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrado Perdido'
+            const wasClosedBefore = currentLead.etapa === 'Cerrado Ganado' || currentLead.etapa === 'Cerrado Perdido'
 
-            if (isClosing) {
+            if (isClosedNow) {
                 const y = leadData.etapa === 'Cerrado Ganado' ? 1 : 0
-                const pValue = leadData.probabilidad || currentLead.probabilidad || 50
+                const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : (currentLead.probabilidad || 50)
                 const p = pValue / 100
 
-                // Log Loss = -(y*ln(p) + (1-y)*ln(1-p))
-                const logLoss = -(y * Math.log(p) + (1 - y) * Math.log(1 - p))
+                // Recalculate if it's new closure OR if data changed on an old closure
+                const dataChanged = leadData.probabilidad !== currentLead.probabilidad || leadData.etapa !== currentLead.etapa
 
-                payload.forecast_logloss = logLoss
-                payload.forecast_evaluated_probability = pValue
-                payload.forecast_outcome = y
-                payload.forecast_scored_at = new Date().toISOString()
+                if (!wasClosedBefore || dataChanged) {
+                    // Log Loss = -(y*ln(p) + (1-y)*ln(1-p))
+                    const logLoss = -(y * Math.log(p) + (1 - y) * Math.log(1 - p))
+
+                    payload.forecast_logloss = logLoss
+                    payload.forecast_evaluated_probability = pValue
+                    payload.forecast_outcome = y
+                    payload.forecast_scored_at = new Date().toISOString()
+                }
             }
 
             const { error } = await (supabase
