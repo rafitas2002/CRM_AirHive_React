@@ -296,17 +296,24 @@ export interface MeetingWithUrgency extends Meeting {
     etapa?: string
     hoursUntil?: number
     urgencyLevel?: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled' | 'in_progress'
+    seller_name?: string
 }
 
-export async function getUpcomingMeetings(userId: string, limit: number = 10): Promise<MeetingWithUrgency[]> {
+export async function getUpcomingMeetings(userId: string, limit: number = 10, allMeetings: boolean = false): Promise<MeetingWithUrgency[]> {
     try {
-        console.log('Fetching upcoming meetings for user:', userId)
+        console.log('Fetching upcoming meetings for user:', userId, 'All meetings:', allMeetings)
 
         // 1. Fetch meetings only
-        const { data: meetings, error: meetingsError } = await supabase
+        let query = supabase
             .from('meetings')
             .select('*')
-            .eq('seller_id', userId)
+
+        // Only filter by seller_id if NOT viewing all meetings
+        if (!allMeetings) {
+            query = query.eq('seller_id', userId)
+        }
+
+        const { data: meetings, error: meetingsError } = await query
             .eq('status', 'scheduled')
             .order('start_time', { ascending: true })
             .limit(limit * 2)
@@ -342,6 +349,23 @@ export async function getUpcomingMeetings(userId: string, limit: number = 10): P
             return acc
         }, {})
 
+        // 2.1 Fetch sellers (profiles) if viewing all meetings
+        let sellersMap: Record<string, string> = {}
+        if (allMeetings) {
+            const sellerIds = Array.from(new Set(filteredMeetings.map((m: any) => m.seller_id)))
+            const { data: profiles, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, username, full_name')
+                .in('id', sellerIds)
+
+            if (!profilesError && profiles) {
+                sellersMap = profiles.reduce((acc: any, p: any) => {
+                    acc[p.id] = p.full_name || p.username || 'Desconocido'
+                    return acc
+                }, {})
+            }
+        }
+
         // 3. Combine and calculate urgency
         const now = new Date()
         return filteredMeetings.map((meeting: any) => {
@@ -374,7 +398,8 @@ export async function getUpcomingMeetings(userId: string, limit: number = 10): P
                 empresa: client?.empresa,
                 etapa: client?.etapa,
                 hoursUntil,
-                urgencyLevel
+                urgencyLevel,
+                seller_name: sellersMap[meeting.seller_id]
             }
         })
     } catch (err) {

@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getUpcomingMeetings, getPendingConfirmations, confirmMeeting, type MeetingWithUrgency } from '@/lib/confirmationService'
 import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
+import { useAuth } from '@/lib/auth'
 import MeetingConfirmationModal from '@/components/MeetingConfirmationModal'
 import MeetingModal from '@/components/MeetingModal'
 import { updateMeeting, deleteMeeting } from '@/lib/meetingsService'
 
 export default function CalendarioPage() {
-    const [supabase] = useState(() => createClient())
+    const auth = useAuth()
     const [meetings, setMeetings] = useState<MeetingWithUrgency[]>([])
     const [pendingConfirmations, setPendingConfirmations] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const [currentUser, setCurrentUser] = useState<any>(null)
+    // const [loading, setLoading] = useState(true) // Handled by auth
+    // const [currentUser, setCurrentUser] = useState<any>(null) // Handled by auth
     const [showConfirmationModal, setShowConfirmationModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
@@ -22,22 +23,24 @@ export default function CalendarioPage() {
     const [isEditMode, setIsEditMode] = useState(false)
 
     useEffect(() => {
-        fetchData()
+        if (!auth.loading && auth.user) {
+            fetchData()
+        }
         // Check for pending confirmations every minute
         const interval = setInterval(checkPendingConfirmations, 60 * 1000)
         return () => clearInterval(interval)
-    }, [])
+    }, [auth.user, auth.loading, auth.profile])
 
     const fetchData = async () => {
-        setLoading(true)
+        // setLoading(true) // Auth handles initial loading
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            if (!auth.user) return
 
-            setCurrentUser(user)
+            // Check if admin
+            const isAdmin = auth.profile?.role === 'admin'
 
             // Fetch all meetings
-            const allMeetings = await getUpcomingMeetings(user.id, 50)
+            const allMeetings = await getUpcomingMeetings(auth.user.id, 50, isAdmin)
             setMeetings(allMeetings)
 
             // Check for pending confirmations
@@ -45,20 +48,12 @@ export default function CalendarioPage() {
         } catch (error) {
             console.error('Error fetching calendar data:', error)
         } finally {
-            setLoading(false)
+            // setLoading(false)
         }
     }
 
     const checkPendingConfirmations = async () => {
-        let userId = currentUser?.id
-
-        if (!userId) {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-            userId = user.id
-            setCurrentUser(user)
-        }
-
+        const userId = auth.user?.id
         if (!userId) return
 
         const pending = await getPendingConfirmations(userId)
@@ -72,10 +67,10 @@ export default function CalendarioPage() {
     }
 
     const handleConfirmMeeting = async (wasHeld: boolean, notes: string) => {
-        if (!selectedMeeting || !currentUser) return
+        if (!selectedMeeting || !auth.user) return
 
         try {
-            await confirmMeeting(selectedMeeting.id, wasHeld, notes, currentUser.id)
+            await confirmMeeting(selectedMeeting.id, wasHeld, notes, auth.user.id)
 
             // Refresh data
             await fetchData()
@@ -146,7 +141,7 @@ export default function CalendarioPage() {
         return acc
     }, {} as Record<string, MeetingWithUrgency[]>)
 
-    if (loading) {
+    if (auth.loading) {
         return (
             <div className='h-full flex items-center justify-center bg-[#F0F2F5]'>
                 <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
@@ -304,6 +299,12 @@ export default function CalendarioPage() {
                                                             <p className='text-sm text-gray-600 mb-2'>
                                                                 🏢 {meeting.empresa}
                                                             </p>
+
+                                                            {meeting.seller_name && (
+                                                                <p className='text-xs text-gray-500 font-medium mb-2'>
+                                                                    👤 Vendedor: <span className='text-gray-700'>{meeting.seller_name}</span>
+                                                                </p>
+                                                            )}
 
                                                             {meeting.notes && (
                                                                 <p className='text-sm text-gray-500 mt-2 italic'>
