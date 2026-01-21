@@ -21,6 +21,12 @@ export default function CalendarioPage() {
     const [editMeetingData, setEditMeetingData] = useState<any>(null)
     const [viewMode, setViewMode] = useState<'week' | 'list'>('list')
     const [isEditMode, setIsEditMode] = useState(false)
+    const [currentTime, setCurrentTime] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+        return () => clearInterval(timer)
+    }, [])
 
     useEffect(() => {
         if (!auth.loading && auth.user) {
@@ -155,9 +161,17 @@ export default function CalendarioPage() {
             <div className='bg-white border-b border-gray-200 px-8 py-6 shrink-0'>
                 <div className='flex items-center justify-between'>
                     <div>
-                        <h1 className='text-3xl font-black text-[#0F2A44]'>
-                            📅 Calendario de Juntas
-                        </h1>
+                        <div className='flex items-center gap-4'>
+                            <h1 className='text-3xl font-black text-[#0F2A44]'>
+                                📅 Calendario de Juntas
+                            </h1>
+                            <div className='bg-[#2048FF]/5 border border-[#2048FF]/10 px-4 py-1.5 rounded-xl flex items-center gap-2.5 shadow-sm'>
+                                <span className='text-blue-600 animate-pulse'>●</span>
+                                <span className='text-xl font-bold text-[#2048FF] font-mono tabular-nums tracking-tight'>
+                                    {currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                                </span>
+                            </div>
+                        </div>
                         <p className='text-sm text-gray-600 mt-1'>
                             Gestiona tus reuniones y confirma las que ya pasaron
                         </p>
