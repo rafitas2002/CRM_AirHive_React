@@ -66,7 +66,31 @@ export default function ResetPasswordPage() {
                         </div>
 
                         <div className='p-7'>
-                            {!success ? (
+                            {auth.loading ? (
+                                <div className='py-8 text-center'>
+                                    <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin mx-auto mb-4' />
+                                    <p className='text-gray-500'>Verificando sesión...</p>
+                                </div>
+                            ) : !auth.loggedIn && !success ? (
+                                <div className='text-center py-4'>
+                                    <div className='w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4'>
+                                        <span className='text-2xl'>⚠️</span>
+                                    </div>
+                                    <h2 className='text-xl font-bold text-black'>Sesión no encontrada</h2>
+                                    <p className='mt-3 text-[14px] text-[#667085] leading-relaxed'>
+                                        Para cambiar tu contraseña, debes seguir el enlace que enviamos a tu correo.
+                                        El enlace solo es válido por un tiempo limitado y para un solo uso.
+                                    </p>
+                                    <div className='mt-8'>
+                                        <Link
+                                            href='/forgot-password'
+                                            className='inline-block px-8 py-3 bg-[#2048FF] text-white rounded-[12px] font-bold text-sm shadow-md hover:bg-[#1700AC] transition-all'
+                                        >
+                                            Solicitar nuevo enlace
+                                        </Link>
+                                    </div>
+                                </div>
+                            ) : !success ? (
                                 <>
                                     <h1 className='text-[28px] font-extrabold text-black text-center'>Nueva contraseña</h1>
                                     <p className='mt-2 text-[13px] text-[#667085] text-center'>
