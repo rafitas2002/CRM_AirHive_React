@@ -3,11 +3,14 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { CompanyData } from './CompanyModal'
-import { Database } from '@/lib/supabase'
+import type { Database } from '@/lib/supabase'
 import ClientDetailView from './ClientDetailView'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
+/**
+ * AdminCompanyDetailView - A detailed view of a company including its associated leads.
+ */
 interface AdminCompanyDetailViewProps {
     isOpen: boolean
     onClose: () => void

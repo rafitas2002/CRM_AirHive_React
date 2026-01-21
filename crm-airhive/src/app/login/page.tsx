@@ -89,6 +89,15 @@ export default function LoginPage() {
                                     autoComplete='current-password'
                                 />
 
+                                <div className='flex justify-end'>
+                                    <a
+                                        href='/forgot-password'
+                                        className='text-[13px] text-[#2048FF] hover:underline font-medium'
+                                    >
+                                        ¿Olvidaste tu contraseña?
+                                    </a>
+                                </div>
+
                                 {/* Error box igual a QML */}
                                 {auth.lastError ? (
                                     <div className='w-full rounded-[10px] bg-[#FFF1F1] border border-[#FFD1D1] px-3 py-2'>

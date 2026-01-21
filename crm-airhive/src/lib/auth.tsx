@@ -21,6 +21,8 @@ type AuthState = {
     lastError: string
     login: (username: string, password: string) => Promise<void>
     logout: () => Promise<void>
+    requestPasswordReset: (emailOrUsername: string) => Promise<boolean>
+    updatePassword: (newPassword: string) => Promise<boolean>
     clearError: () => void
     user: User | null
 }
@@ -157,6 +159,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.location.href = '/login'
     }
 
+    const requestPasswordReset = async (usernameInput: string) => {
+        setBusy(true)
+        setLastError('')
+        const domain = process.env.NEXT_PUBLIC_AUTH_DOMAIN || 'airhivemx.com'
+        const email = usernameInput.includes('@')
+            ? usernameInput
+            : `${usernameInput}@${domain}`
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        })
+
+        setBusy(false)
+        if (error) {
+            console.error('Reset error:', error)
+            setLastError(error.message)
+            return false
+        }
+        return true
+    }
+
+    const updatePassword = async (newPassword: string) => {
+        setBusy(true)
+        setLastError('')
+        const { error } = await supabase.auth.updateUser({
+            password: newPassword
+        })
+
+        setBusy(false)
+        if (error) {
+            console.error('Update password error:', error)
+            setLastError(error.message)
+            return false
+        }
+        return true
+    }
+
     const value = useMemo(() => ({
         loggedIn: !!user,
         username: profile?.username || user?.email || '',
@@ -166,6 +205,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastError,
         login,
         logout,
+        requestPasswordReset,
+        updatePassword,
         clearError,
         user
     }), [user, profile, loading, busy, lastError])
