@@ -148,8 +148,8 @@ export async function getPendingConfirmations(userId: string) {
         console.log('Fetching pending confirmations for user:', userId)
 
         // 1. Fetch meetings only (simplified query)
-        const { data: meetings, error: meetingsError } = await supabase
-            .from('meetings')
+        const { data: meetings, error: meetingsError } = await (supabase
+            .from('meetings') as any)
             .select('*')
             .eq('seller_id', userId)
             .eq('meeting_status', 'pending_confirmation')
