@@ -59,6 +59,9 @@ export type Database = {
                     forecast_outcome: number | null
                     forecast_scored_at: string | null
                     probabilidad: number | null
+                    probability_locked: boolean | null
+                    next_meeting_id: string | null
+                    last_snapshot_at: string | null
                 }
                 Insert: {
                     id?: number
@@ -80,6 +83,9 @@ export type Database = {
                     forecast_outcome?: number | null
                     forecast_scored_at?: string | null
                     probabilidad?: number | null
+                    probability_locked?: boolean | null
+                    next_meeting_id?: string | null
+                    last_snapshot_at?: string | null
                 }
                 Update: {
                     id?: number
@@ -101,6 +107,179 @@ export type Database = {
                     forecast_outcome?: number | null
                     forecast_scored_at?: string | null
                     probabilidad?: number | null
+                    probability_locked?: boolean | null
+                    next_meeting_id?: string | null
+                    last_snapshot_at?: string | null
+                }
+            }
+            meetings: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    seller_id: string
+                    title: string
+                    start_time: string
+                    duration_minutes: number
+                    meeting_type: 'presencial' | 'llamada' | 'video'
+                    notes: string | null
+                    attendees: string[] | null
+                    calendar_event_id: string | null
+                    calendar_provider: 'google' | 'outlook' | null
+                    status: 'scheduled' | 'completed' | 'cancelled'
+                    meeting_status: 'scheduled' | 'held' | 'not_held' | 'pending_confirmation' | 'cancelled'
+                    frozen_probability_value: number | null
+                    confirmation_timestamp: string | null
+                    confirmed_by: string | null
+                    confirmation_notes: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    seller_id: string
+                    title: string
+                    start_time: string
+                    duration_minutes?: number
+                    meeting_type: 'presencial' | 'llamada' | 'video'
+                    notes?: string | null
+                    attendees?: string[] | null
+                    calendar_event_id?: string | null
+                    calendar_provider?: 'google' | 'outlook' | null
+                    status?: 'scheduled' | 'completed' | 'cancelled'
+                    meeting_status?: 'scheduled' | 'held' | 'not_held' | 'pending_confirmation' | 'cancelled'
+                    frozen_probability_value?: number | null
+                    confirmation_timestamp?: string | null
+                    confirmed_by?: string | null
+                    confirmation_notes?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    seller_id?: string
+                    title?: string
+                    start_time?: string
+                    duration_minutes?: number
+                    meeting_type?: 'presencial' | 'llamada' | 'video'
+                    notes?: string | null
+                    attendees?: string[] | null
+                    calendar_event_id?: string | null
+                    calendar_provider?: 'google' | 'outlook' | null
+                    status?: 'scheduled' | 'completed' | 'cancelled'
+                    meeting_status?: 'scheduled' | 'held' | 'not_held' | 'pending_confirmation' | 'cancelled'
+                    frozen_probability_value?: number | null
+                    confirmation_timestamp?: string | null
+                    confirmed_by?: string | null
+                    confirmation_notes?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
+            meeting_alerts: {
+                Row: {
+                    id: string
+                    meeting_id: string
+                    user_id: string
+                    alert_type: '24h' | '2h' | '15min' | 'overdue'
+                    alert_time: string
+                    sent: boolean
+                    sent_at: string | null
+                    dismissed: boolean
+                    dismissed_at: string | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    meeting_id: string
+                    user_id: string
+                    alert_type: '24h' | '2h' | '15min' | 'overdue'
+                    alert_time: string
+                    sent?: boolean
+                    sent_at?: string | null
+                    dismissed?: boolean
+                    dismissed_at?: string | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    meeting_id?: string
+                    user_id?: string
+                    alert_type?: '24h' | '2h' | '15min' | 'overdue'
+                    alert_time?: string
+                    sent?: boolean
+                    sent_at?: string | null
+                    dismissed?: boolean
+                    dismissed_at?: string | null
+                    created_at?: string
+                }
+            }
+            meeting_confirmations: {
+                Row: {
+                    id: string
+                    meeting_id: string
+                    confirmed_by: string
+                    was_held: boolean
+                    confirmation_notes: string | null
+                    snapshot_created: boolean
+                    snapshot_id: string | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    meeting_id: string
+                    confirmed_by: string
+                    was_held: boolean
+                    confirmation_notes?: string | null
+                    snapshot_created?: boolean
+                    snapshot_id?: string | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    meeting_id?: string
+                    confirmed_by?: string
+                    was_held?: boolean
+                    confirmation_notes?: string | null
+                    snapshot_created?: boolean
+                    snapshot_id?: string | null
+                    created_at?: string
+                }
+            }
+            forecast_snapshots: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    seller_id: string
+                    meeting_id: string
+                    snapshot_number: number
+                    probability: number
+                    snapshot_timestamp: string
+                    source: string
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    seller_id: string
+                    meeting_id: string
+                    snapshot_number: number
+                    probability: number
+                    snapshot_timestamp: string
+                    source?: string
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    seller_id?: string
+                    meeting_id?: string
+                    snapshot_number?: number
+                    probability?: number
+                    snapshot_timestamp?: string
+                    source?: string
+                    created_at?: string
                 }
             }
             lead_history: {

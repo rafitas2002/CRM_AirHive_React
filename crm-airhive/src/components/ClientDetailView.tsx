@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import MeetingModal from './MeetingModal'
+import MeetingsList from './MeetingsList'
+import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable } from '@/lib/meetingsService'
+import { Database } from '@/lib/supabase'
 
 type ClientData = {
     id: number
@@ -15,13 +19,20 @@ type ClientData = {
     notas: string
     empresa_id?: string
     owner_username?: string
+    owner_id?: string
     probabilidad?: number
     fecha_registro?: string
     forecast_logloss?: number | null
     forecast_evaluated_probability?: number | null
     forecast_outcome?: number | null
     forecast_scored_at?: string | null
+    probability_locked?: boolean | null
+    next_meeting_id?: string | null
+    last_snapshot_at?: string | null
 }
+
+type Meeting = Database['public']['Tables']['meetings']['Row']
+type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
 
 type CompanyData = {
     id: string
@@ -53,14 +64,23 @@ export default function ClientDetailView({
     const [loadingCompany, setLoadingCompany] = useState(false)
     const [supabase] = useState(() => createClient())
 
+    // Meetings & Snapshots State
+    const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
+    const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
+    const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+    const [isProbEditable, setIsProbEditable] = useState(false)
+    const [currentUser, setCurrentUser] = useState<any>(null)
+
     useEffect(() => {
-        console.log('ClientDetailView client:', client) // DEBUG
         if (client?.empresa_id) {
-            console.log('Fetching company with ID:', client.empresa_id) // DEBUG
             fetchCompany(client.empresa_id)
         } else {
-            console.log('No empresa_id found on client') // DEBUG
             setCompany(null)
+        }
+
+        if (client) {
+            fetchMeetingsData()
+            fetchCurrentUser()
         }
     }, [client])
 
@@ -78,6 +98,43 @@ export default function ClientDetailView({
             setCompany(data)
         }
         setLoadingCompany(false)
+    }
+
+    const fetchCurrentUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        setCurrentUser(user)
+    }
+
+    const fetchMeetingsData = async () => {
+        if (!client) return
+
+        try {
+            const [nextMtg, snaps] = await Promise.all([
+                getNextMeeting(client.id),
+                getLeadSnapshots(client.id)
+            ])
+
+            setNextMeeting(nextMtg)
+            setSnapshots(snaps)
+
+            // Check if probability is editable
+            if (currentUser && client) {
+                const result = await isProbabilityEditable(client as any, currentUser.id)
+                setIsProbEditable(result.editable)
+            }
+        } catch (error) {
+            console.error('Error fetching meetings data:', error)
+        }
+    }
+
+    const handleCreateMeeting = async (meetingData: any) => {
+        try {
+            await createMeeting(meetingData)
+            await fetchMeetingsData()
+        } catch (error) {
+            console.error('Error creating meeting:', error)
+            throw error
+        }
     }
 
     if (!isOpen || !client) return null
@@ -239,6 +296,116 @@ export default function ClientDetailView({
                                 </div>
                             </div>
                         </div>
+
+                        {/* Meetings & Forecast Status */}
+                        {client.etapa === 'Negociación' && (
+                            <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl shadow-sm border border-blue-200'>
+                                <h2 className='text-lg font-bold text-[#0F2A44] mb-4 border-b border-blue-200 pb-2'>
+                                    📅 Estado del Pronóstico
+                                </h2>
+
+                                <div className='grid grid-cols-2 gap-4 mb-4'>
+                                    <div>
+                                        <p className='text-xs font-bold text-gray-600 uppercase tracking-wider'>Próxima Junta</p>
+                                        <p className='text-lg font-black text-blue-900 mt-1'>
+                                            {nextMeeting ? new Date(nextMeeting.start_time).toLocaleString('es-MX', {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) : 'No agendada'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className='text-xs font-bold text-gray-600 uppercase tracking-wider'>Pronóstico Editable Hasta</p>
+                                        <p className='text-lg font-black text-purple-900 mt-1'>
+                                            {nextMeeting ? new Date(nextMeeting.start_time).toLocaleString('es-MX', {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            }) : 'N/A'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className='flex items-center gap-3'>
+                                    <span className={`px-4 py-2 rounded-full text-xs font-black ${isProbEditable
+                                        ? 'bg-green-100 text-green-700 border-2 border-green-200'
+                                        : 'bg-red-100 text-red-700 border-2 border-red-200'
+                                        }`}>
+                                        {isProbEditable ? '✅ Editable' : '🔒 Bloqueado'}
+                                    </span>
+
+                                    {!nextMeeting && (
+                                        <button
+                                            onClick={() => setIsMeetingModalOpen(true)}
+                                            className='px-4 py-2 bg-blue-600 text-white rounded-full text-xs font-bold hover:bg-blue-700 transition-colors shadow-md'
+                                        >
+                                            + Agendar Primera Reunión
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Meetings Section */}
+                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                            <div className='flex justify-between items-center mb-4'>
+                                <h2 className='text-lg font-bold text-[#0F2A44] border-b pb-2'>
+                                    📅 Reuniones
+                                </h2>
+                                <button
+                                    onClick={() => setIsMeetingModalOpen(true)}
+                                    className='px-4 py-2 bg-[#2048FF] text-white rounded-lg font-bold hover:bg-[#1700AC] transition-colors shadow-sm text-sm'
+                                >
+                                    + Nueva Reunión
+                                </button>
+                            </div>
+
+                            <MeetingsList
+                                leadId={client.id}
+                                onRefresh={fetchMeetingsData}
+                            />
+                        </div>
+
+                        {/* Snapshots History */}
+                        {snapshots.length > 0 && (
+                            <div className='bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-200'>
+                                <h2 className='text-lg font-bold text-purple-900 mb-4 border-b border-purple-200 pb-2'>
+                                    📸 Historial de Pronósticos (Snapshots)
+                                </h2>
+                                <div className='space-y-3'>
+                                    {snapshots.map((snapshot) => (
+                                        <div key={snapshot.id} className='flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border border-purple-100'>
+                                            <div>
+                                                <p className='text-sm font-bold text-gray-700'>Snapshot #{snapshot.snapshot_number}</p>
+                                                <p className='text-xs text-gray-500 mt-1'>
+                                                    📅 {new Date(snapshot.snapshot_timestamp).toLocaleString('es-MX', {
+                                                        weekday: 'short',
+                                                        month: 'short',
+                                                        day: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </p>
+                                            </div>
+                                            <div className='text-right'>
+                                                <span className='text-2xl font-black text-purple-700'>
+                                                    {snapshot.probability}%
+                                                </span>
+                                                <p className='text-xs text-purple-600 mt-1'>Probabilidad</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className='mt-4 p-3 bg-purple-100 rounded-lg border border-purple-200'>
+                                    <p className='text-xs text-purple-800 font-medium'>
+                                        💡 Estos snapshots se capturan automáticamente al inicio de cada reunión y se usan para evaluar la confiabilidad del vendedor.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Column: Company Details */}
@@ -336,6 +503,17 @@ export default function ClientDetailView({
 
                 </div>
             </div>
+
+            {/* Meeting Modal */}
+            {currentUser && (
+                <MeetingModal
+                    isOpen={isMeetingModalOpen}
+                    onClose={() => setIsMeetingModalOpen(false)}
+                    onSave={handleCreateMeeting}
+                    leadId={client.id}
+                    sellerId={currentUser.id}
+                />
+            )}
         </div>
     )
 }

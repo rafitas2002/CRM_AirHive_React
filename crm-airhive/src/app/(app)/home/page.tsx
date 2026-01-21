@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import SellerRace from '@/components/SellerRace'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
+import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -237,11 +238,137 @@ function AdminDashboardView() {
 }
 
 function SellerHomeView({ username }: { username: string }) {
+    const [supabase] = useState(() => createClient())
+    const [stats, setStats] = useState({ activeLeads: 0, negotiationLeads: 0, totalValue: 0 })
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const { data: leads } = await (supabase
+                .from('clientes') as any)
+                .select('*')
+                .eq('owner_id', user.id)
+
+            if (leads) {
+                const active = leads.filter((l: any) => !l.etapa?.toLowerCase().includes('cerrado'))
+                const negotiation = leads.filter((l: any) => l.etapa === 'Negociación')
+                const totalValue = negotiation.reduce((acc: number, l: any) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
+
+                setStats({
+                    activeLeads: active.length,
+                    negotiationLeads: negotiation.length,
+                    totalValue
+                })
+            }
+            setLoading(false)
+        }
+        fetchStats()
+    }, [supabase])
+
+    if (loading) {
+        return (
+            <div className='h-full flex items-center justify-center bg-[#F0F2F5]'>
+                <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
+            </div>
+        )
+    }
+
     return (
-        <div className='h-full flex items-center justify-center bg-gray-50'>
-            <h1 className='text-4xl font-extrabold text-black'>
-                Bienvenido {username ? username : ''} 🥳🥳
-            </h1>
+        <div className='h-full flex flex-col p-8 bg-[#F0F2F5] overflow-y-auto'>
+            <div className='max-w-7xl mx-auto w-full space-y-8'>
+                {/* Welcome Header */}
+                <div className='bg-gradient-to-r from-[#1700AC] to-[#2048FF] p-8 rounded-3xl shadow-xl text-white'>
+                    <h1 className='text-4xl font-black mb-2'>
+                        ¡Bienvenido, {username}! 🚀
+                    </h1>
+                    <p className='text-white/80 text-lg'>
+                        Aquí está tu resumen del día
+                    </p>
+                </div>
+
+                {/* Stats Cards */}
+                <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>Leads Activos</label>
+                        <p className='text-4xl font-black text-[#0F2A44] mt-2'>{stats.activeLeads}</p>
+                        <p className='text-xs text-gray-500 mt-1'>En tu pipeline</p>
+                    </div>
+
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>En Negociación</label>
+                        <p className='text-4xl font-black text-amber-600 mt-2'>{stats.negotiationLeads}</p>
+                        <p className='text-xs text-gray-500 mt-1'>Requieren seguimiento</p>
+                    </div>
+
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>Forecast Ponderado</label>
+                        <p className='text-4xl font-black text-emerald-600 mt-2'>
+                            ${stats.totalValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
+                        </p>
+                        <p className='text-xs text-gray-500 mt-1'>Valor esperado</p>
+                    </div>
+                </div>
+
+                {/* Main Content Grid */}
+                <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+                    {/* Left Column - Upcoming Meetings */}
+                    <div className='lg:col-span-1'>
+                        <UpcomingMeetingsWidget />
+                    </div>
+
+                    {/* Right Column - Quick Actions */}
+                    <div className='lg:col-span-2 space-y-6'>
+                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                            <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>
+                                🎯 Acciones Rápidas
+                            </h2>
+                            <div className='grid grid-cols-2 gap-4'>
+                                <a
+                                    href='/clientes'
+                                    className='p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors border-2 border-blue-200'
+                                >
+                                    <p className='font-bold text-blue-900 mb-1'>Ver Leads</p>
+                                    <p className='text-xs text-blue-700'>Gestiona tu pipeline</p>
+                                </a>
+                                <a
+                                    href='/calendario'
+                                    className='p-4 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors border-2 border-purple-200'
+                                >
+                                    <p className='font-bold text-purple-900 mb-1'>Calendario</p>
+                                    <p className='text-xs text-purple-700'>Ver todas las juntas</p>
+                                </a>
+                                <a
+                                    href='/empresas'
+                                    className='p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors border-2 border-emerald-200'
+                                >
+                                    <p className='font-bold text-emerald-900 mb-1'>Empresas</p>
+                                    <p className='text-xs text-emerald-700'>Gestionar cuentas</p>
+                                </a>
+                                <a
+                                    href='/admin/forecast'
+                                    className='p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors border-2 border-amber-200'
+                                >
+                                    <p className='font-bold text-amber-900 mb-1'>Mi Score</p>
+                                    <p className='text-xs text-amber-700'>Ver confiabilidad</p>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl border-2 border-blue-200'>
+                            <h3 className='text-lg font-bold text-[#0F2A44] mb-2'>
+                                💡 Tip del Día
+                            </h3>
+                            <p className='text-sm text-gray-700'>
+                                Recuerda actualizar la probabilidad de cierre de tus leads en <strong>Negociación</strong> antes de cada junta.
+                                El sistema congelará automáticamente el pronóstico al inicio de la reunión.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }

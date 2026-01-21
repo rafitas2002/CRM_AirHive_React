@@ -1,8 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createClient } from '@/lib/supabase'
+import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
+import { Database } from '@/lib/supabase'
+
+type Lead = Database['public']['Tables']['clientes']['Row']
+type Meeting = Database['public']['Tables']['meetings']['Row']
 
 export type ClientData = {
+    id?: number
     empresa: string
     nombre: string
     contacto: string
@@ -12,7 +19,10 @@ export type ClientData = {
     calificacion: number
     notas: string
     empresa_id?: string
+    owner_id?: string
     probabilidad?: number
+    probability_locked?: boolean | null
+    next_meeting_id?: string | null
 }
 
 interface ClientModalProps {
@@ -52,11 +62,22 @@ export default function ClientModal({
     const wrapperRef = useRef<HTMLDivElement>(null)
     const wasOpen = useRef(false)
 
+    // Probability editability state
+    const [isProbEditable, setIsProbEditable] = useState(true)
+    const [editabilityReason, setEditabilityReason] = useState('')
+    const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
+    const [currentUser, setCurrentUser] = useState<any>(null)
+    const [supabase] = useState(() => createClient())
+
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
             // Modal is opening, initialize/reset form
             if (initialData) {
                 setFormData(initialData)
+                // Check probability editability for edit mode
+                if (mode === 'edit') {
+                    checkProbabilityEditability()
+                }
             } else {
                 setFormData({
                     empresa: '',
@@ -70,10 +91,47 @@ export default function ClientModal({
                     empresa_id: undefined,
                     probabilidad: 50
                 })
+                // New leads are always editable
+                setIsProbEditable(true)
+                setEditabilityReason('')
             }
+
+            // Fetch current user
+            fetchCurrentUser()
         }
         wasOpen.current = isOpen
-    }, [isOpen, initialData])
+    }, [isOpen, initialData, mode])
+
+    const fetchCurrentUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        setCurrentUser(user)
+    }
+
+    const checkProbabilityEditability = async () => {
+        if (!initialData || !initialData.id) {
+            setIsProbEditable(true)
+            return
+        }
+
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const result = await isProbabilityEditable(initialData as any, user.id)
+            setIsProbEditable(result.editable)
+            setEditabilityReason(result.reason || '')
+            setNextMeeting(result.nextMeeting || null)
+
+            // If not editable and no next meeting, fetch it separately
+            if (!result.editable && initialData.id) {
+                const meeting = await getNextMeeting(initialData.id)
+                setNextMeeting(meeting)
+            }
+        } catch (error) {
+            console.error('Error checking probability editability:', error)
+            setIsProbEditable(true) // Default to editable on error
+        }
+    }
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -320,9 +378,16 @@ export default function ClientModal({
                                     <label className='block text-sm font-black text-[#0F2A44] uppercase tracking-tighter'>
                                         Probabilidad de Cierre
                                     </label>
-                                    <span className={`font-black text-xs ${formData.probabilidad && formData.probabilidad >= 70 ? 'text-emerald-600' : formData.probabilidad && formData.probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
-                                        {formData.probabilidad || 0}%
-                                    </span>
+                                    <div className='flex items-center gap-2'>
+                                        <span className={`font-black text-xs ${formData.probabilidad && formData.probabilidad >= 70 ? 'text-emerald-600' : formData.probabilidad && formData.probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                            {formData.probabilidad || 0}%
+                                        </span>
+                                        {!isProbEditable && (
+                                            <span className='text-xs font-bold text-red-500 flex items-center gap-1'>
+                                                🔒
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                                 <input
                                     type='range'
@@ -331,13 +396,46 @@ export default function ClientModal({
                                     step='5'
                                     value={formData.probabilidad || 50}
                                     onChange={(e) => setFormData({ ...formData, probabilidad: Number(e.target.value) })}
-                                    className='w-full h-2 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF]'
+                                    disabled={!isProbEditable}
+                                    className={`w-full h-2 bg-[#E0E0E0] rounded-lg appearance-none cursor-pointer accent-[#2048FF] ${!isProbEditable ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 />
                                 <div className='flex justify-between text-[8px] font-bold text-gray-400 uppercase tracking-widest'>
                                     <span>Baja</span>
                                     <span>Media</span>
                                     <span>Alta</span>
                                 </div>
+
+                                {/* Editability Messages */}
+                                {!isProbEditable && formData.etapa === 'Negociación' && (
+                                    <div className='mt-2 p-3 bg-amber-50 border-2 border-amber-200 rounded-lg'>
+                                        <p className='text-xs text-amber-800 font-bold mb-1'>
+                                            🔒 {editabilityReason}
+                                        </p>
+                                        {!nextMeeting && (
+                                            <p className='text-xs text-amber-700 mt-2'>
+                                                💡 Agenda una reunión para poder actualizar el pronóstico.
+                                            </p>
+                                        )}
+                                        {nextMeeting && (
+                                            <p className='text-xs text-amber-700 mt-2'>
+                                                📅 Próxima reunión: {new Date(nextMeeting.start_time).toLocaleString('es-MX', {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {!isProbEditable && formData.etapa !== 'Negociación' && (
+                                    <div className='mt-2 p-3 bg-blue-50 border-2 border-blue-200 rounded-lg'>
+                                        <p className='text-xs text-blue-800 font-bold'>
+                                            ℹ️ La probabilidad solo se puede editar en etapa de Negociación
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div className='space-y-1.5'>
