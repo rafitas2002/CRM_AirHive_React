@@ -185,7 +185,7 @@ export async function getPendingConfirmations(userId: string) {
         }, {})
 
         // 3. Combine data
-        const combined = meetings.map(meeting => ({
+        const combined = (meetings as Meeting[]).map(meeting => ({
             ...meeting,
             clientes: clientsMap[meeting.lead_id] || { empresa: 'Desconocida', etapa: '-' }
         }))
