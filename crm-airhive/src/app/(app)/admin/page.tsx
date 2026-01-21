@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
-import { useAuth } from '@/lib/auth'
 import {
     LayoutDashboard,
     TrendingUp,
@@ -27,7 +26,7 @@ type History = {
     created_at: string
 }
 
-function AdminDashboardView() {
+export default function AdminDashboard() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [history, setHistory] = useState<History[]>([])
     const [loading, setLoading] = useState(true)
@@ -46,6 +45,7 @@ function AdminDashboardView() {
         fetchData()
     }, [supabase])
 
+    // Metric Calculations (Shared with Forecast)
     const stats = useMemo(() => {
         const map: Record<string, {
             name: string,
@@ -55,6 +55,7 @@ function AdminDashboardView() {
             negotiationPipeline: number
         }> = {}
 
+        // Baseline global win rate for L_base calculation (historical comparison)
         const closed = leads.filter(l => l.etapa?.toLowerCase().includes('cerrado'))
         const active = leads.filter(l => !l.etapa?.toLowerCase().includes('cerrado'))
 
@@ -66,6 +67,7 @@ function AdminDashboardView() {
         })
 
         const sellers = Object.values(map).map(s => {
+            // New Strict Reliability Algorithm (Quadratic + N Penalty)
             const scoredLeads = s.historicalLeads.map(l => {
                 let p = 0
                 let y = l.etapa === 'Cerrado Ganado' ? 1 : 0
@@ -94,6 +96,7 @@ function AdminDashboardView() {
         const totalPipeline = active.reduce((acc, l) => acc + (l.valor_estimado || 0), 0)
         const adjustedForecast = sellers.reduce((acc, s) => acc + (s.negotiationPipeline * (s.score / 100)), 0)
 
+        // Pipeline Stage Distribution
         const stages = ['Prospección', 'Negociación', 'Cerrado Ganado', 'Cerrado Perdido']
         const funnel = stages.map(stage => ({
             stage,
@@ -119,19 +122,21 @@ function AdminDashboardView() {
     return (
         <div className='h-full flex flex-col p-8 bg-[#F0F2F5] overflow-y-auto'>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
+                {/* Header */}
                 <div className='flex justify-between items-center'>
                     <div className='space-y-1'>
                         <h1 className='text-3xl font-black text-[#0A1635] tracking-tighter flex items-center gap-3'>
                             <LayoutDashboard className='w-8 h-8 text-[#1700AC]' />
-                            Dashboard Ejecutivo
+                            Dashboard Administrativo
                         </h1>
-                        <p className='text-sm text-gray-500 font-medium'>Control maestro del rendimiento comercial y calidad de datos.</p>
+                        <p className='text-sm text-gray-500 font-medium'>Vista general del rendimiento comercial y pronósticos en tiempo real.</p>
                     </div>
                 </div>
 
+                {/* Hero Metrics */}
                 <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
                     <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Pipeline Seleccionado</label>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Pipeline de Negocio</label>
                         <p className='text-3xl font-black text-[#0A1635] mt-2'>
                             ${stats.totalPipeline.toLocaleString('es-MX')}
                         </p>
@@ -147,7 +152,7 @@ function AdminDashboardView() {
                             <p className='text-3xl font-black text-white mt-1'>
                                 ${stats.adjustedForecast.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                             </p>
-                            <p className='text-[10px] text-white/40 font-medium mt-1 leading-tight'>Ponderado por el score de confiabilidad histórico.</p>
+                            <p className='text-[10px] text-white/40 font-medium mt-1 leading-tight'>Ponderado por el score de confiabilidad histórico de los vendedores.</p>
                         </div>
                         <Zap className='absolute -right-4 -bottom-4 w-24 h-24 text-white/5 opacity-20 transform -rotate-12 transition-transform group-hover:scale-110' />
                     </div>
@@ -162,7 +167,7 @@ function AdminDashboardView() {
                     </div>
 
                     <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Objetivo Semanal</label>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Objetivo de Equipo</label>
                         <div className='mt-2 flex items-center justify-between'>
                             <p className='text-3xl font-black text-[#0A1635]'>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
                             <Target className='w-6 h-6 text-gray-200' />
@@ -173,8 +178,10 @@ function AdminDashboardView() {
                     </div>
                 </div>
 
+                {/* Main Content Grid */}
                 <div className='grid grid-cols-1 xl:grid-cols-3 gap-8'>
                     <div className='xl:col-span-2 space-y-8'>
+                        {/* The Race */}
                         <SellerRace
                             maxGoal={teamGoal}
                             sellers={stats.sellers.map(s => ({
@@ -185,10 +192,11 @@ function AdminDashboardView() {
                             }))}
                         />
 
+                        {/* Secondary Grid */}
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
                             <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
                                 <div className='flex justify-between items-center mb-6'>
-                                    <h3 className='font-black text-[#0A1635] text-sm uppercase tracking-wider'>Top Performance</h3>
+                                    <h3 className='font-black text-[#0A1635] text-sm uppercase tracking-wider'>Top Vendedores (Real)</h3>
                                     <Users className='w-4 h-4 text-gray-300' />
                                 </div>
                                 <div className='space-y-4'>
@@ -202,13 +210,13 @@ function AdminDashboardView() {
                                             </div>
                                             <div className='text-right'>
                                                 <p className='text-xs font-black text-[#1700AC]'>${(s.negotiationPipeline * (s.score / 100)).toLocaleString()}</p>
-                                                <p className='text-[8px] font-bold text-gray-400 uppercase'>Forecast Adj</p>
+                                                <p className='text-[8px] font-bold text-gray-400 uppercase'>Ajustado</p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                                 <button className='w-full mt-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 transition-colors flex items-center justify-center gap-2'>
-                                    Ver Detalle <ChevronRight className='w-3 h-3' />
+                                    Ver Detalle Completo <ChevronRight className='w-3 h-3' />
                                 </button>
                             </div>
 
@@ -217,8 +225,8 @@ function AdminDashboardView() {
                                     <Search className='w-8 h-8 text-blue-500' />
                                 </div>
                                 <div className='space-y-1'>
-                                    <h4 className='font-black text-[#0A1635] text-base'>Filtros Rápidos</h4>
-                                    <p className='text-[10px] text-gray-400 font-medium px-8'>Próximamente filtros por región y periodo fiscal.</p>
+                                    <h4 className='font-black text-[#0A1635] text-base'>Filtros de Análisis</h4>
+                                    <p className='text-[10px] text-gray-400 font-medium px-8'>Próximamente: Podrás filtrar esta dashboard por fechas específicas y regiones.</p>
                                 </div>
                                 <button className='px-6 py-2 bg-gray-50 rounded-xl text-[10px] font-black text-gray-400 uppercase tracking-tight flex items-center gap-2'>
                                     <Filter className='w-3 h-3' /> Configurar
@@ -227,6 +235,7 @@ function AdminDashboardView() {
                         </div>
                     </div>
 
+                    {/* Funnel Visualizer */}
                     <div className='xl:col-span-1'>
                         <PipelineVisualizer data={stats.funnel} />
                     </div>
@@ -234,27 +243,4 @@ function AdminDashboardView() {
             </div>
         </div>
     )
-}
-
-function SellerHomeView({ username }: { username: string }) {
-    return (
-        <div className='h-full flex items-center justify-center bg-gray-50'>
-            <h1 className='text-4xl font-extrabold text-black'>
-                Bienvenido {username ? username : ''} 🥳🥳
-            </h1>
-        </div>
-    )
-}
-
-export default function HomePage() {
-    const auth = useAuth()
-    const isAdmin = auth.profile?.role === 'admin'
-
-    if (auth.loading) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
-
-    if (isAdmin) {
-        return <AdminDashboardView />
-    }
-
-    return <SellerHomeView username={auth.username} />
 }
