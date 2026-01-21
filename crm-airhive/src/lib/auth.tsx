@@ -124,6 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ? usernameInput
             : `${usernameInput}@${domain}`
 
+        console.log('Attempting login with email:', email)
+
         const { error } = await supabase.auth.signInWithPassword({
             email,
             password: p
@@ -175,6 +177,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const email = usernameInput.includes('@')
             ? usernameInput
             : `${usernameInput}@${domain}`
+
+        console.log('Attempting password reset for email:', email)
 
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: `${window.location.origin}/reset-password`,
