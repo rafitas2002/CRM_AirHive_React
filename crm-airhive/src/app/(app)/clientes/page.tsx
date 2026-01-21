@@ -366,24 +366,24 @@ export default function LeadsPage() {
                     </div>
 
                     {/* Filter Bar */}
-                    <div className='bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center gap-6'>
-                        <div className='flex-1 min-w-[300px] relative font-medium'>
-                            <span className='absolute left-4 top-1/2 -translate-y-1/2 text-gray-500'>🔍</span>
+                    <div className='bg-white p-3 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4'>
+                        <div className='flex-1 relative font-medium min-w-[200px]'>
+                            <span className='absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm'>🔍</span>
                             <input
                                 type="text"
-                                placeholder="Buscar por nombre, empresa o contacto..."
+                                placeholder="Buscar leads..."
                                 value={filterSearch}
                                 onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] text-sm text-[#0A1635] font-semibold transition-all placeholder:text-gray-400 hover:border-gray-400'
+                                className='w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2048FF] focus:border-[#2048FF] text-xs text-[#0A1635] font-semibold transition-all placeholder:text-gray-400 hover:border-gray-400'
                             />
                         </div>
 
-                        <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Etapa:</label>
+                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
+                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Etapa</label>
                             <select
                                 value={filterStage}
                                 onChange={(e) => setFilterStage(e.target.value)}
-                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
                             >
                                 <option value="All">Todas</option>
                                 <option value="Prospección">Prospección</option>
@@ -393,12 +393,12 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Vendedor:</label>
+                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
+                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Vendedor</label>
                             <select
                                 value={filterOwner}
                                 onChange={(e) => setFilterOwner(e.target.value)}
-                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
                             >
                                 <option value="All">Cualquiera</option>
                                 {uniqueOwners.map(owner => (
@@ -407,40 +407,41 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-widest'>Ordenar por:</label>
+                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
+                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Orden</label>
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
-                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
                             >
-                                <option value="fecha_registro-desc">Reciente → Antiguo</option>
-                                <option value="fecha_registro-asc">Antiguo → Reciente</option>
-                                <option value="valor_estimado-desc">Valor (Mayor → Menor)</option>
-                                <option value="calificacion-desc">Calificación (Mayor → Menor)</option>
-                                <option value="etapa-asc">Etapa (Negociación → Cerrado)</option>
-                                <option value="probabilidad-desc">Probabilidad (Mayor → Menor)</option>
-                                <option value="empresa-asc">Empresa (A → Z)</option>
-                                <option value="owner_username-asc">Vendedor (A → Z)</option>
+                                <option value="fecha_registro-desc">Reciente</option>
+                                <option value="fecha_registro-asc">Antiguo</option>
+                                <option value="valor_estimado-desc">$$$ → $</option>
+                                <option value="calificacion-desc">Calif. ★</option>
+                                <option value="etapa-asc">Fase</option>
+                                <option value="probabilidad-desc">Prob. %</option>
+                                <option value="empresa-asc">Empresa</option>
                             </select>
                         </div>
 
-                        {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
-                            <button
-                                onClick={() => {
-                                    setFilterSearch('')
-                                    setFilterStage('All')
-                                    setFilterOwner('All')
-                                    setSortBy('fecha_registro-desc')
-                                }}
-                                className='text-[10px] font-black text-red-500 uppercase tracking-tighter hover:text-red-700 transition-colors'
-                            >
-                                Limpiar Filtros
-                            </button>
-                        )}
+                        <div className='flex items-center gap-4 ml-auto'>
+                            {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
+                                <button
+                                    onClick={() => {
+                                        setFilterSearch('')
+                                        setFilterStage('All')
+                                        setFilterOwner('All')
+                                        setSortBy('fecha_registro-desc')
+                                    }}
+                                    className='text-[9px] font-black text-red-500 uppercase tracking-tighter hover:text-red-700 transition-colors bg-red-50 px-2 py-1 rounded-md'
+                                >
+                                    Limpiar
+                                </button>
+                            )}
 
-                        <div className='ml-auto text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]'>
-                            Mostrando {sortedAndFilteredLeads.length} de {leads.length}
+                            <div className='text-[9px] font-black text-gray-300 uppercase tracking-widest whitespace-nowrap'>
+                                {sortedAndFilteredLeads.length} leads
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -9,8 +9,7 @@ const links = [
     { href: '/home', label: 'Home' },
     { href: '/clientes', label: 'Leads' },
     { href: '/tareas', label: 'Tareas' },
-    { href: '/calendario', label: 'Calendario' },
-    { href: '/otros', label: 'Otros' }
+    { href: '/calendario', label: 'Calendario' }
 ]
 
 export default function TopBar() {
@@ -19,13 +18,13 @@ export default function TopBar() {
 
     return (
         <header className='h-[70px] bg-black border-b-2 border-black'>
-            <div className='h-full px-3 flex items-center gap-6'>
+            <div className='h-full px-3 flex items-center gap-10'>
                 <Link href='/home' className='flex items-center hover:opacity-80 transition-opacity'>
                     <Image
                         src='/airhive_logo_azul_sinfondo.svg'
                         alt='Air Hive'
-                        width={240}
-                        height={80}
+                        width={280}
+                        height={94}
                         priority
                     />
                 </Link>
@@ -89,8 +88,9 @@ export default function TopBar() {
 
                 {/* Chip usuario */}
                 <div className='flex items-center gap-6 mr-8'>
-                    <div className='h-7 px-3 rounded-full border border-white/20 bg-white/15 text-white text-xs font-bold flex items-center'>
-                        👤 {auth.loading ? 'Cargando...' : auth.username}
+                    <div className='h-9 px-4 rounded-full border border-white/20 bg-white/10 text-white text-xs font-bold flex items-center gap-2.5 whitespace-nowrap whitespace-nowrap shrink-0'>
+                        <span className='text-sm opacity-90'>👤</span>
+                        <span className='truncate max-w-[150px]'>{auth.loading ? 'Cargando...' : auth.username}</span>
                     </div>
 
                     <button

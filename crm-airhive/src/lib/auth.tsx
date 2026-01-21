@@ -46,14 +46,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const init = async () => {
             try {
                 // Check if there is a 'code' in the URL (PKCE flow)
+                // Check if there is a 'code' in the URL (PKCE flow)
                 const url = new URL(window.location.href)
                 const code = url.searchParams.get('code')
+
+                // Detect if it's a special auth flow
+                const isRecovery = window.location.hash.includes('type=recovery') || url.searchParams.get('type') === 'recovery'
+                const isSignup = window.location.hash.includes('type=signup') || url.searchParams.get('type') === 'signup'
+                const isInvite = window.location.hash.includes('type=invite') || url.searchParams.get('type') === 'invite'
 
                 if (code) {
                     await supabase.auth.exchangeCodeForSession(code)
                     // Remove code from URL for cleanliness
                     url.searchParams.delete('code')
                     window.history.replaceState({}, '', url.toString())
+
+                    if (isRecovery || isSignup || isInvite) {
+                        router.push('/reset-password')
+                        return
+                    }
                 }
 
                 const { data: { session } } = await supabase.auth.getSession()

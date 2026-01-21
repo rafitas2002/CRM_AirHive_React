@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
             setSuccess(true)
             setTimeout(() => {
                 router.push('/login')
-            }, 3000)
+            }, 5000)
         }
     }
 
@@ -92,9 +92,13 @@ export default function ResetPasswordPage() {
                                 </div>
                             ) : !success ? (
                                 <>
-                                    <h1 className='text-[28px] font-extrabold text-black text-center'>Nueva contraseña</h1>
+                                    <h1 className='text-[28px] font-extrabold text-black text-center'>
+                                        {auth.loggedIn ? '¡Bienvenido a Air Hive!' : 'Nueva contraseña'}
+                                    </h1>
                                     <p className='mt-2 text-[13px] text-[#667085] text-center'>
-                                        Crea una contraseña segura para tu cuenta.
+                                        {auth.loggedIn
+                                            ? 'Por favor crea tu contraseña para comenzar.'
+                                            : 'Crea una contraseña segura para tu cuenta.'}
                                     </p>
 
                                     <form className='mt-6 space-y-4' onSubmit={onSubmit}>

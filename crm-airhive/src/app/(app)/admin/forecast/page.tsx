@@ -3,13 +3,17 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 
 export default function ForecastDashboard() {
+    const auth = useAuth()
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
     // Filters
     const [dateRange, setDateRange] = useState('all') // 30, 90, 180, all
@@ -30,6 +34,30 @@ export default function ForecastDashboard() {
             setLeads(data)
         }
         setLoading(false)
+    }
+
+    const handleClearHistory = async () => {
+        let query = (supabase.from('clientes') as any).update({
+            forecast_logloss: null,
+            forecast_evaluated_probability: null,
+            forecast_outcome: null,
+            forecast_scored_at: null
+        })
+
+        if (filterSeller !== 'All') {
+            query = query.eq('owner_username', filterSeller)
+        } else {
+            query = query.not('forecast_logloss', 'is', null)
+        }
+
+        const { error } = await query
+
+        if (error) {
+            console.error('Error clearing history:', error)
+            alert('Error al borrar el historial')
+        } else {
+            await fetchLeads()
+        }
     }
 
     const filteredLeads = useMemo(() => {
@@ -110,7 +138,15 @@ export default function ForecastDashboard() {
                     <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>
                         Confiabilidad de Vendedores
                     </h1>
-                    <div className='flex gap-4'>
+                    <div className='flex gap-4 items-center'>
+                        {auth.profile?.role === 'admin' && (
+                            <button
+                                onClick={() => setIsConfirmOpen(true)}
+                                className='bg-red-50 text-red-600 border border-red-200 rounded-xl px-4 py-2 text-sm font-bold shadow-sm hover:bg-red-100 transition-colors whitespace-nowrap'
+                            >
+                                🗑️ {filterSeller === 'All' ? 'Borrar Todo el Historial' : `Borrar Historial de ${filterSeller}`}
+                            </button>
+                        )}
                         <select
                             value={dateRange}
                             onChange={(e) => setDateRange(e.target.value)}
@@ -212,6 +248,18 @@ export default function ForecastDashboard() {
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={isConfirmOpen}
+                onClose={() => setIsConfirmOpen(false)}
+                onConfirm={handleClearHistory}
+                title={filterSeller === 'All' ? "Borrar Todo el Historial" : `Borrar Historial de ${filterSeller}`}
+                message={filterSeller === 'All'
+                    ? "Esta acción borrará todas las métricas de precisión de TODOS los vendedores de forma permanente. ¿Deseas continuar?"
+                    : `Esta acción borrará todas las métricas de precisión de ${filterSeller} de forma permanente. ¿Deseas continuar?`
+                }
+                isDestructive={true}
+            />
         </div>
     )
 }
