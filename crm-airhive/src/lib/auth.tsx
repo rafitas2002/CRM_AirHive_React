@@ -45,10 +45,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const init = async () => {
             try {
+                // Check if there is a 'code' in the URL (PKCE flow)
+                const url = new URL(window.location.href)
+                const code = url.searchParams.get('code')
+
+                if (code) {
+                    await supabase.auth.exchangeCodeForSession(code)
+                    // Remove code from URL for cleanliness
+                    url.searchParams.delete('code')
+                    window.history.replaceState({}, '', url.toString())
+                }
+
                 const { data: { session } } = await supabase.auth.getSession()
                 if (session?.user) {
-                    // Don't block loading on profile fetch? 
-                    // Better to block to avoid flicker, but with timeout.
                     await handleUserSession(session.user)
                 } else {
                     setLoading(false)
