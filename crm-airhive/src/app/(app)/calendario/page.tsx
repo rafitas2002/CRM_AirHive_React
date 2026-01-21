@@ -237,7 +237,7 @@ export default function CalendarioPage() {
                         <div className='space-y-8'>
                             {Object.entries(groupedMeetings).map(([date, dayMeetings]) => (
                                 <div key={date}>
-                                    <h2 className='text-lg font-bold text-[#0F2A44] mb-4 sticky top-0 bg-[#F0F2F5] py-2 z-10'>
+                                    <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>
                                         {date}
                                     </h2>
                                     <div className='space-y-3'>

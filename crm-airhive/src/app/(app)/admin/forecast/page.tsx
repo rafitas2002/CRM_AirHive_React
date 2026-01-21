@@ -348,7 +348,7 @@ export default function ForecastDashboard() {
                                     </td>
                                     <td className='px-6 py-4 text-center font-bold text-[#0A1635]'>{s.winRate.toFixed(1)}%</td>
                                     <td className='px-6 py-4 text-center'>
-                                        <span className={`px-2 py-1 rounded text-[10px] font-black ${s.historicalLeads.length < 10 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
+                                        <span className={`px-3 py-1.5 rounded-lg text-sm font-black ${s.historicalLeads.length < 10 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
                                             {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}
                                         </span>
                                     </td>
