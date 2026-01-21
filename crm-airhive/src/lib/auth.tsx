@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setBusy(true)
         setLastError('')
 
-        const domain = process.env.NEXT_PUBLIC_AUTH_DOMAIN || 'airhive.local'
+        const domain = process.env.NEXT_PUBLIC_AUTH_DOMAIN || 'airhivemx.com'
         const email = usernameInput.includes('@')
             ? usernameInput
             : `${usernameInput}@${domain}`
