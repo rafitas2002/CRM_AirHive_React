@@ -24,22 +24,48 @@ export async function confirmMeeting(
     userId: string
 ): Promise<{ success: boolean; snapshotCreated: boolean; snapshotId?: string }> {
     try {
-        // 1. Get meeting with frozen probability
+        console.log('Confirming meeting:', meetingId, 'Held:', wasHeld, 'User:', userId)
+
+        // 1. Get meeting with frozen probability (Fetch WITHOUT join first to be safe)
         const { data: meeting, error: meetingError } = await (supabase
             .from('meetings') as any)
-            .select('*, clientes(*)')
+            .select('*')
             .eq('id', meetingId)
             .single()
 
-        if (meetingError || !meeting) {
+        if (meetingError) {
+            console.error('Error fetching meeting to confirm:', meetingError)
+            throw new Error(`Error finding meeting: ${meetingError.message}`)
+        }
+        if (!meeting) {
+            console.error('Meeting not found (null data) for ID:', meetingId)
             throw new Error('Meeting not found')
         }
 
         let snapshotId: string | null = null
         let snapshotCreated = false
 
-        // 2. If meeting was held AND we have a frozen probability, create snapshot
-        if (wasHeld && meeting.frozen_probability_value !== null) {
+        // 2. If meeting was held, create snapshot
+        // If frozen_probability_value is null, use current client probability (fallback)
+        let frozenProbability = meeting.frozen_probability_value
+
+        if (wasHeld && frozenProbability === null) {
+            // Fetch client probability separately
+            const { data: clientData, error: clientError } = await supabase
+                .from('clientes')
+                .select('probabilidad')
+                .eq('id', meeting.lead_id)
+                .single()
+
+            if (!clientError && clientData) {
+                frozenProbability = (clientData as any).probabilidad
+            } else {
+                console.warn('Could not fetch client probability for fallback:', clientError)
+                frozenProbability = 50 // Default fallback
+            }
+        }
+
+        if (wasHeld && frozenProbability !== null) {
             // Get next snapshot number
             const { data: lastSnapshot } = await (supabase
                 .from('forecast_snapshots') as any)
@@ -59,7 +85,7 @@ export async function confirmMeeting(
                     seller_id: meeting.seller_id,
                     meeting_id: meetingId,
                     snapshot_number: snapshotNumber,
-                    probability: meeting.frozen_probability_value,
+                    probability: frozenProbability,
                     snapshot_timestamp: meeting.start_time,
                     source: 'meeting_confirmed_held'
                 })
@@ -76,6 +102,7 @@ export async function confirmMeeting(
         await (supabase
             .from('meetings') as any)
             .update({
+                status: 'completed', // Important: Mark as completed to prevent re-fetching as 'pending'
                 meeting_status: wasHeld ? 'held' : 'not_held',
                 confirmation_timestamp: new Date().toISOString(),
                 confirmed_by: userId,
@@ -119,10 +146,11 @@ export async function confirmMeeting(
                 })
                 .eq('id', meeting.lead_id)
         } else {
-            // No more meetings, keep locked
+            // No more meetings, unlock probability and clear next meeting
             await (supabase
                 .from('clientes') as any)
                 .update({
+                    probability_locked: false,
                     next_meeting_id: null
                 })
                 .eq('id', meeting.lead_id)
@@ -134,7 +162,7 @@ export async function confirmMeeting(
             snapshotId: snapshotId || undefined
         }
     } catch (error) {
-        console.error('Error confirming meeting:', error)
+        console.error('Error in confirmMeeting service:', error)
         throw error
     }
 }
@@ -148,12 +176,13 @@ export async function getPendingConfirmations(userId: string) {
         console.log('Fetching pending confirmations for user:', userId)
 
         // 1. Fetch meetings only (simplified query)
+        // 1. Fetch meetings only (simplified query)
+        // Fetch both 'pending_confirmation' AND 'scheduled' meetings in the past
         const { data: meetings, error: meetingsError } = await (supabase
             .from('meetings') as any)
             .select('*')
             .eq('seller_id', userId)
-            .eq('meeting_status', 'pending_confirmation')
-            .lt('start_time', new Date().toISOString())
+            .or('meeting_status.eq.pending_confirmation,and(status.eq.scheduled,start_time.lt.' + new Date().toISOString() + ')')
             .order('start_time', { ascending: true })
 
         if (meetingsError) {
@@ -170,6 +199,8 @@ export async function getPendingConfirmations(userId: string) {
 
         // 2. Fetch clients for these meetings
         const leadIds = Array.from(new Set((meetings as Meeting[]).map(m => m.lead_id)))
+        // console.log('Fetching properties for leads:', leadIds) // Debug if needed
+
         const { data: clients, error: clientsError } = await supabase
             .from('clientes')
             .select('id, empresa, etapa')
@@ -177,6 +208,8 @@ export async function getPendingConfirmations(userId: string) {
 
         if (clientsError) {
             console.error('Error fetching clients for confirmations:', clientsError)
+        } else if (!clients || clients.length === 0) {
+            console.warn('No clients found for pending meetings. Lead IDs:', leadIds)
         }
 
         const clientsMap = (clients || []).reduce((acc: any, client: any) => {
@@ -262,7 +295,7 @@ export interface MeetingWithUrgency extends Meeting {
     empresa?: string
     etapa?: string
     hoursUntil?: number
-    urgencyLevel?: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled'
+    urgencyLevel?: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled' | 'in_progress'
 }
 
 export async function getUpcomingMeetings(userId: string, limit: number = 10): Promise<MeetingWithUrgency[]> {
@@ -316,8 +349,15 @@ export async function getUpcomingMeetings(userId: string, limit: number = 10): P
             const startTime = new Date(meeting.start_time)
             const hoursUntil = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
-            let urgencyLevel: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled'
-            if (hoursUntil < 0) {
+            let urgencyLevel: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled' | 'in_progress'
+
+            // Calculate end time (default duration 60 mins if missing)
+            const durationMs = (meeting.duration_minutes || 60) * 60 * 1000
+            const endTime = new Date(startTime.getTime() + durationMs)
+
+            if (now >= startTime && now <= endTime) {
+                urgencyLevel = 'in_progress'
+            } else if (hoursUntil < 0) {
                 urgencyLevel = 'overdue'
             } else if (hoursUntil < 2) {
                 urgencyLevel = 'urgent'
@@ -354,6 +394,13 @@ export function getUrgencyColor(urgencyLevel: string): {
     label: string
 } {
     switch (urgencyLevel) {
+        case 'in_progress':
+            return {
+                bg: 'bg-indigo-100',
+                border: 'border-indigo-500',
+                text: 'text-indigo-800',
+                label: 'En transcurso'
+            }
         case 'overdue':
             return {
                 bg: 'bg-red-100',

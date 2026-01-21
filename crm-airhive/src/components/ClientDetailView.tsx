@@ -337,7 +337,7 @@ export default function ClientDetailView({
                                         {isProbEditable ? '✅ Editable' : '🔒 Bloqueado'}
                                     </span>
 
-                                    {!nextMeeting && (
+                                    {!nextMeeting && snapshots.length === 0 && (
                                         <button
                                             onClick={() => setIsMeetingModalOpen(true)}
                                             className='px-4 py-2 bg-blue-600 text-white rounded-full text-xs font-bold hover:bg-blue-700 transition-colors shadow-md'

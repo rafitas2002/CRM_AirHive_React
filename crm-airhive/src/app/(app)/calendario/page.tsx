@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import { getUpcomingMeetings, getPendingConfirmations, confirmMeeting, type MeetingWithUrgency } from '@/lib/confirmationService'
 import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
 import MeetingConfirmationModal from '@/components/MeetingConfirmationModal'
+import MeetingModal from '@/components/MeetingModal'
+import { updateMeeting, deleteMeeting } from '@/lib/meetingsService'
 
 export default function CalendarioPage() {
     const [supabase] = useState(() => createClient())
@@ -13,8 +15,11 @@ export default function CalendarioPage() {
     const [loading, setLoading] = useState(true)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [showConfirmationModal, setShowConfirmationModal] = useState(false)
+    const [showEditModal, setShowEditModal] = useState(false)
     const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
+    const [editMeetingData, setEditMeetingData] = useState<any>(null)
     const [viewMode, setViewMode] = useState<'week' | 'list'>('list')
+    const [isEditMode, setIsEditMode] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -92,6 +97,42 @@ export default function CalendarioPage() {
         }
     }
 
+    const handleDeleteMeeting = async (meeting: any) => {
+        if (!confirm('¿Estás seguro de que deseas eliminar esta reunión? Esta acción no se puede deshacer.')) return
+
+        try {
+            await deleteMeeting(meeting.id)
+            await fetchData() // Refresh
+        } catch (error) {
+            console.error('Error deleting meeting:', error)
+            alert('Error al eliminar la reunión')
+        }
+    }
+
+    const handleEditMeeting = (meeting: any) => {
+        setEditMeetingData(meeting)
+        setShowEditModal(true)
+    }
+
+    const handleSaveEdit = async (data: any) => {
+        if (!editMeetingData) return
+
+        try {
+            // Remove helper fields that are not part of the database table if necessary, 
+            // but updateMeeting expects partial MeetingUpdate.
+            // We need to make sure we don't send 'empresa', 'urgencyLevel', etc.
+            const { empresa, etapa, urgencyLevel, hoursUntil, clientes, ...cleanData } = data
+
+            await updateMeeting(editMeetingData.id, cleanData)
+            await fetchData()
+            setShowEditModal(false)
+            setEditMeetingData(null)
+        } catch (error) {
+            console.error('Error updating meeting:', error)
+            alert('Error al guardar cambios')
+        }
+    }
+
     // Group meetings by date
     const groupedMeetings = meetings.reduce((acc, meeting) => {
         const date = new Date(meeting.start_time).toLocaleDateString('es-MX', {
@@ -128,6 +169,18 @@ export default function CalendarioPage() {
                     </div>
 
                     <div className='flex items-center gap-3'>
+                        {/* Edit Mode Toggle */}
+                        <button
+                            onClick={() => setIsEditMode(!isEditMode)}
+                            className={`px-4 py-2 rounded-lg font-bold transition-all border-2 ${isEditMode
+                                ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner'
+                                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                                }`}
+                            title={isEditMode ? 'Salir del modo edición' : 'Editar reuniones'}
+                        >
+                            {isEditMode ? '✏️ Modo Edición Activo' : '✏️ Editar'}
+                        </button>
+
                         {pendingConfirmations.length > 0 && (
                             <button
                                 onClick={() => {
@@ -202,7 +255,8 @@ export default function CalendarioPage() {
                                             return (
                                                 <div
                                                     key={meeting.id}
-                                                    className={`bg-white p-5 rounded-xl border-2 ${urgency.border} hover:shadow-lg transition-all`}
+                                                    className={`bg-white p-5 rounded-xl border-2 ${urgency.border} hover:shadow-lg transition-all ${meeting.urgencyLevel === 'in_progress' ? 'animate-pulse ring-2 ring-indigo-300 ring-offset-2' : ''
+                                                        }`}
                                                 >
                                                     <div className='flex items-start gap-4'>
                                                         {/* Time */}
@@ -283,6 +337,26 @@ export default function CalendarioPage() {
                                                                     Confirmar
                                                                 </button>
                                                             )}
+
+                                                            {/* Edit/Delete Actions - Only in Edit Mode */}
+                                                            {isEditMode && (meeting.meeting_status === 'scheduled' || meeting.meeting_status === 'not_held') && (
+                                                                <div className='flex items-center gap-2 mt-2'>
+                                                                    <button
+                                                                        onClick={() => handleEditMeeting(meeting)}
+                                                                        className='p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors'
+                                                                        title='Editar reunión'
+                                                                    >
+                                                                        ✏️
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDeleteMeeting(meeting)}
+                                                                        className='p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors'
+                                                                        title='Eliminar reunión'
+                                                                    >
+                                                                        🗑️
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -306,6 +380,22 @@ export default function CalendarioPage() {
                         setShowConfirmationModal(false)
                         setSelectedMeeting(null)
                     }}
+                />
+            )}
+
+            {/* Edit Modal */}
+            {showEditModal && editMeetingData && (
+                <MeetingModal
+                    isOpen={showEditModal}
+                    onClose={() => {
+                        setShowEditModal(false)
+                        setEditMeetingData(null)
+                    }}
+                    onSave={handleSaveEdit}
+                    leadId={editMeetingData.lead_id}
+                    sellerId={editMeetingData.seller_id}
+                    initialData={editMeetingData}
+                    mode='edit'
                 />
             )}
         </div>

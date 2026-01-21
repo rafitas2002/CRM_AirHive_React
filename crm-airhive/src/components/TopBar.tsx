@@ -16,6 +16,11 @@ export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
 
+    const isAdmin = auth.profile?.role === 'admin'
+    const logoDimensions = isAdmin
+        ? { width: 350, height: 114 }
+        : { width: 280, height: 94 }
+
     return (
         <header className='h-[70px] bg-black border-b-2 border-black'>
             <div className='h-full px-3 flex items-center gap-10'>
@@ -23,8 +28,8 @@ export default function TopBar() {
                     <Image
                         src='/airhive_logo_azul_sinfondo.svg'
                         alt='Air Hive'
-                        width={280}
-                        height={94}
+                        width={logoDimensions.width}
+                        height={logoDimensions.height}
                         priority
                     />
                 </Link>

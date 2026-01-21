@@ -324,21 +324,24 @@ export async function isProbabilityEditable(
     const nextMeeting = await getNextMeeting(lead.id)
 
     if (!nextMeeting) {
+        // User request: Should be editable even without a scheduled meeting
+        // (Unless we want to force scheduling, but user said "nunca bloquear")
         return {
-            editable: false,
-            reason: 'Debes agendar una reunión para poder editar el pronóstico',
+            editable: true,
             nextMeeting: null
         }
     }
 
-    // 4. Check if meeting has already started
+    // 4. Check if meeting is CURRENTLY happening (Lock ONLY during meeting)
     const now = new Date()
     const meetingStart = new Date(nextMeeting.start_time)
+    const durationMs = (nextMeeting.duration_minutes || 60) * 60 * 1000
+    const meetingEnd = new Date(meetingStart.getTime() + durationMs)
 
-    if (now >= meetingStart) {
+    if (now >= meetingStart && now <= meetingEnd) {
         return {
             editable: false,
-            reason: 'La reunión ya comenzó. El pronóstico ha sido congelado.',
+            reason: 'La reunión está en curso. El pronóstico está temporalmente congelado.',
             nextMeeting
         }
     }

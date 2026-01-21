@@ -165,8 +165,8 @@ export default function MeetingModal({
                                 </label>
                                 <input
                                     type='number'
-                                    min='15'
-                                    step='15'
+                                    min='1'
+                                    step='1'
                                     value={formData.duration_minutes}
                                     onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
                                     className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-gray-900 placeholder:text-gray-500'

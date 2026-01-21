@@ -87,7 +87,7 @@ export default function MeetingConfirmationModal({
                         placeholder='¿Cómo fue la junta? ¿Qué se discutió?'
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        className='w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none'
+                        className='w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none text-gray-900 placeholder:text-gray-500'
                         rows={3}
                         disabled={isSubmitting}
                     />
