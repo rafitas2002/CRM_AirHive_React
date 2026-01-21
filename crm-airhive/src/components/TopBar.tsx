@@ -19,7 +19,7 @@ export default function TopBar() {
     const isAdmin = auth.profile?.role === 'admin'
     const logoDimensions = isAdmin
         ? { width: 350, height: 114 }
-        : { width: 280, height: 94 }
+        : { width: 350, height: 114 }
 
     return (
         <header className='h-[70px] bg-black border-b-2 border-black'>
@@ -71,7 +71,7 @@ export default function TopBar() {
                             />
                         </Link>
                     )}
-                    {auth.profile?.role === 'admin' && (
+                    {(auth.profile?.role === 'admin' || auth.profile?.role === 'seller') && (
                         <Link
                             href='/admin/forecast'
                             className={`relative text-white font-semibold text-base px-2 py-2 group`}
