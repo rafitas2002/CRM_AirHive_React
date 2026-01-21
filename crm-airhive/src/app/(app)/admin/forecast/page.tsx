@@ -138,36 +138,42 @@ export default function ForecastDashboard() {
             const sumWins = s.historicalLeads.filter(l => l.etapa === 'Cerrado Ganado').length
             const winRate = histN > 0 ? (sumWins / histN) * 100 : 0
 
-            // Reliability Score - Recover log loss if missing
+            // Reliability Score - Linear Accuracy (1 - Mean Absolute Error)
+            // Accuracy = (1 - |Outcome - PredictedProb|) * 100
             const scoredLeads = s.historicalLeads.map(l => {
-                if (l.forecast_logloss !== null) return l
+                let p = 0
+                let y = l.etapa === 'Cerrado Ganado' ? 1 : 0
 
-                // Try to RECOVER from history
-                // Find latest probability set (since we ordered by created_at desc in fetch)
-                const leadHist = history.filter(h => h.lead_id === l.id)
-                const recoveredProbStr = leadHist[0]?.new_value
-
-                if (recoveredProbStr) {
-                    const p = parseInt(recoveredProbStr) / 100
-                    const y = l.etapa === 'Cerrado Ganado' ? 1 : 0
-                    // Prevent Math.log(0)
-                    const pSafe = Math.max(0.01, Math.min(0.99, p))
-                    const logLoss = -(y * Math.log(pSafe) + (1 - y) * Math.log(1 - pSafe))
-                    return {
-                        ...l,
-                        forecast_logloss: logLoss,
-                        forecast_evaluated_probability: parseInt(recoveredProbStr)
+                // Use the probability the seller committed to
+                if (l.forecast_evaluated_probability !== null) {
+                    p = l.forecast_evaluated_probability / 100
+                    y = l.forecast_outcome ?? (l.etapa === 'Cerrado Ganado' ? 1 : 0)
+                } else {
+                    // Try to RECOVER from history for older leads
+                    const leadHist = history.filter(h => h.lead_id === l.id)
+                    const recoveredProbStr = leadHist[0]?.new_value
+                    if (recoveredProbStr) {
+                        p = parseInt(recoveredProbStr) / 100
+                    } else {
+                        // If no commitment was ever made, we can't score reliability
+                        return null
                     }
                 }
-                return l
-            }).filter(l => l.forecast_logloss !== null)
+
+                const error = Math.abs(y - p)
+                return { ...l, lead_error: error, forecast_evaluated_probability: p * 100 } // Store p*100 for avgProb
+            }).filter((l): l is (Lead & { lead_error: number, forecast_evaluated_probability: number }) => l !== null)
 
             const scoredN = scoredLeads.length
-            const sumLogLoss = scoredLeads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0)
-            const sumProbHist = scoredLeads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0)
+            // Brier-style accuracy (1 - error^2)
+            const sumAccuracy = scoredLeads.reduce((acc, l) => acc + (1 - Math.pow(l.lead_error, 2)), 0)
+            const rawAccuracy = scoredN > 0 ? (sumAccuracy / scoredN) : 0
 
-            const avgLogLoss = scoredN > 0 ? sumLogLoss / scoredN : 0
-            const reliabilityScore = scoredN > 0 ? Math.max(0, 1 - (avgLogLoss / L_base)) * 100 : 0
+            // Credibility Factor: Penalty for low sample size
+            // K=4 means you need 4 leads to get 50% of your potential score
+            const K = 4
+            const credibilityFactor = scoredN / (scoredN + K)
+            const reliabilityScore = scoredN > 0 ? (rawAccuracy * credibilityFactor) * 100 : 0
 
             // Pipeline Forecast (Only Negotiation leads)
             const negotiationLeads = s.activeLeads.filter(l => l.etapa === 'Negociación')
@@ -182,9 +188,9 @@ export default function ForecastDashboard() {
 
             return {
                 ...s,
-                avgLogLoss,
+                avgLogLoss: scoredN > 0 ? (1 - rawAccuracy) : 0, // Now Mean Quadratic Error
                 winRate,
-                avgProb: scoredN > 0 ? sumProbHist / scoredN : 0,
+                avgProb: scoredN > 0 ? (scoredLeads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0) / scoredN) : 0,
                 score: reliabilityScore,
                 pipelineExpectedValue: pipelineEV,
                 pipelineAdjustedValue: pipelineAdj
@@ -197,10 +203,15 @@ export default function ForecastDashboard() {
         const historical = filteredLeads.filter(l => l.etapa?.toLowerCase().includes('cerrado'))
         const active = filteredLeads.filter(l => !l.etapa?.toLowerCase().includes('cerrado'))
 
-        // Only average log loss for leads that actually HAVE it
-        const scoredLeads = historical.filter(l => l.forecast_logloss !== null)
-        const avgLogLoss = scoredLeads.length > 0
-            ? scoredLeads.reduce((acc, l) => acc + (l.forecast_logloss || 0), 0) / scoredLeads.length
+        // Global Brier Accuracy
+        const scoredSellers = statsPerSeller.filter(s => s.historicalLeads.length > 0)
+        const avgRawAcc = scoredSellers.length > 0
+            ? scoredSellers.reduce((acc, s) => acc + (s.score / (s.historicalLeads.length / (s.historicalLeads.length + 4)) / 100), 0) / scoredSellers.length
+            : 0
+
+        // Actually, let's just use the mean error from sellers directly
+        const globalMeanError = scoredSellers.length > 0
+            ? scoredSellers.reduce((acc, s) => acc + s.avgLogLoss, 0) / scoredSellers.length
             : 0
 
         const pipelineForecast = active.filter(l => l.etapa === 'Negociación').reduce((acc, l) => {
@@ -215,7 +226,7 @@ export default function ForecastDashboard() {
             historicalCount: historical.length,
             activeCount: active.length,
             negotiationCount: active.filter(l => l.etapa === 'Negociación').length,
-            avgLogLoss,
+            avgLogLoss: globalMeanError,
             pipelineForecast,
             adjustedTotal
         }
@@ -261,9 +272,9 @@ export default function ForecastDashboard() {
                         <p className='text-3xl font-black text-[#0A1635] mt-2'>{globalStats.historicalCount} <span className='text-sm font-normal text-gray-400'>Cerrados</span></p>
                     </div>
                     <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Log Loss Histórico</label>
+                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Error Cuadrático (Brier)</label>
                         <p className='text-3xl font-black text-[#2048FF] mt-2'>
-                            {globalStats.avgLogLoss.toFixed(4)}
+                            {globalStats.avgLogLoss.toFixed(3)}
                         </p>
                     </div>
                     <div className='bg-[#1700AC] p-6 rounded-2xl border border-[#1700AC] shadow-lg'>
@@ -313,15 +324,18 @@ export default function ForecastDashboard() {
                                     </td>
                                     <td className='px-6 py-4 text-center'>
                                         <div className='flex flex-col items-center gap-1'>
-                                            <span className={`text-lg font-black ${s.score > 80 ? 'text-emerald-600' : s.score > 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                            <span className={`text-lg font-black ${s.score > 70 ? 'text-emerald-600' : s.score > 40 ? 'text-amber-600' : 'text-red-600'}`}>
                                                 {s.score > 0 ? s.score.toFixed(1) : (s.historicalLeads.length > 0 ? 'Sin datos' : 'N/A')}
                                             </span>
-                                            <div className='w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden'>
+                                            <div className='w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1'>
                                                 <div
-                                                    className={`h-full ${s.score > 80 ? 'bg-emerald-500' : s.score > 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                    className={`h-full transition-all duration-500 ${s.score > 70 ? 'bg-emerald-500' : s.score > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
                                                     style={{ width: `${s.score}%` }}
                                                 />
                                             </div>
+                                            <p className='text-[9px] font-bold text-gray-400 mt-1 uppercase tracking-tighter'>
+                                                Basado en {s.historicalLeads.length} leads
+                                            </p>
                                         </div>
                                     </td>
                                     <td className='px-6 py-4 text-center'>

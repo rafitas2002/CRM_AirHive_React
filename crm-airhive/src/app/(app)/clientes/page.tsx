@@ -252,13 +252,11 @@ export default function LeadsPage() {
                 const dataChanged = leadData.probabilidad !== currentLead.probabilidad || leadData.etapa !== currentLead.etapa
 
                 if (!wasClosedBefore || dataChanged) {
-                    // Log Loss = -(y*ln(p) + (1-y)*ln(1-p))
-                    const logLoss = -(y * Math.log(p) + (1 - y) * Math.log(1 - p))
-
-                    payload.forecast_logloss = logLoss
                     payload.forecast_evaluated_probability = pValue
                     payload.forecast_outcome = y
                     payload.forecast_scored_at = new Date().toISOString()
+                    // Clear old logloss to force recalculation via new formula if needed
+                    payload.forecast_logloss = null
                 }
             }
 
