@@ -115,23 +115,43 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
         throw error
     }
 
-    // Google Calendar Sync
-    if (data.calendar_provider === 'google' && data.calendar_event_id) {
-        try {
-            const accessToken = await getUserAccessToken(supabase, data.seller_id)
-            if (accessToken) {
-                const { data: lead } = await supabase
-                    .from('clientes')
-                    .select('nombre, apellido')
-                    .eq('id', data.lead_id)
-                    .single()
+    // Google Calendar Sync Logic
+    const hadEvent = !!data.calendar_event_id
+    const wantsSync = updates.calendar_provider === 'google' || (updates.calendar_provider === undefined && data.calendar_provider === 'google')
+    const stoppedSync = updates.calendar_provider === null && data.calendar_provider === 'google'
 
-                const leadName = lead ? `${(lead as any).nombre} ${(lead as any).apellido}` : 'Cliente'
-                await updateGoogleCalendarEvent(accessToken, data.calendar_event_id, updates, leadName)
+    try {
+        const accessToken = await getUserAccessToken(supabase, data.seller_id)
+        if (accessToken) {
+            // Fetch lead name for description
+            const { data: lead } = await supabase
+                .from('clientes')
+                .select('nombre, apellido')
+                .eq('id', data.lead_id)
+                .single()
+            const leadName = lead ? `${(lead as any).nombre} ${(lead as any).apellido}` : 'Cliente'
+
+            if (wantsSync && !hadEvent) {
+                // CREATE new event if toggle turned ON
+                const googleEventId = await createGoogleCalendarEvent(accessToken, { ...data, ...updates } as any, leadName)
+                if (googleEventId) {
+                    await (supabase.from('meetings') as any)
+                        .update({ calendar_event_id: googleEventId } as any)
+                        .eq('id', meetingId)
+                }
+            } else if (wantsSync && hadEvent) {
+                // UPDATE existing event
+                await updateGoogleCalendarEvent(accessToken, data.calendar_event_id!, updates, leadName)
+            } else if (stoppedSync && hadEvent) {
+                // DELETE event if toggle turned OFF
+                await deleteGoogleCalendarEvent(accessToken, data.calendar_event_id!)
+                await (supabase.from('meetings') as any)
+                    .update({ calendar_event_id: null } as any)
+                    .eq('id', meetingId)
             }
-        } catch (syncError) {
-            console.error('⚠️ Google Calendar Update Sync Error:', syncError)
         }
+    } catch (syncError) {
+        console.error('⚠️ Google Calendar Sync Sync Error:', syncError)
     }
 
     // If start_time changed, update lead's next_meeting_id
