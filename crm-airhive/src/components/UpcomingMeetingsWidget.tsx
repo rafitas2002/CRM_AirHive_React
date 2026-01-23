@@ -83,7 +83,7 @@ export default function UpcomingMeetingsWidget() {
                     return (
                         <div
                             key={meeting.id}
-                            className={`p-3 rounded-lg border-2 ${urgency.border} ${urgency.bg} hover:shadow-md transition-all cursor-pointer ${meeting.urgencyLevel === 'in_progress' ? 'animate-breathing-slow' : ''}`}
+                            className={`p-3 rounded-lg border-2 ${urgency.border} ${urgency.bg} hover:shadow-md transition-all cursor-pointer`}
                         >
                             <div className='flex items-start justify-between gap-3'>
                                 <div className='flex-1 min-w-0'>
