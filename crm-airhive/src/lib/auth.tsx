@@ -84,7 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
                 if (session.user.id !== user?.id) {
-                    setLoading(true)
+                    // Only set global loading if we don't have a user at all
+                    if (!user) setLoading(true)
                     await handleUserSession(session.user)
                 }
             } else {

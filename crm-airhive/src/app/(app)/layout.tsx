@@ -14,7 +14,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (!auth.loading && !auth.loggedIn) router.push('/login')
     }, [auth.loading, auth.loggedIn, router])
 
-    if (auth.loading) {
+    // Only show blocking spinner if we are loading AND don't have a session yet
+    // If we have a session but are loading (e.g. refreshing profile), we show the app
+    if (auth.loading && !auth.loggedIn) {
         return (
             <div className='h-screen w-full flex items-center justify-center bg-[#F1F3F5]'>
                 <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />

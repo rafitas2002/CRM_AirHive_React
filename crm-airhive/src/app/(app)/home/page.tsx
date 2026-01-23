@@ -113,7 +113,7 @@ function AdminDashboardView() {
         }
     }, [leads, history])
 
-    if (loading) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
 
@@ -377,7 +377,8 @@ export default function HomePage() {
     const auth = useAuth()
     const isAdmin = auth.profile?.role === 'admin'
 
-    if (auth.loading) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    // Only block if we are loading AND don't have a session
+    if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     if (isAdmin) {
         return <AdminDashboardView />

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { Database } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
+import { getUserAccessToken } from '@/lib/googleCalendarService'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -35,6 +37,31 @@ export default function MeetingModal({
     })
     const [attendeeInput, setAttendeeInput] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [isGoogleConnected, setIsGoogleConnected] = useState(false)
+
+    useEffect(() => {
+        if (isOpen) {
+            checkCalendarStatus()
+        }
+    }, [isOpen, sellerId])
+
+    const checkCalendarStatus = async () => {
+        try {
+            const supabase = createClient()
+            const { data } = await supabase
+                .from('user_calendar_tokens')
+                .select('user_id')
+                .eq('user_id', sellerId)
+                .single()
+
+            setIsGoogleConnected(!!data)
+            if (data && mode === 'create') {
+                setFormData((prev: any) => ({ ...prev, calendar_provider: 'google' }))
+            }
+        } catch (error) {
+            console.error('Error checking calendar status:', error)
+        }
+    }
 
     useEffect(() => {
         if (isOpen) {
@@ -76,7 +103,7 @@ export default function MeetingModal({
     const handleRemoveAttendee = (attendee: string) => {
         setFormData({
             ...formData,
-            attendees: formData.attendees.filter(a => a !== attendee)
+            attendees: formData.attendees.filter((a: string) => a !== attendee)
         })
     }
 
@@ -255,37 +282,43 @@ export default function MeetingModal({
                             />
                         </div>
 
-                        {/* Integración con Calendario (Placeholder) */}
-                        <div className='bg-blue-50 p-4 rounded-lg border border-blue-200'>
-                            <p className='text-sm font-bold text-blue-900 mb-2'>🗓️ Integración con Calendario</p>
-                            <p className='text-xs text-blue-700 mb-3'>
-                                Próximamente podrás sincronizar esta reunión con Google Calendar o Outlook.
-                            </p>
-                            {/* <div className='flex gap-2'>
-                                <button
-                                    type='button'
-                                    onClick={() => setFormData({ ...formData, calendar_provider: 'google' })}
-                                    className={`px-3 py-2 rounded-lg text-sm font-bold ${
-                                        formData.calendar_provider === 'google'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white text-gray-700 border border-gray-300'
-                                    }`}
-                                >
-                                    Google Calendar
-                                </button>
-                                <button
-                                    type='button'
-                                    onClick={() => setFormData({ ...formData, calendar_provider: 'outlook' })}
-                                    className={`px-3 py-2 rounded-lg text-sm font-bold ${
-                                        formData.calendar_provider === 'outlook'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-white text-gray-700 border border-gray-300'
-                                    }`}
-                                >
-                                    Outlook
-                                </button>
-                            </div> */}
-                        </div>
+                        {/* Integración con Calendario */}
+                        {isGoogleConnected ? (
+                            <div className='bg-green-50 p-4 rounded-xl border border-green-200'>
+                                <div className='flex items-center justify-between mb-2'>
+                                    <p className='text-sm font-bold text-green-900'>🗓️ Google Calendar</p>
+                                    <div className='flex items-center gap-2'>
+                                        <label className='relative inline-flex items-center cursor-pointer'>
+                                            <input
+                                                type='checkbox'
+                                                className='sr-only peer'
+                                                checked={formData.calendar_provider === 'google'}
+                                                onChange={(e) => setFormData({ ...formData, calendar_provider: e.target.checked ? 'google' : null })}
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                        </label>
+                                        <span className='text-xs font-bold text-green-700'>Sincronizar</span>
+                                    </div>
+                                </div>
+                                <p className='text-xs text-green-700'>
+                                    {formData.calendar_provider === 'google'
+                                        ? '✅ Esta reunión se creará automáticamente en tu Google Calendar y enviará invitaciones.'
+                                        : 'Esta reunión solo se guardará internamente en el CRM.'}
+                                </p>
+                                {formData.meeting_type === 'video' && formData.calendar_provider === 'google' && (
+                                    <p className='text-[10px] text-blue-600 font-bold mt-2'>
+                                        ✨ Se generará automáticamente un enlace de Google Meet.
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className='bg-blue-50 p-4 rounded-xl border border-blue-200'>
+                                <p className='text-sm font-bold text-blue-900 mb-2'>🗓️ Integración con Calendario</p>
+                                <p className='text-xs text-blue-700'>
+                                    Para sincronizar tus juntas, primero conecta tu cuenta de Google en la página principal del Calendario.
+                                </p>
+                            </div>
+                        )}
                     </form>
                 </div>
 

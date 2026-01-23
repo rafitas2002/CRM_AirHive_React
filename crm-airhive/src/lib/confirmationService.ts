@@ -326,18 +326,23 @@ export interface MeetingWithUrgency extends Meeting {
     seller_name?: string
 }
 
-export async function getUpcomingMeetings(userId: string, limit: number = 10, allMeetings: boolean = false): Promise<MeetingWithUrgency[]> {
+export async function getUpcomingMeetings(userId: string, limit: number = 10, allMeetings: boolean = false, userEmail?: string): Promise<MeetingWithUrgency[]> {
     try {
-        console.log('Fetching upcoming meetings for user:', userId, 'All meetings:', allMeetings)
+        console.log('Fetching upcoming meetings for user:', userId, 'Email:', userEmail, 'All meetings:', allMeetings)
 
-        // 1. Fetch meetings only
+        // 1. Fetch meetings
         let query = supabase
             .from('meetings')
             .select('*')
 
-        // Only filter by seller_id if NOT viewing all meetings
+        // If not viewing all (Admin filter or specific view), we filter by seller OR attendee
         if (!allMeetings) {
-            query = query.eq('seller_id', userId)
+            if (userEmail) {
+                // Fetch meetings where user is owner OR attendee
+                query = query.or(`seller_id.eq.${userId},attendees.cs.{"${userEmail}"}`)
+            } else {
+                query = query.eq('seller_id', userId)
+            }
         }
 
         const { data: meetings, error: meetingsError } = await query

@@ -56,7 +56,9 @@ const GOOGLE_CONFIG = {
     redirectUri: process.env.GOOGLE_REDIRECT_URI || '',
     scopes: [
         'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/calendar.events'
+        'https://www.googleapis.com/auth/calendar.events',
+        'openid',
+        'email'
     ]
 }
 
@@ -65,15 +67,22 @@ const GOOGLE_CONFIG = {
  * This should be called when user clicks "Connect Google Calendar"
  */
 export function getGoogleAuthUrl(): string {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    const redirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ||
+        (typeof window !== 'undefined' ? `${window.location.origin}/api/auth/google/callback` : '')
+
+    if (!clientId) {
+        console.error('❌ NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing!')
+    }
+
     const params = new URLSearchParams({
-        client_id: GOOGLE_CONFIG.clientId,
-        redirect_uri: GOOGLE_CONFIG.redirectUri,
+        client_id: clientId || '',
+        redirect_uri: redirectUri,
         response_type: 'code',
         scope: GOOGLE_CONFIG.scopes.join(' '),
         access_type: 'offline',
-        prompt: 'consent',
-        // Restrict to @airhivemx.com domain
-        hd: 'airhivemx.com'
+        prompt: 'select_account consent'
+        // Removed hd: 'airhivemx.com' to allow any google account (including gmail)
     })
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
@@ -296,15 +305,35 @@ export async function storeUserTokens(
     const expiresAt = new Date()
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in)
 
-    await supabase
+    // Optional: Get user's Google email
+    let email = null
+    try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+        })
+        if (response.ok) {
+            const data = await response.json()
+            email = data.email
+        }
+    } catch (e) {
+        console.warn('Could not fetch Google user email:', e)
+    }
+
+    const { error } = await supabase
         .from('user_calendar_tokens')
         .upsert({
             user_id: userId,
             provider: 'google',
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
-            expires_at: expiresAt.toISOString()
+            expires_at: expiresAt.toISOString(),
+            email: email
         })
+
+    if (error) {
+        console.error('Error storing tokens in Supabase:', error)
+        throw error
+    }
 }
 
 /**

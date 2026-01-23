@@ -151,7 +151,9 @@ export default function EmpresasPage() {
         await fetchCompanies()
     }
 
-    if (auth.loading || loading) {
+    // Only show blocking spinner if we are loading session AND not logged in
+    // OR if we are loading companies AND we don't have any data yet
+    if ((auth.loading && !auth.loggedIn) || (loading && companies.length === 0)) {
         return (
             <div className='h-full bg-[#E9ECEF] flex items-center justify-center'>
                 <div className='flex flex-col items-center gap-4'>

@@ -451,7 +451,7 @@ export default function LeadsPage() {
 
                 {/* Table Area - Scrollable */}
                 <div className='flex-1 overflow-y-auto custom-scrollbar bg-white rounded-2xl border border-gray-200 shadow-sm'>
-                    {loading ? (
+                    {loading && leads.length === 0 ? (
                         <div className='w-full h-full flex items-center justify-center'>
                             <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
                         </div>
