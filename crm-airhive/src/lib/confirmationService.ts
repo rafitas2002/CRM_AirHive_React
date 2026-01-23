@@ -176,8 +176,8 @@ export async function getPendingConfirmations(userId: string) {
         console.log('Fetching pending confirmations for user:', userId)
 
         // 1. Fetch meetings only (simplified query)
-        // 1. Fetch meetings only (simplified query)
         // Fetch both 'pending_confirmation' AND 'scheduled' meetings in the past
+        // But ONLY if the duration has passed
         const { data: meetings, error: meetingsError } = await (supabase
             .from('meetings') as any)
             .select('*')
@@ -187,9 +187,6 @@ export async function getPendingConfirmations(userId: string) {
 
         if (meetingsError) {
             console.error('Error fetching pending meetings:', meetingsError)
-            console.error('Details:', JSON.stringify(meetingsError, null, 2))
-            console.error('Hint:', meetingsError.hint)
-            console.error('Message:', meetingsError.message)
             return []
         }
 
@@ -197,8 +194,21 @@ export async function getPendingConfirmations(userId: string) {
             return []
         }
 
+        // Filter out meetings that are still "in progress"
+        const now = new Date()
+        const historicalMeetings = (meetings as Meeting[]).filter(m => {
+            const start = new Date(m.start_time)
+            const durationMs = (m.duration_minutes || 60) * 60 * 1000
+            const end = new Date(start.getTime() + durationMs)
+            return now > end || m.meeting_status === 'pending_confirmation'
+        })
+
+        if (historicalMeetings.length === 0) {
+            return []
+        }
+
         // 2. Fetch clients for these meetings
-        const leadIds = Array.from(new Set((meetings as Meeting[]).map(m => m.lead_id)))
+        const leadIds = Array.from(new Set(historicalMeetings.map(m => m.lead_id)))
         // console.log('Fetching properties for leads:', leadIds) // Debug if needed
 
         const { data: clients, error: clientsError } = await supabase
@@ -236,21 +246,38 @@ export async function getPendingConfirmations(userId: string) {
 // ============================================
 
 export async function getPendingAlerts(userId: string) {
-    const { data, error } = await (supabase
-        .from('meeting_alerts') as any)
-        .select('*, meetings(*, clientes(empresa, etapa))')
-        .eq('user_id', userId)
-        .eq('sent', false)
-        .eq('dismissed', false)
-        .lte('alert_time', new Date().toISOString())
-        .order('alert_time', { ascending: true })
+    try {
+        const { data, error } = await (supabase
+            .from('meeting_alerts') as any)
+            .select(`
+                *,
+                meetings:meeting_id (
+                    id,
+                    title,
+                    start_time,
+                    lead_id,
+                    clientes:lead_id (
+                        empresa,
+                        etapa
+                    )
+                )
+            `)
+            .eq('user_id', userId)
+            .eq('sent', false)
+            .eq('dismissed', false)
+            .lte('alert_time', new Date().toISOString())
+            .order('alert_time', { ascending: true })
 
-    if (error) {
-        console.error('Error fetching pending alerts:', error)
+        if (error) {
+            console.error('Error fetching pending alerts:', JSON.stringify(error, null, 2))
+            return []
+        }
+
+        return data || []
+    } catch (err) {
+        console.error('Exception in getPendingAlerts:', err)
         return []
     }
-
-    return data || []
 }
 
 export async function dismissAlert(alertId: string) {

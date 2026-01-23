@@ -1,6 +1,7 @@
 'use client'
 
 import TopBar from '@/components/TopBar'
+import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
 import { useAuth } from '@/lib/auth'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
