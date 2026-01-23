@@ -67,22 +67,47 @@ body {
   animation: pulse-border 2s infinite ease-in-out;
 }
 
+@keyframes breathing-slow {
+
+  0%,
+  100% {
+    border-color: #2048FF !important;
+    border-width: 3px !important;
+    background-color: rgba(32, 72, 255, 0.05) !important;
+    box-shadow:
+      0 0 10px rgba(32, 72, 255, 0.4),
+      0 0 20px rgba(32, 72, 255, 0.2),
+      inset 0 0 10px rgba(32, 72, 255, 0.1) !important;
+  }
+
+  50% {
+    border-color: rgba(32, 72, 255, 0.3) !important;
+    border-width: 3px !important;
+    background-color: white !important;
+    box-shadow:
+      0 0 5px rgba(32, 72, 255, 0.1),
+      0 0 0px rgba(32, 72, 255, 0) !important;
+  }
+}
+
+.animate-breathing-slow {
+  animation: breathing-slow 2s infinite ease-in-out !important;
+}
+
 @keyframes flash-intense {
 
   0%,
   100% {
-    opacity: 1;
-    border-color: rgba(32, 72, 255, 1);
-    box-shadow: 0 0 20px rgba(32, 72, 255, 0.4);
+    border-color: rgba(32, 72, 255, 1) !important;
+    box-shadow: 0 0 20px rgba(32, 72, 255, 0.4) !important;
   }
 
   50% {
-    opacity: 0.7;
-    border-color: rgba(32, 72, 255, 0.2);
-    box-shadow: 0 0 5px rgba(32, 72, 255, 0.1);
+    border-color: rgba(32, 72, 255, 0.2) !important;
+    box-shadow: 0 0 5px rgba(32, 72, 255, 0.1) !important;
   }
 }
 
 .animate-flash-intense {
-  animation: flash-intense 1.5s infinite ease-in-out;
+  animation: flash-intense 1.5s infinite ease-in-out !important;
 }

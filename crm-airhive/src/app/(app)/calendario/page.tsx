@@ -159,7 +159,7 @@ export default function CalendarioPage() {
                                             const startTime = new Date(meeting.start_time)
 
                                             return (
-                                                <div key={meeting.id} className={`bg-white p-5 rounded-xl border-2 ${urgency.border} hover:shadow-lg transition-all ${meeting.urgencyLevel === 'in_progress' ? 'animate-breathing-slow shadow-blue-50/50 shadow-lg' : ''}`}>
+                                                <div key={meeting.id} className={`bg-white p-5 rounded-xl border-2 ${urgency.border} hover:shadow-lg transition-all ${meeting.urgencyLevel === 'in_progress' ? 'animate-breathing-slow' : ''}`}>
                                                     <div className='flex items-start gap-4'>
                                                         <div className='text-center min-w-[80px]'>
                                                             <p className='text-2xl font-black text-[#0F2A44]'>
