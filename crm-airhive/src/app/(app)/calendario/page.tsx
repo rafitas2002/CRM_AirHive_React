@@ -9,6 +9,8 @@ import { updateMeeting, deleteMeeting } from '@/lib/meetingsService'
 import { getGoogleAuthUrl, getUserAccessToken } from '@/lib/googleCalendarService'
 import { createClient } from '@/lib/supabase'
 
+import CalendarWeekView from '@/components/CalendarWeekView'
+
 export default function CalendarioPage() {
     const auth = useAuth()
     const [meetings, setMeetings] = useState<MeetingWithUrgency[]>([])
@@ -18,7 +20,7 @@ export default function CalendarioPage() {
     const [isEditMode, setIsEditMode] = useState(false)
     const [currentTime, setCurrentTime] = useState(new Date())
     const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string | null }>({ connected: false })
-    const [sellers, setSellers] = useState<{ id: string; full_name: string }[]>([])
+    const [sellers, setSellers] = useState<{ id: string; full_name: string | null; username: string | null }[]>([])
     const [selectedSellerId, setSelectedSellerId] = useState<string>('all')
 
     useEffect(() => {
@@ -35,6 +37,10 @@ export default function CalendarioPage() {
             }
         }
     }, [auth.user, auth.loading, auth.profile])
+
+    useEffect(() => {
+        if (selectedSellerId) fetchData()
+    }, [selectedSellerId])
 
     const fetchCalendarStatus = async () => {
         try {
@@ -59,7 +65,7 @@ export default function CalendarioPage() {
             const supabase = createClient()
             const { data } = await supabase
                 .from('profiles')
-                .select('id, full_name')
+                .select('id, full_name, username')
                 .order('full_name')
 
             if (data) setSellers(data)
@@ -72,7 +78,6 @@ export default function CalendarioPage() {
         try {
             if (!auth.user) return
             const isAdmin = auth.profile?.role === 'admin'
-            // If admin and specific seller selected, we fetch that seller's meetings
             const targetId = (isAdmin && selectedSellerId !== 'all') ? selectedSellerId : auth.user.id
             const showAll = isAdmin && selectedSellerId === 'all'
 
@@ -139,155 +144,196 @@ export default function CalendarioPage() {
     }
 
     return (
-        <div className='h-full flex flex-col bg-[#F0F2F5] overflow-hidden'>
-            {/* Header */}
-            <div className='bg-white border-b border-gray-200 px-8 py-6 shrink-0'>
+        <div className='h-full flex flex-col bg-[#F8FAFB] overflow-hidden'>
+            {/* Minimal Background Header */}
+            <div className='bg-white px-8 py-4 shrink-0 shadow-sm z-20 flex flex-col gap-4'>
                 <div className='flex items-center justify-between'>
-                    <div>
-                        <div className='flex items-center gap-4'>
-                            <h1 className='text-3xl font-black text-[#0F2A44]'>
-                                📅 Calendario de Juntas
+                    <div className='flex items-center gap-6'>
+                        <div className='space-y-0.5'>
+                            <h1 className='text-2xl font-black text-[#0A1635] tracking-tight'>
+                                Calendario
                             </h1>
-                            <div className='bg-[#2048FF]/5 border border-[#2048FF]/10 px-4 py-1.5 rounded-xl flex items-center gap-2.5 shadow-sm'>
-                                <span className='text-blue-600 animate-pulse'>●</span>
-                                <span className='text-xl font-bold text-[#2048FF] font-mono tabular-nums tracking-tight'>
+                            <p className='text-[11px] font-bold text-gray-400 uppercase tracking-widest'>
+                                Gestión de Juntas y Forecast
+                            </p>
+                        </div>
+
+                        <div className='h-8 w-px bg-gray-100' />
+
+                        <div className='flex items-center gap-3'>
+                            <div className='bg-blue-50 px-3 py-1.5 rounded-xl flex items-center gap-2 border border-blue-100/50'>
+                                <span className='text-xs font-black text-blue-600 tabular-nums'>
                                     {currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                                 </span>
                             </div>
+
+                            {calendarStatus.connected ? (
+                                <div className='group relative'>
+                                    <div className='flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 cursor-help transition-all hover:bg-emerald-100'>
+                                        <span className='text-[10px]'>🟢</span>
+                                        <span className='text-[10px] font-black text-emerald-700 uppercase'>Google</span>
+                                    </div>
+                                    <div className='absolute top-full right-0 mt-2 bg-[#0F2A44] text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none shadow-xl'>
+                                        Sincronizado con: {calendarStatus.email}
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={handleConnectGoogle}
+                                    className='px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-xl text-[10px] font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5 uppercase'
+                                >
+                                    <span>🔗</span> Conectar
+                                </button>
+                            )}
                         </div>
-                        <p className='text-sm text-gray-600 mt-1'>
-                            Gestiona tus reuniones y confirma las que ya pasaron
-                        </p>
                     </div>
 
-                    <div className='flex items-center gap-3'>
+                    <div className='flex items-center gap-4'>
+                        {/* Selector de Vendedores con MEJOR CONTRASTE */}
                         {auth.profile?.role === 'admin' && (
-                            <select
-                                value={selectedSellerId}
-                                onChange={(e) => {
-                                    setSelectedSellerId(e.target.value)
-                                    // Trigger fetch manually or rely on useEffect dependecy
-                                }}
-                                className='px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-                            >
-                                <option value="all">👥 Todos los vendedores</option>
-                                {sellers.map(s => (
-                                    <option key={s.id} value={s.id}>👤 {s.full_name}</option>
-                                ))}
-                            </select>
-                        )}
-
-                        {calendarStatus.connected ? (
-                            <div className='flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg border border-green-100'>
-                                <span className='text-sm text-green-700 font-bold'>✅ Google Conectado</span>
-                                <span className='text-[10px] text-green-600 bg-white px-2 py-0.5 rounded-full border border-green-50'>{calendarStatus.email}</span>
+                            <div className='flex items-center gap-2'>
+                                <label className='text-[9px] font-black text-gray-500 uppercase tracking-widest'>Filtro:</label>
+                                <select
+                                    value={selectedSellerId}
+                                    onChange={(e) => setSelectedSellerId(e.target.value)}
+                                    className='px-3 py-1.5 bg-white border-2 border-gray-100 rounded-xl text-sm font-black text-[#0A1635] shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer'
+                                >
+                                    <option value="all" className='text-[#0A1635]'>👥 Todos los vendedores</option>
+                                    {sellers.map(s => (
+                                        <option key={s.id} value={s.id} className='text-[#0A1635]'>👤 {s.full_name || s.username || 'Sin nombre'}</option>
+                                    ))}
+                                </select>
                             </div>
-                        ) : (
-                            <button
-                                onClick={handleConnectGoogle}
-                                className='px-4 py-2 bg-white border border-blue-200 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-2'
-                            >
-                                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                                </svg>
-                                Conectar Calendar
-                            </button>
                         )}
 
-                        <button
-                            onClick={() => setIsEditMode(!isEditMode)}
-                            className={`px-4 py-2 rounded-lg font-bold transition-all border-2 ${isEditMode
-                                ? 'bg-orange-100 text-orange-700 border-orange-300 shadow-inner'
-                                : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-                                }`}
-                        >
-                            {isEditMode ? '✏️ Modo Edición Activo' : '✏️ Editar'}
-                        </button>
+                        <div className='h-8 w-px bg-gray-100' />
 
-                        <div className='flex bg-gray-100 rounded-lg p-1'>
+                        <div className='flex items-center gap-2'>
                             <button
-                                onClick={() => setViewMode('list')}
-                                className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${viewMode === 'list' ? 'bg-white text-[#0F2A44] shadow-sm' : 'text-gray-600'}`}
+                                onClick={() => setIsEditMode(!isEditMode)}
+                                className={`h-9 px-4 rounded-xl text-xs font-black transition-all border-2 flex items-center gap-2 shadow-sm transform active:scale-95 ${isEditMode
+                                    ? 'bg-orange-500 text-white border-orange-600'
+                                    : 'bg-white text-gray-700 border-gray-100 hover:border-gray-200'
+                                    }`}
                             >
-                                Lista
+                                <span>{isEditMode ? '🔒' : '✏️'}</span> {isEditMode ? 'Finalizar' : 'Editar'}
                             </button>
-                            <button
-                                onClick={() => setViewMode('week')}
-                                className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${viewMode === 'week' ? 'bg-white text-[#0F2A44] shadow-sm' : 'text-gray-600'}`}
-                            >
-                                Semana
-                            </button>
+
+                            <div className='flex bg-gray-50 rounded-xl p-0.5 border border-gray-100'>
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={`px-4 py-1.5 rounded-[10px] text-[10px] font-black transition-all uppercase tracking-widest ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    Lista
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('week')}
+                                    className={`px-4 py-1.5 rounded-[10px] text-[10px] font-black transition-all uppercase tracking-widest ${viewMode === 'week' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    Semana
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Content */}
-            <div className='flex-1 overflow-y-auto p-8'>
-                <div className='max-w-6xl mx-auto'>
+            {/* Content Area */}
+            <div className='flex-1 overflow-hidden p-8 flex flex-col min-h-0'>
+                <div className='max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0'>
                     {meetings.length === 0 ? (
-                        <div className='bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-200'>
-                            <h3 className='text-xl font-bold text-gray-900 mb-2'>No tienes juntas programadas</h3>
-                            <a href='/clientes' className='inline-block px-6 py-3 bg-[#2048FF] text-white rounded-lg font-bold'>Ir a Leads</a>
+                        <div className='flex-1 flex flex-col items-center justify-center bg-white rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border border-gray-50'>
+                            <div className='w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-4xl mb-6'>📅</div>
+                            <h3 className='text-3xl font-black text-[#0A1635] mb-3'>No hay juntas programadas</h3>
+                            <p className='text-gray-400 mb-8 font-medium max-w-sm'>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>
+                            <a href='/clientes' className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform hover:-translate-y-1'>
+                                Ir a Leads
+                            </a>
                         </div>
                     ) : (
-                        <div className='space-y-8'>
-                            {Object.entries(groupedMeetings).map(([date, dayMeetings]) => (
-                                <div key={date}>
-                                    <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>{date}</h2>
-                                    <div className='space-y-3'>
-                                        {dayMeetings.map((meeting) => {
-                                            const urgency = getUrgencyColor(meeting.urgencyLevel || 'scheduled')
-                                            const stage = getStageColor(meeting.etapa || '')
-                                            const startTime = new Date(meeting.start_time)
+                        <div className='flex-1 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-y-auto custom-scrollbar pr-2 min-h-0'>
+                            {viewMode === 'list' ? (
+                                <div className='space-y-10 pb-10'>
+                                    {Object.entries(groupedMeetings).map(([date, dayMeetings]) => (
+                                        <div key={date} className='space-y-4'>
+                                            <div className='inline-block px-5 py-2 bg-[#0A1635] rounded-2xl shadow-lg'>
+                                                <h2 className='text-xs font-black text-white uppercase tracking-[0.2em]'>{date}</h2>
+                                            </div>
+                                            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+                                                {dayMeetings.map((meeting) => {
+                                                    const urgency = getUrgencyColor(meeting.urgencyLevel || 'scheduled')
+                                                    const stage = getStageColor(meeting.etapa || '')
+                                                    const startTime = new Date(meeting.start_time)
 
-                                            return (
-                                                <div key={meeting.id} className={`bg-white p-5 rounded-xl border-2 ${urgency.border} hover:shadow-lg transition-all`}>
-                                                    <div className='flex items-start gap-4'>
-                                                        <div className='text-center min-w-[80px]'>
-                                                            <p className='text-2xl font-black text-[#0F2A44]'>
-                                                                {startTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                                                            </p>
-                                                            <p className='text-xs text-gray-500'>{meeting.duration_minutes} min</p>
-                                                        </div>
+                                                    return (
+                                                        <div key={meeting.id} className={`group relative bg-white p-6 rounded-[32px] border-2 ${urgency.border} hover:shadow-2xl hover:shadow-blue-500/10 transition-all cursor-pointer transform hover:-translate-y-1`}>
+                                                            <div className='flex items-start justify-between mb-6'>
+                                                                <div className='bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100'>
+                                                                    <p className='text-2xl font-black text-[#0A1635] tabular-nums leading-none'>
+                                                                        {startTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                                                    </p>
+                                                                    <p className='text-[10px] font-black text-gray-400 uppercase mt-1'>{meeting.duration_minutes} min</p>
+                                                                </div>
 
-                                                        <div className='flex-1'>
-                                                            <div className='flex items-center gap-2 mb-2'>
-                                                                <span className={`px-3 py-1 rounded-full text-xs font-black ${urgency.bg} ${urgency.text} border-2 ${urgency.border}`}>{urgency.label}</span>
-                                                                <span className={`px-3 py-1 rounded-full text-xs font-black ${stage.bg} ${stage.text} border ${stage.border}`}>{meeting.etapa}</span>
-                                                                {meeting.meeting_status === 'pending_confirmation' && (
-                                                                    <span className='px-3 py-1 rounded-full text-xs font-black bg-red-100 text-red-700 border-2 border-red-200 animate-pulse'>⚠️ Pendiente confirmar</span>
-                                                                )}
+                                                                <div className='flex flex-col gap-1.5 items-end'>
+                                                                    <span className={`px-3 py-1 rounded-xl text-[9px] font-black border-2 uppercase tracking-tight ${urgency.bg} ${urgency.text} ${urgency.border}`}>{urgency.label}</span>
+                                                                    <span className={`px-3 py-1 rounded-xl text-[9px] font-black border uppercase tracking-tight ${stage.bg} ${stage.text} ${stage.border}`}>{meeting.etapa}</span>
+                                                                </div>
                                                             </div>
 
-                                                            <h3 className='text-lg font-bold text-gray-900 mb-1'>{meeting.title}</h3>
-                                                            <p className='text-sm text-gray-600 mb-2'>🏢 {meeting.empresa}</p>
-                                                            {meeting.seller_name && <p className='text-xs text-gray-500 mb-2'>👤 Vendedor: <span className='text-gray-700'>{meeting.seller_name}</span></p>}
-                                                            {meeting.frozen_probability_value !== null && (
-                                                                <div className='mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200'>
-                                                                    <p className='text-xs text-purple-800 font-bold'>🎯 Pronóstico congelado: {meeting.frozen_probability_value}%</p>
+                                                            <div className='space-y-3 mb-6'>
+                                                                <h3 className='text-lg font-black text-[#0A1635] leading-tight group-hover:text-blue-600 transition-colors'>{meeting.title}</h3>
+                                                                <div className='flex flex-col gap-1'>
+                                                                    <p className='text-xs font-bold text-gray-600 flex items-center gap-2'>
+                                                                        <span className='w-5 h-5 bg-blue-50 rounded-lg flex items-center justify-center'>🏢</span>
+                                                                        {meeting.empresa}
+                                                                    </p>
+                                                                    {meeting.seller_name && (
+                                                                        <p className='text-[10px] font-bold text-gray-400 flex items-center gap-2'>
+                                                                            <span className='w-5 h-5 bg-gray-50 rounded-lg flex items-center justify-center'>👤</span>
+                                                                            {meeting.seller_name}
+                                                                        </p>
+                                                                    )}
                                                                 </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
 
-                                                        <div className='flex flex-col gap-2'>
+                                                            {meeting.frozen_probability_value !== null && (
+                                                                <div className='p-3 bg-purple-50 rounded-2xl border border-purple-100 flex items-center justify-between'>
+                                                                    <span className='text-[10px] font-black text-purple-700 uppercase'>Forecast Congelado</span>
+                                                                    <span className='text-lg font-black text-purple-900'>{meeting.frozen_probability_value}%</span>
+                                                                </div>
+                                                            )}
+
+                                                            {meeting.meeting_status === 'pending_confirmation' && (
+                                                                <div className='mt-3 p-3 bg-red-50 rounded-2xl border-2 border-red-100 flex items-center gap-3 animate-pulse'>
+                                                                    <span className='text-lg'>⚠️</span>
+                                                                    <p className='text-[10px] font-black text-red-700 uppercase leading-tight'>Pendiente confirmar reunión</p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Actions Overlay */}
                                                             {isEditMode && (meeting.meeting_status === 'scheduled' || meeting.meeting_status === 'not_held') && (
-                                                                <div className='flex items-center gap-2'>
-                                                                    <button onClick={() => handleEditMeeting(meeting)} className='p-2 bg-blue-50 text-blue-600 rounded-lg'>✏️</button>
-                                                                    <button onClick={() => handleDeleteMeeting(meeting)} className='p-2 bg-red-50 text-red-600 rounded-lg'>🗑️</button>
+                                                                <div className='absolute inset-0 bg-white/60 backdrop-blur-[2px] rounded-[32px] flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-all'>
+                                                                    <button onClick={() => handleEditMeeting(meeting)} className='w-12 h-12 bg-white text-blue-600 rounded-2xl shadow-xl border border-gray-100 hover:bg-blue-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center text-xl'>✏️</button>
+                                                                    <button onClick={() => handleDeleteMeeting(meeting)} className='w-12 h-12 bg-white text-red-600 rounded-2xl shadow-xl border border-gray-100 hover:bg-red-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center text-xl'>🗑️</button>
                                                                 </div>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            ) : (
+                                <CalendarWeekView
+                                    meetings={meetings}
+                                    onEditMeeting={handleEditMeeting}
+                                    isEditMode={isEditMode}
+                                    getUrgencyColor={getUrgencyColor}
+                                    getStageColor={getStageColor}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
