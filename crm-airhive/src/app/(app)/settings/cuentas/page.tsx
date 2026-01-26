@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createClient, Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getGoogleAuthUrl, exchangeCodeForToken, storeUserTokens } from '@/lib/googleCalendarService'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -13,6 +13,8 @@ type ConnectionStatus = {
         lastSync?: string
     }
 }
+
+type UserCalendarToken = Database['public']['Tables']['user_calendar_tokens']['Row']
 
 export default function CuentasPage() {
     const auth = useAuth()
@@ -72,12 +74,15 @@ export default function CuentasPage() {
 
         try {
             const supabase = createClient()
-            const { data } = await supabase
+            const response = await supabase
                 .from('user_calendar_tokens')
                 .select('*')
                 .eq('user_id', auth.user.id)
                 .eq('provider', 'google')
                 .single()
+
+            // Explicit cast to avoid 'never' issue with build
+            const data = response.data as UserCalendarToken | null
 
             if (data) {
                 setStatus({
