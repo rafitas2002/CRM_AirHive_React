@@ -374,12 +374,12 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#DDE2E5]'>
+        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
             <div className='w-full mx-auto flex flex-col h-full gap-8'>
                 {/* Header - Fixed */}
                 <div className='shrink-0 space-y-4'>
                     <div className='flex items-center justify-between'>
-                        <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>
+                        <h1 className='text-3xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
                             Leads
                         </h1>
 
@@ -388,8 +388,13 @@ export default function LeadsPage() {
                                 onClick={() => setIsEditingMode(!isEditingMode)}
                                 className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 ${isEditingMode
                                     ? 'bg-[#1700AC] text-white hover:bg-[#0F2A44]'
-                                    : 'bg-white border border-gray-200 text-[#0A1635] hover:bg-gray-50'
+                                    : 'border'
                                     }`}
+                                style={!isEditingMode ? {
+                                    background: 'var(--card-bg)',
+                                    borderColor: 'var(--card-border)',
+                                    color: 'var(--text-primary)'
+                                } : {}}
                             >
                                 <span>{isEditingMode ? '✅' : '✏️'}</span> {isEditingMode ? 'Terminar Edición' : 'Editar'}
                             </button>
@@ -409,24 +414,33 @@ export default function LeadsPage() {
                     </div>
 
                     {/* Filter Bar */}
-                    <div className='bg-white p-3 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4'>
+                    <div className='p-3 rounded-2xl border shadow-sm flex items-center gap-4' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex-1 relative font-medium min-w-[200px]'>
-                            <span className='absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm'>🔍</span>
+                            <span className='absolute left-3.5 top-1/2 -translate-y-1/2 text-sm' style={{ color: 'var(--text-secondary)' }}>🔍</span>
                             <input
                                 type="text"
                                 placeholder="Buscar leads..."
                                 value={filterSearch}
                                 onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2048FF] focus:border-[#2048FF] text-xs text-[#0A1635] font-semibold transition-all placeholder:text-gray-400 hover:border-gray-400'
+                                className='w-full pl-9 pr-3 py-1.5 border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2048FF] focus:border-[#2048FF] text-xs font-semibold transition-all placeholder:text-gray-400'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    borderColor: 'var(--input-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             />
                         </div>
 
-                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
-                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Etapa</label>
+                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
+                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Etapa</label>
                             <select
                                 value={filterStage}
                                 onChange={(e) => setFilterStage(e.target.value)}
-                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
+                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <option value="All">Todas</option>
                                 <option value="Prospección">Prospección</option>
@@ -436,12 +450,16 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
-                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Vendedor</label>
+                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
+                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Vendedor</label>
                             <select
                                 value={filterOwner}
                                 onChange={(e) => setFilterOwner(e.target.value)}
-                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
+                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <option value="All">Cualquiera</option>
                                 {uniqueOwners.map(owner => (
@@ -450,12 +468,16 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        <div className='flex items-center gap-2 border-l border-gray-100 pl-4'>
-                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap'>Orden</label>
+                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
+                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Orden</label>
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
-                                className='bg-gray-50 border border-transparent hover:border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-[#0A1635] focus:outline-none transition-all cursor-pointer'
+                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <option value="fecha_registro-desc">Reciente</option>
                                 <option value="fecha_registro-asc">Antiguo</option>
@@ -490,7 +512,7 @@ export default function LeadsPage() {
                 </div>
 
                 {/* Table Area - Scrollable */}
-                <div className='flex-1 overflow-y-auto custom-scrollbar bg-white rounded-2xl border border-gray-200 shadow-sm'>
+                <div className='flex-1 overflow-y-auto custom-scrollbar rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     {loading && leads.length === 0 ? (
                         <div className='w-full h-full flex items-center justify-center'>
                             <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
@@ -548,6 +570,6 @@ export default function LeadsPage() {
                 recipientEmail={emailRecipient.email}
                 recipientName={emailRecipient.name}
             />
-        </div>
+        </div >
     )
 }

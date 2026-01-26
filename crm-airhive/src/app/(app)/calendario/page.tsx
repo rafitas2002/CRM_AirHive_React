@@ -137,23 +137,23 @@ export default function CalendarioPage() {
 
     if (auth.loading && !auth.loggedIn) {
         return (
-            <div className='h-full flex items-center justify-center bg-[#F0F2F5]'>
+            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
                 <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
             </div>
         )
     }
 
     return (
-        <div className='h-full flex flex-col bg-[#F8FAFB] overflow-hidden'>
+        <div className='h-full flex flex-col overflow-hidden' style={{ background: 'var(--background)' }}>
             {/* Minimal Background Header */}
-            <div className='bg-white px-8 py-4 shrink-0 shadow-sm z-20 flex flex-col gap-4'>
+            <div className='px-8 py-4 shrink-0 shadow-sm z-20 flex flex-col gap-4' style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--card-border)' }}>
                 <div className='flex items-center justify-between'>
                     <div className='flex items-center gap-6'>
                         <div className='space-y-0.5'>
-                            <h1 className='text-2xl font-black text-[#0A1635] tracking-tight'>
+                            <h1 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
                                 Calendario
                             </h1>
-                            <p className='text-[11px] font-bold text-gray-400 uppercase tracking-widest'>
+                            <p className='text-[11px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
                                 Gestión de Juntas y Forecast
                             </p>
                         </div>
@@ -166,25 +166,6 @@ export default function CalendarioPage() {
                                     {currentTime.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
                                 </span>
                             </div>
-
-                            {calendarStatus.connected ? (
-                                <div className='group relative'>
-                                    <div className='flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 cursor-help transition-all hover:bg-emerald-100'>
-                                        <span className='text-[10px]'>🟢</span>
-                                        <span className='text-[10px] font-black text-emerald-700 uppercase'>Google</span>
-                                    </div>
-                                    <div className='absolute top-full right-0 mt-2 bg-[#0F2A44] text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none shadow-xl'>
-                                        Sincronizado con: {calendarStatus.email}
-                                    </div>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={handleConnectGoogle}
-                                    className='px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-xl text-[10px] font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-1.5 uppercase'
-                                >
-                                    <span>🔗</span> Conectar
-                                </button>
-                            )}
                         </div>
                     </div>
 
@@ -192,11 +173,16 @@ export default function CalendarioPage() {
                         {/* Selector de Vendedores con MEJOR CONTRASTE */}
                         {auth.profile?.role === 'admin' && (
                             <div className='flex items-center gap-2'>
-                                <label className='text-[9px] font-black text-gray-500 uppercase tracking-widest'>Filtro:</label>
+                                <label className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Filtro:</label>
                                 <select
                                     value={selectedSellerId}
                                     onChange={(e) => setSelectedSellerId(e.target.value)}
-                                    className='px-3 py-1.5 bg-white border-2 border-gray-100 rounded-xl text-sm font-black text-[#0A1635] shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer'
+                                    className='px-3 py-1.5 border-2 rounded-xl text-sm font-black shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer'
+                                    style={{
+                                        background: 'var(--input-bg)',
+                                        borderColor: 'var(--input-border)',
+                                        color: 'var(--text-primary)'
+                                    }}
                                 >
                                     <option value="all" className='text-[#0A1635]'>👥 Todos los vendedores</option>
                                     {sellers.map(s => (
@@ -242,10 +228,10 @@ export default function CalendarioPage() {
             <div className='flex-1 overflow-hidden p-8 flex flex-col min-h-0'>
                 <div className='max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0'>
                     {meetings.length === 0 ? (
-                        <div className='flex-1 flex flex-col items-center justify-center bg-white rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border border-gray-50'>
+                        <div className='flex-1 flex flex-col items-center justify-center rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-4xl mb-6'>📅</div>
-                            <h3 className='text-3xl font-black text-[#0A1635] mb-3'>No hay juntas programadas</h3>
-                            <p className='text-gray-400 mb-8 font-medium max-w-sm'>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>
+                            <h3 className='text-3xl font-black mb-3' style={{ color: 'var(--text-primary)' }}>No hay juntas programadas</h3>
+                            <p className='mb-8 font-medium max-w-sm' style={{ color: 'var(--text-secondary)' }}>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>
                             <a href='/clientes' className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform hover:-translate-y-1'>
                                 Ir a Leads
                             </a>
@@ -266,7 +252,7 @@ export default function CalendarioPage() {
                                                     const startTime = new Date(meeting.start_time)
 
                                                     return (
-                                                        <div key={meeting.id} className={`group relative bg-white p-6 rounded-[32px] border-2 ${urgency.border} hover:shadow-2xl hover:shadow-blue-500/10 transition-all cursor-pointer transform hover:-translate-y-1`}>
+                                                        <div key={meeting.id} className={`group relative p-6 rounded-[32px] border-2 ${urgency.border} hover:shadow-2xl hover:shadow-blue-500/10 transition-all cursor-pointer transform hover:-translate-y-1`} style={{ background: 'var(--card-bg)' }}>
                                                             <div className='flex items-start justify-between mb-6'>
                                                                 <div className='bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100'>
                                                                     <p className='text-2xl font-black text-[#0A1635] tabular-nums leading-none'>

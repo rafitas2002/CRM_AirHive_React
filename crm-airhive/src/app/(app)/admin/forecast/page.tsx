@@ -233,17 +233,18 @@ export default function ForecastDashboard() {
     }, [filteredLeads, statsPerSeller])
     burial:
     return (
-        <div className='h-full flex flex-col p-8 bg-[#DDE2E5] overflow-y-auto'>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 <div className='flex justify-between items-center'>
-                    <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>
+                    <h1 className='text-3xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
                         Pronóstico & Confiabilidad
                     </h1>
                     <div className='flex gap-4 items-center'>
                         <select
                             value={dateRange}
                             onChange={(e) => setDateRange(e.target.value)}
-                            className='bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold text-[#0A1635] shadow-sm'
+                            className='border rounded-xl px-4 py-2 text-sm font-bold shadow-sm'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                         >
                             <option value="all">Todo Histórico</option>
                             <option value="30">Últimos 30 días</option>
@@ -253,7 +254,8 @@ export default function ForecastDashboard() {
                         <select
                             value={filterSeller}
                             onChange={(e) => setFilterSeller(e.target.value)}
-                            className='bg-white border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold text-[#0A1635] shadow-sm'
+                            className='border rounded-xl px-4 py-2 text-sm font-bold shadow-sm'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                         >
                             <option value="All">Todos los Vendedores</option>
                             {sellers.map(s => <option key={s} value={s!}>{s}</option>)}
@@ -263,16 +265,16 @@ export default function ForecastDashboard() {
 
                 {/* Dashboard Cards */}
                 <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
-                    <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Pipeline Seleccionado</label>
-                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{globalStats.totalLeads} <span className='text-sm font-normal text-gray-400'>Leads</span></p>
+                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Pipeline Seleccionado</label>
+                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{globalStats.totalLeads} <span className='text-sm font-normal' style={{ color: 'var(--text-secondary)' }}>Leads</span></p>
                     </div>
-                    <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Histórico Analizado</label>
-                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{globalStats.historicalCount} <span className='text-sm font-normal text-gray-400'>Cerrados</span></p>
+                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Histórico Analizado</label>
+                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{globalStats.historicalCount} <span className='text-sm font-normal' style={{ color: 'var(--text-secondary)' }}>Cerrados</span></p>
                     </div>
-                    <div className='bg-white p-6 rounded-2xl border border-gray-200 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Error Cuadrático (Brier)</label>
+                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Error Cuadrático (Brier)</label>
                         <p className='text-3xl font-black text-[#2048FF] mt-2'>
                             {globalStats.avgLogLoss.toFixed(3)}
                         </p>
@@ -299,7 +301,7 @@ export default function ForecastDashboard() {
                 </div>
 
                 {/* Main Table */}
-                <div className='bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden'>
+                <div className='rounded-2xl border shadow-sm overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     <table className='w-full text-left'>
                         <thead className='bg-gray-50 border-b border-gray-100'>
                             <tr>
@@ -313,13 +315,13 @@ export default function ForecastDashboard() {
                         </thead>
                         <tbody className='divide-y divide-gray-50'>
                             {statsPerSeller.map((s, idx) => (
-                                <tr key={s.name} className='hover:bg-gray-50 transition-colors group'>
+                                <tr key={s.name} className='transition-colors group' style={{ borderBottom: '1px solid var(--card-border)' }}>
                                     <td className='px-6 py-4'>
                                         <div className='flex items-center gap-3'>
                                             <span className='w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs'>
                                                 {idx + 1}
                                             </span>
-                                            <span className='font-bold text-[#0A1635]'>{s.name}</span>
+                                            <span className='font-bold' style={{ color: 'var(--text-primary)' }}>{s.name}</span>
                                         </div>
                                     </td>
                                     <td className='px-6 py-4 text-center'>
@@ -346,7 +348,7 @@ export default function ForecastDashboard() {
                                         <p className='font-black text-[#1700AC] text-lg'>${s.pipelineAdjustedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
                                         <p className='text-[10px] text-blue-600/60 uppercase font-black tracking-tighter'>Ponderado</p>
                                     </td>
-                                    <td className='px-6 py-4 text-center font-bold text-[#0A1635]'>{s.winRate.toFixed(1)}%</td>
+                                    <td className='px-6 py-4 text-center font-bold' style={{ color: 'var(--text-primary)' }}>{s.winRate.toFixed(1)}%</td>
                                     <td className='px-6 py-4 text-center'>
                                         <span className={`px-3 py-1.5 rounded-lg text-sm font-black ${s.historicalLeads.length < 10 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
                                             {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}

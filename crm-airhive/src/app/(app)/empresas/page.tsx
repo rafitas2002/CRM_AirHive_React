@@ -155,10 +155,10 @@ export default function EmpresasPage() {
     // OR if we are loading companies AND we don't have any data yet
     if ((auth.loading && !auth.loggedIn) || (loading && companies.length === 0)) {
         return (
-            <div className='h-full bg-[#E9ECEF] flex items-center justify-center'>
+            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
                 <div className='flex flex-col items-center gap-4'>
                     <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
-                    <p className='text-gray-500 font-medium'>Cargando catálogo de empresas...</p>
+                    <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>Cargando catálogo de empresas...</p>
                 </div>
             </div>
         )
@@ -169,7 +169,7 @@ export default function EmpresasPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#E9ECEF]'>
+        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
             <div className='w-full mx-auto flex flex-col h-full gap-8'>
                 {/* Header - Fixed */}
                 <div className='shrink-0 flex flex-col gap-6'>
@@ -177,16 +177,17 @@ export default function EmpresasPage() {
                         <div className='flex items-center gap-4'>
                             <Link
                                 href='/clientes'
-                                className='w-12 h-12 flex items-center justify-center bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm'
+                                className='w-12 h-12 flex items-center justify-center border rounded-xl transition-all shadow-sm'
+                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
                                 title='Volver a Leads'
                             >
-                                <span className='text-xl font-bold'>←</span>
+                                <span className='text-xl font-bold' style={{ color: 'var(--text-primary)' }}>←</span>
                             </Link>
                             <div>
-                                <h1 className='text-4xl font-black text-[#0A1635] tracking-tight'>
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
                                     Catálogo de Empresas
                                 </h1>
-                                <p className='text-gray-500 mt-1 font-medium text-sm'>
+                                <p className='mt-1 font-medium text-sm' style={{ color: 'var(--text-secondary)' }}>
                                     Administra las empresas existentes o crea nuevas para vincularlas a tus leads.
                                 </p>
                             </div>
@@ -197,14 +198,24 @@ export default function EmpresasPage() {
                                 onClick={() => setIsEditingMode(!isEditingMode)}
                                 className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 ${isEditingMode
                                     ? 'bg-[#1700AC] text-white hover:bg-[#0F2A44]'
-                                    : 'bg-white border border-gray-200 text-[#0A1635] hover:bg-gray-50'
+                                    : 'border'
                                     }`}
+                                style={!isEditingMode ? {
+                                    background: 'var(--card-bg)',
+                                    borderColor: 'var(--card-border)',
+                                    color: 'var(--text-primary)'
+                                } : {}}
                             >
                                 <span>{isEditingMode ? '✅' : '✏️'}</span> {isEditingMode ? 'Terminar Edición' : 'Editar'}
                             </button>
                             <button
                                 onClick={fetchCompanies}
-                                className='px-5 py-2.5 bg-white border border-gray-200 text-[#0A1635] rounded-xl font-bold hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2'
+                                className='px-5 py-2.5 border rounded-xl font-bold transition-all shadow-sm flex items-center gap-2'
+                                style={{
+                                    background: 'var(--card-bg)',
+                                    borderColor: 'var(--card-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <span>🔄</span> Actualizar
                             </button>
@@ -218,24 +229,34 @@ export default function EmpresasPage() {
                     </div>
 
                     {/* Filter Bar - Row */}
-                    <div className='bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-wrap items-center gap-6'>
+                    <div className='p-4 rounded-2xl border shadow-sm flex flex-wrap items-center gap-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex-1 min-w-[300px] relative font-medium'>
-                            <span className='absolute left-4 top-1/2 -translate-y-1/2 text-gray-500'>🔍</span>
+                            <span className='absolute left-4 top-1/2 -translate-y-1/2' style={{ color: 'var(--text-secondary)' }}>🔍</span>
                             <input
                                 type="text"
                                 placeholder="Buscar por nombre o ubicación..."
                                 value={filterSearch}
                                 onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] text-sm text-[#0A1635] font-semibold transition-all placeholder:text-gray-400 hover:border-gray-400'
+                                className='w-full pl-12 pr-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] text-sm font-semibold transition-all placeholder:text-gray-400'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    borderColor: 'var(--input-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             />
                         </div>
 
                         <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]'>Industria:</label>
+                            <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Industria:</label>
                             <select
                                 value={filterIndustry}
                                 onChange={(e) => setFilterIndustry(e.target.value)}
-                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                                className='border rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    borderColor: 'var(--input-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <option value="All">Todas</option>
                                 {uniqueIndustries.map(ind => (
@@ -245,11 +266,16 @@ export default function EmpresasPage() {
                         </div>
 
                         <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]'>Tamaño:</label>
+                            <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Tamaño:</label>
                             <select
                                 value={filterSize}
                                 onChange={(e) => setFilterSize(e.target.value)}
-                                className='bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-[#0A1635] focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer hover:border-gray-400'
+                                className='border rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer'
+                                style={{
+                                    background: 'var(--input-bg)',
+                                    borderColor: 'var(--input-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
                                 <option value="All">Cualquiera</option>
                                 <option value="1">Nivel 1 (Startup)</option>
@@ -280,7 +306,7 @@ export default function EmpresasPage() {
                 </div>
 
                 {/* Table Section - Scrollable */}
-                <div className='flex-1 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-700 bg-white rounded-2xl border border-gray-200 shadow-sm'>
+                <div className='flex-1 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-700 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     <CompaniesTable
                         companies={filteredCompanies}
                         isEditingMode={isEditingMode}

@@ -266,13 +266,13 @@ export async function storeUserTokens(
     }
 
     const { error } = await supabase
-        .from('user_calendar_tokens')
+        .from('google_connections')
         .upsert({
             user_id: userId,
-            provider: 'google',
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
-            expires_at: expiresAt.toISOString(),
+            token_expires_at: expiresAt.toISOString(),
+            scope: 'calendar,gmail', // Simplified scope string
             email: email
         })
 
@@ -287,15 +287,14 @@ export async function getUserAccessToken(
     userId: string
 ): Promise<string | null> {
     const { data } = await supabase
-        .from('user_calendar_tokens')
+        .from('google_connections')
         .select('*')
         .eq('user_id', userId)
-        .eq('provider', 'google')
         .single()
 
     if (!data) return null
 
-    const expiresAt = new Date(data.expires_at)
+    const expiresAt = new Date(data.token_expires_at)
     const now = new Date()
 
     if (now >= expiresAt) {

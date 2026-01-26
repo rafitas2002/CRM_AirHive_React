@@ -29,20 +29,19 @@ export default function CuentasPage() {
 
         try {
             const supabase = createClient()
-            const { data, error } = await supabase
-                .from('profiles')
+            const { data } = await supabase
+                .from('google_connections')
                 .select('*')
-                .eq('id', auth.user.id)
+                .eq('user_id', auth.user.id)
                 .single()
 
             if (data) {
-                // Check if user has Google tokens stored
-                // For now, we'll check if they have any calendar events synced
-                const hasGoogleConnection = false // TODO: Implement actual check
+                const conn = data as any
                 setStatus({
                     google: {
-                        connected: hasGoogleConnection,
-                        email: auth.user.email
+                        connected: true,
+                        email: conn.email || undefined,
+                        lastSync: new Date(conn.updated_at).toLocaleDateString()
                     }
                 })
             }
@@ -59,8 +58,22 @@ export default function CuentasPage() {
     }
 
     const handleDisconnectGoogle = async () => {
-        // TODO: Implement disconnect logic
-        alert('Función de desconectar próximamente')
+        if (!confirm('¿Estás seguro de desconectar tu cuenta de Google? Dejarán de sincronizarse las reuniones.')) return
+
+        try {
+            const supabase = createClient()
+            const { error } = await supabase
+                .from('google_connections')
+                .delete()
+                .eq('user_id', auth.user!.id)
+
+            if (error) throw error
+
+            setStatus({ google: { connected: false } })
+        } catch (error) {
+            console.error('Error deleting connection:', error)
+            alert('Error al desconectar')
+        }
     }
 
     return (

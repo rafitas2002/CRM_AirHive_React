@@ -113,27 +113,27 @@ function AdminDashboardView() {
         }
     }, [leads, history])
 
-    if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
 
     return (
-        <div className='h-full flex flex-col p-8 bg-[#F0F2F5] overflow-y-auto'>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 <div className='flex justify-between items-center'>
                     <div className='space-y-1'>
-                        <h1 className='text-3xl font-black text-[#0A1635] tracking-tighter flex items-center gap-3'>
+                        <h1 className='text-3xl font-black tracking-tighter flex items-center gap-3' style={{ color: 'var(--text-primary)' }}>
                             <LayoutDashboard className='w-8 h-8 text-[#1700AC]' />
                             Dashboard Ejecutivo
                         </h1>
-                        <p className='text-sm text-gray-500 font-medium'>Control maestro del rendimiento comercial y calidad de datos.</p>
+                        <p className='text-sm font-medium' style={{ color: 'var(--text-secondary)' }}>Control maestro del rendimiento comercial y calidad de datos.</p>
                     </div>
                 </div>
 
                 <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
-                    <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Pipeline Seleccionado</label>
-                        <p className='text-3xl font-black text-[#0A1635] mt-2'>
+                    <div className='p-6 rounded-3xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Pipeline Seleccionado</label>
+                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>
                             ${stats.totalPipeline.toLocaleString('es-MX')}
                         </p>
                         <div className='flex items-center gap-1 mt-2 text-emerald-500'>
@@ -153,22 +153,22 @@ function AdminDashboardView() {
                         <Zap className='absolute -right-4 -bottom-4 w-24 h-24 text-white/5 opacity-20 transform -rotate-12 transition-transform group-hover:scale-110' />
                     </div>
 
-                    <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Calidad de Datos</label>
-                        <p className='text-3xl font-black text-[#0A1635] mt-2'>{stats.dataWarnings}</p>
+                    <div className='p-6 rounded-3xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Calidad de Datos</label>
+                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{stats.dataWarnings}</p>
                         <div className='flex items-center gap-1 mt-2 text-amber-500'>
                             <AlertCircle className='w-3 h-3' />
                             <span className='text-[10px] font-bold'>Leads sin valor estimado</span>
                         </div>
                     </div>
 
-                    <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Objetivo Semanal</label>
+                    <div className='p-6 rounded-3xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Objetivo Semanal</label>
                         <div className='mt-2 flex items-center justify-between'>
-                            <p className='text-3xl font-black text-[#0A1635]'>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
-                            <Target className='w-6 h-6 text-gray-200' />
+                            <p className='text-3xl font-black' style={{ color: 'var(--text-primary)' }}>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
+                            <Target className='w-6 h-6' style={{ color: 'var(--text-secondary)' }} />
                         </div>
-                        <div className='w-full h-1.5 bg-gray-100 rounded-full mt-3 overflow-hidden'>
+                        <div className='w-full h-1.5 rounded-full mt-3 overflow-hidden' style={{ background: 'var(--hover-bg)' }}>
                             <div className='h-full bg-[#1700AC]' style={{ width: `${(stats.adjustedForecast / teamGoal * 100)}%` }} />
                         </div>
                     </div>
@@ -187,10 +187,10 @@ function AdminDashboardView() {
                         />
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
-                            <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm'>
+                            <div className='p-6 rounded-3xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                                 <div className='flex justify-between items-center mb-6'>
-                                    <h3 className='font-black text-[#0A1635] text-sm uppercase tracking-wider'>Top Performance</h3>
-                                    <Users className='w-4 h-4 text-gray-300' />
+                                    <h3 className='font-black text-sm uppercase tracking-wider' style={{ color: 'var(--text-primary)' }}>Top Performance</h3>
+                                    <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)' }} />
                                 </div>
                                 <div className='space-y-4'>
                                     {stats.sellers.slice(0, 5).map((s, i) => (
@@ -199,29 +199,29 @@ function AdminDashboardView() {
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-gray-50 text-gray-400'}`}>
                                                     {i + 1}
                                                 </div>
-                                                <span className='font-bold text-sm text-[#0A1635]'>{s.name}</span>
+                                                <span className='font-bold text-sm' style={{ color: 'var(--text-primary)' }}>{s.name}</span>
                                             </div>
                                             <div className='text-right'>
                                                 <p className='text-xs font-black text-[#1700AC]'>${(s.negotiationPipeline * (s.score / 100)).toLocaleString()}</p>
-                                                <p className='text-[8px] font-bold text-gray-400 uppercase'>Forecast Adj</p>
+                                                <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Forecast Adj</p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <button className='w-full mt-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 transition-colors flex items-center justify-center gap-2'>
+                                <button className='w-full mt-6 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'transparent' }}>
                                     Ver Detalle <ChevronRight className='w-3 h-3' />
                                 </button>
                             </div>
 
-                            <div className='bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center space-y-4'>
+                            <div className='p-6 rounded-3xl border shadow-sm flex flex-col justify-center items-center text-center space-y-4' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                                 <div className='w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center'>
                                     <Search className='w-8 h-8 text-blue-500' />
                                 </div>
                                 <div className='space-y-1'>
-                                    <h4 className='font-black text-[#0A1635] text-base'>Filtros Rápidos</h4>
-                                    <p className='text-[10px] text-gray-400 font-medium px-8'>Próximamente filtros por región y periodo fiscal.</p>
+                                    <h4 className='font-black text-base' style={{ color: 'var(--text-primary)' }}>Filtros Rápidos</h4>
+                                    <p className='text-[10px] font-medium px-8' style={{ color: 'var(--text-secondary)' }}>Próximamente filtros por región y periodo fiscal.</p>
                                 </div>
-                                <button className='px-6 py-2 bg-gray-50 rounded-xl text-[10px] font-black text-gray-400 uppercase tracking-tight flex items-center gap-2'>
+                                <button className='px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight flex items-center gap-2' style={{ background: 'var(--hover-bg)', color: 'var(--text-secondary)' }}>
                                     <Filter className='w-3 h-3' /> Configurar
                                 </button>
                             </div>
@@ -270,14 +270,14 @@ function SellerHomeView({ username }: { username: string }) {
 
     if (loading) {
         return (
-            <div className='h-full flex items-center justify-center bg-[#F0F2F5]'>
+            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
                 <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
             </div>
         )
     }
 
     return (
-        <div className='h-full flex flex-col p-8 bg-[#F0F2F5] overflow-y-auto'>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Welcome Header */}
                 <div className='bg-gradient-to-r from-[#1700AC] to-[#2048FF] p-8 rounded-3xl shadow-xl text-white'>
@@ -291,24 +291,24 @@ function SellerHomeView({ username }: { username: string }) {
 
                 {/* Stats Cards */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>Leads Activos</label>
-                        <p className='text-4xl font-black text-[#0F2A44] mt-2'>{stats.activeLeads}</p>
-                        <p className='text-xs text-gray-500 mt-1'>En tu pipeline</p>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Leads Activos</label>
+                        <p className='text-4xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{stats.activeLeads}</p>
+                        <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>En tu pipeline</p>
                     </div>
 
-                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>En Negociación</label>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>En Negociación</label>
                         <p className='text-4xl font-black text-amber-600 mt-2'>{stats.negotiationLeads}</p>
-                        <p className='text-xs text-gray-500 mt-1'>Requieren seguimiento</p>
+                        <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Requieren seguimiento</p>
                     </div>
 
-                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                        <label className='text-xs font-bold text-gray-500 uppercase tracking-wider'>Forecast Ponderado</label>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Forecast Ponderado</label>
                         <p className='text-4xl font-black text-emerald-600 mt-2'>
                             ${stats.totalValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                         </p>
-                        <p className='text-xs text-gray-500 mt-1'>Valor esperado</p>
+                        <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Valor esperado</p>
                     </div>
                 </div>
 
@@ -321,8 +321,8 @@ function SellerHomeView({ username }: { username: string }) {
 
                     {/* Right Column - Quick Actions */}
                     <div className='lg:col-span-2 space-y-6'>
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                            <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>
+                        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                            <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                                 🎯 Acciones Rápidas
                             </h2>
                             <div className='grid grid-cols-2 gap-4'>
@@ -378,7 +378,7 @@ export default function HomePage() {
     const isAdmin = auth.profile?.role === 'admin'
 
     // Only block if we are loading AND don't have a session
-    if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     if (isAdmin) {
         return <AdminDashboardView />

@@ -1,58 +1,41 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+
+import { createClient } from '@/lib/supabase'
 import { exchangeCodeForToken, storeUserTokens } from '@/lib/googleCalendarService'
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 export async function GET(request: Request) {
-    const requestUrl = new URL(request.url)
-    const code = requestUrl.searchParams.get('code')
-    const error = requestUrl.searchParams.get('error')
+    const { searchParams } = new URL(request.url)
+    const code = searchParams.get('code')
+    const error = searchParams.get('error')
 
     if (error) {
-        console.error('Google OAuth Error:', error)
-        return NextResponse.redirect(new URL('/calendario?error=auth_denied', requestUrl.origin))
+        return NextResponse.redirect(new URL('/settings/cuentas?error=' + error, request.url))
     }
 
-    if (code) {
-        try {
-            const cookieStore = await cookies()
-            const supabase = createServerClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-                {
-                    cookies: {
-                        get(name: string) {
-                            return cookieStore.get(name)?.value
-                        },
-                        set(name: string, value: string, options: CookieOptions) {
-                            cookieStore.set({ name, value, ...options })
-                        },
-                        remove(name: string, options: CookieOptions) {
-                            cookieStore.set({ name, value: '', ...options })
-                        },
-                    },
-                }
-            )
-            const { data: { user } } = await supabase.auth.getUser()
+    if (!code) {
+        return NextResponse.redirect(new URL('/settings/cuentas?error=no_code', request.url))
+    }
 
-            if (!user) {
-                return NextResponse.redirect(new URL('/login', requestUrl.origin))
-            }
+    try {
+        const cookieStore = cookies()
+        const supabase = createClient()
 
-            // Exchange code for tokens
-            const tokens = await exchangeCodeForToken(code)
+        const { data: { user } } = await supabase.auth.getUser()
 
-            // Store tokens in database
-            await storeUserTokens(supabase, user.id, tokens)
-
-            // Redirect back to calendar with success message
-            return NextResponse.redirect(new URL('/calendario?success=google_connected', requestUrl.origin))
-        } catch (err) {
-            console.error('Error in Google OAuth callback:', err)
-            return NextResponse.redirect(new URL('/calendario?error=connection_failed', requestUrl.origin))
+        if (!user) {
+            return NextResponse.redirect(new URL('/auth/login', request.url))
         }
-    }
 
-    // No code and no error? Something went wrong
-    return NextResponse.redirect(new URL('/calendario', requestUrl.origin))
+        // Exchange code for tokens
+        const tokens = await exchangeCodeForToken(code)
+
+        // Store tokens
+        await storeUserTokens(supabase, user.id, tokens)
+
+        return NextResponse.redirect(new URL('/settings/cuentas?success=true', request.url))
+    } catch (err: any) {
+        console.error('Error in Google Callback:', err)
+        return NextResponse.redirect(new URL('/settings/cuentas?error=' + encodeURIComponent(err.message), request.url))
+    }
 }

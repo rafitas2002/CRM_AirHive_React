@@ -144,19 +144,19 @@ export default function TareasPage() {
 
     if (auth.loading && !auth.loggedIn) {
         return (
-            <div className='h-screen w-full flex items-center justify-center bg-[#DDE2E5]'>
+            <div className='h-screen w-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
                 <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
             </div>
         )
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden bg-[#DDE2E5]'>
+        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
             <div className='w-full max-w-7xl mx-auto flex flex-col h-full gap-8'>
                 {/* Header */}
                 <div className='shrink-0 flex items-center justify-between'>
                     <div className='space-y-1'>
-                        <h1 className='text-4xl font-black text-[#0A1635] tracking-tight'>Tareas</h1>
+                        <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tareas</h1>
                         <p className='text-[10px] font-black text-[#2048FF] uppercase tracking-[0.2em]'>Seguimiento y Actividades de Leads</p>
                     </div>
                     <button
@@ -178,7 +178,11 @@ export default function TareasPage() {
                                     <div className={`px-5 py-2 rounded-2xl shadow-sm border-2 ${groupName === 'Atrasadas' ? 'bg-red-50 border-red-100 text-red-600' :
                                         groupName === 'Hoy' ? 'bg-blue-600 border-blue-600 text-white shadow-blue-500/20' :
                                             groupName === 'Completadas' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                                                'bg-white border-gray-100 text-[#0A1635]'}`}>
+                                                'border'}`}
+                                        style={groupName !== 'Atrasadas' && groupName !== 'Hoy' && groupName !== 'Completadas' ? {
+                                            background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)'
+                                        } : {}}
+                                    >
                                         <h2 className='text-xs font-black uppercase tracking-[0.2em]'>{groupName}</h2>
                                     </div>
                                     <div className='flex-1 h-px bg-gray-200/50' />
@@ -195,8 +199,9 @@ export default function TareasPage() {
                                         {groupTasks.map(task => (
                                             <div
                                                 key={task.id}
-                                                className={`group bg-white p-6 rounded-[32px] border-2 transition-all hover:shadow-2xl hover:shadow-[#0A1635]/10 relative ${task.estado === 'completada' ? 'border-emerald-100 opacity-80' :
-                                                    groupName === 'Atrasadas' ? 'border-red-100' : 'border-gray-50'}`}
+                                                className={`group p-6 rounded-[32px] border-2 transition-all hover:shadow-2xl hover:shadow-[#0A1635]/10 relative ${task.estado === 'completada' ? 'border-emerald-100 opacity-80' :
+                                                    groupName === 'Atrasadas' ? 'border-red-100' : 'border'}`}
+                                                style={{ background: 'var(--card-bg)', borderColor: (groupName !== 'Atrasadas' && task.estado !== 'completada') ? 'var(--card-border)' : undefined }}
                                             >
                                                 {/* Priority Badge */}
                                                 <div className={`absolute top-6 right-6 px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest border ${task.prioridad === 'alta' ? 'bg-red-50 text-red-600 border-red-100' :
@@ -216,7 +221,9 @@ export default function TareasPage() {
                                                         {task.estado === 'completada' ? '✓' : ''}
                                                     </button>
                                                     <div className='min-w-0'>
-                                                        <h3 className={`text-lg font-black leading-tight truncate pr-12 transition-all ${task.estado === 'completada' ? 'line-through text-gray-400' : 'text-[#0A1635]'}`}>
+                                                        <h3 className={`text-lg font-black leading-tight truncate pr-12 transition-all ${task.estado === 'completada' ? 'line-through text-gray-400' : ''}`}
+                                                            style={task.estado !== 'completada' ? { color: 'var(--text-primary)' } : {}}
+                                                        >
                                                             {task.titulo}
                                                         </h3>
                                                         <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mt-1'>
