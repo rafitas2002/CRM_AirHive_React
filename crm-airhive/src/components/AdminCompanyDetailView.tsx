@@ -247,6 +247,7 @@ export default function AdminCompanyDetailView({
                     client={selectedClient as any}
                     onEditClient={() => { }} // Read-only for now in this view
                     onEditCompany={() => { }}
+                    onEmailClick={() => { }} // Added missing prop
                 />
             )}
         </div>

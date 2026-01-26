@@ -294,7 +294,7 @@ export default function ClientDetailView({
                                     <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Notas Internas</label>
                                     <div className='p-4 bg-[#FFF9E6] rounded-3xl border border-[#F5E6B3]'>
                                         <p className='text-[11px] font-bold text-[#856404] italic leading-loose whitespace-pre-wrap'>
-                                            {client.notes || 'No se han agregado notas adicionales aún.'}
+                                            {client.notas || 'No se han agregado notas adicionales aún.'}
                                         </p>
                                     </div>
                                     <span className='absolute top-2 right-4 text-xl opacity-20'>✍️</span>

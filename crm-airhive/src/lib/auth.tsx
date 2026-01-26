@@ -10,6 +10,8 @@ type Profile = {
     username: string | null
     role: string | null
     full_name: string | null
+    created_at: string
+    updated_at: string | null
 }
 
 type AuthState = {
