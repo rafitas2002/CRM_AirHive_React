@@ -156,6 +156,44 @@ export type Database = {
                     updated_at?: string
                 }
             }
+            tareas: {
+                Row: {
+                    id: number
+                    lead_id: number
+                    titulo: string
+                    descripcion: string | null
+                    fecha_vencimiento: string
+                    estado: 'pendiente' | 'completada' | 'atrasada' | 'cancelada'
+                    prioridad: 'baja' | 'media' | 'alta'
+                    vendedor_id: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: number
+                    lead_id: number
+                    titulo: string
+                    descripcion?: string | null
+                    fecha_vencimiento: string
+                    estado?: 'pendiente' | 'completada' | 'atrasada' | 'cancelada'
+                    prioridad?: 'baja' | 'media' | 'alta'
+                    vendedor_id?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: number
+                    lead_id?: number
+                    titulo?: string
+                    descripcion?: string | null
+                    fecha_vencimiento?: string
+                    estado?: 'pendiente' | 'completada' | 'atrasada' | 'cancelada'
+                    prioridad?: 'baja' | 'media' | 'alta'
+                    vendedor_id?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
             meetings: {
                 Row: {
                     id: string

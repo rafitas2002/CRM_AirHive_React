@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import MeetingModal from './MeetingModal'
 import MeetingsList from './MeetingsList'
+import TaskModal from './TaskModal'
+import TasksList from './TasksList'
 import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
 
@@ -70,6 +72,8 @@ export default function ClientDetailView({
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
     const [isProbEditable, setIsProbEditable] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+    const [taskKey, setTaskKey] = useState(0) // Used to force refresh TasksList
 
     useEffect(() => {
         if (client?.empresa_id) {
@@ -134,6 +138,20 @@ export default function ClientDetailView({
         } catch (error) {
             console.error('Error creating meeting:', error)
             throw error
+        }
+    }
+
+    const handleCreateTask = async (taskData: any) => {
+        try {
+            const { error } = await supabase.from('tareas').insert({
+                ...taskData,
+                vendedor_id: currentUser?.id
+            })
+            if (error) throw error
+            setTaskKey(prev => prev + 1)
+            setIsTaskModalOpen(false)
+        } catch (error: any) {
+            alert('Error al crear tarea: ' + error.message)
         }
     }
 
@@ -369,6 +387,26 @@ export default function ClientDetailView({
                             />
                         </div>
 
+                        {/* Tasks Section */}
+                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+                            <div className='flex justify-between items-center mb-4'>
+                                <h2 className='text-lg font-bold text-[#0F2A44] border-b pb-2'>
+                                    📝 Pendientes (Follow-up)
+                                </h2>
+                                <button
+                                    onClick={() => setIsTaskModalOpen(true)}
+                                    className='px-4 py-2 bg-[#8B5CF6] text-white rounded-lg font-bold hover:bg-violet-700 transition-colors shadow-sm text-sm'
+                                >
+                                    + Nueva Tarea
+                                </button>
+                            </div>
+
+                            <TasksList
+                                key={taskKey}
+                                leadId={client.id}
+                            />
+                        </div>
+
                         {/* Snapshots History */}
                         {snapshots.length > 0 && (
                             <div className='bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-200'>
@@ -514,6 +552,14 @@ export default function ClientDetailView({
                     sellerId={currentUser.id}
                 />
             )}
+            {/* Task Modal */}
+            <TaskModal
+                isOpen={isTaskModalOpen}
+                onClose={() => setIsTaskModalOpen(false)}
+                onSave={handleCreateTask}
+                leadId={client.id}
+                mode='create'
+            />
         </div>
     )
 }
