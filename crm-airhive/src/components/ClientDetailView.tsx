@@ -76,10 +76,9 @@ export default function ClientDetailView({
     const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
-    const [isProbEditable, setIsProbEditable] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
-    const [taskKey, setTaskKey] = useState(0) // Used to force refresh TasksList
+    const [taskKey, setTaskKey] = useState(0)
 
     useEffect(() => {
         if (client?.empresa_id) {
@@ -102,9 +101,7 @@ export default function ClientDetailView({
             .eq('id', id)
             .single()
 
-        if (error) {
-            console.error('Error fetching company:', error)
-        } else {
+        if (!error && data) {
             setCompany(data)
         }
         setLoadingCompany(false)
@@ -117,21 +114,13 @@ export default function ClientDetailView({
 
     const fetchMeetingsData = async () => {
         if (!client) return
-
         try {
             const [nextMtg, snaps] = await Promise.all([
                 getNextMeeting(client.id),
                 getLeadSnapshots(client.id)
             ])
-
             setNextMeeting(nextMtg)
             setSnapshots(snaps)
-
-            // Check if probability is editable
-            if (currentUser && client) {
-                const result = await isProbabilityEditable(client as any, currentUser.id)
-                setIsProbEditable(result.editable)
-            }
         } catch (error) {
             console.error('Error fetching meetings data:', error)
         }
@@ -164,424 +153,340 @@ export default function ClientDetailView({
     if (!isOpen || !client) return null
 
     return (
-        <div className='fixed inset-0 z-40 bg-[#DDE2E5] flex flex-col animate-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-0 z-40 bg-white flex flex-col animate-in slide-in-from-bottom duration-300'>
             {/* Header */}
-            <div className='bg-[#0F2A44] px-8 py-4 flex items-center justify-between shadow-md shrink-0'>
-                <div className='flex items-center gap-4'>
+            <div className='bg-[#0A1635] px-8 py-5 flex items-center justify-between shadow-xl shrink-0 border-b border-white/5'>
+                <div className='flex items-center gap-6'>
                     <button
                         onClick={onClose}
-                        className='text-white/70 hover:text-white transition-colors flex items-center gap-2'
+                        className='w-10 h-10 flex items-center justify-center rounded-2xl bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-all font-bold group'
                     >
-                        ← Volver
+                        <span className='group-hover:-translate-x-0.5 transition-transform'>←</span>
                     </button>
-                    <h1 className='text-2xl font-bold text-white border-l border-white/20 pl-4'>
-                        {client.nombre}
-                    </h1>
+                    <div className='space-y-0.5'>
+                        <h1 className='text-2xl font-black text-white tracking-tight leading-none'>
+                            {client.nombre}
+                        </h1>
+                        <p className='text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]'>Ficha Detallada del Lead</p>
+                    </div>
                 </div>
-                <div className='flex gap-3'>
+                <div className='flex gap-4'>
                     <button
                         onClick={() => onEditClient(client)}
-                        className='px-4 py-2 bg-[#1700AC] text-white rounded-lg hover:bg-[#2048FF] transition-colors shadow-sm font-medium'
+                        className='h-11 px-6 bg-[#2048FF] text-white rounded-2xl font-black hover:bg-[#1700AC] transition-all shadow-xl shadow-blue-500/20 flex items-center gap-2 transform active:scale-95 uppercase text-[10px] tracking-widest'
                     >
-                        Editar Lead
+                        <span>✏️</span> Editar Lead
                     </button>
                     {company && (
                         <button
                             onClick={() => onEditCompany(company)}
-                            className='px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors shadow-sm font-medium border border-white/20'
+                            className='h-11 px-6 bg-white/5 text-white rounded-2xl font-black hover:bg-white/10 transition-all border border-white/10 flex items-center gap-2 uppercase text-[10px] tracking-widest'
                         >
-                            🏢 Ver en Catálogo
+                            <span>🏢</span> Catálogo
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Content Grid */}
-            <div className='flex-1 overflow-y-auto custom-scrollbar p-8 bg-gray-50'>
-                <div className='max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8'>
+            {/* Content Area */}
+            <div className='flex-1 overflow-y-auto custom-scrollbar p-8 bg-[#F8FAFC]'>
+                <div className='max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8'>
 
-                    {/* Left Column: Client Details */}
-                    <div className='lg:col-span-1 space-y-6'>
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                            <h2 className='text-lg font-bold text-[#0F2A44] mb-4 border-b pb-2'>
-                                Información del Lead
+                    {/* Column 1: Lead Information */}
+                    <div className='space-y-8'>
+                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
+                            <h2 className='text-xs font-black text-gray-400 mb-8 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                                👤 Información del Lead
                             </h2>
 
-                            <div className='space-y-4'>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Empresa (Lead)</label>
-                                    <p className='text-[#0A1635] font-medium text-lg'>{client.empresa}</p>
+                            <div className='space-y-8'>
+                                <div className='group'>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 group-hover:text-blue-500 transition-colors'>Empresa (Lead)</label>
+                                    <p className='text-[#0A1635] font-black text-xl tracking-tight'>{client.empresa}</p>
                                 </div>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Correo Electrónico</label>
-                                    <div className='flex items-center gap-2'>
-                                        <p className='text-[#0A1635]'>{client.email || 'No especificado'}</p>
-                                        {client.email && (
-                                            <button
-                                                onClick={() => onEmailClick(client.email!, client.nombre || client.empresa)}
-                                                className='inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-[10px] font-bold rounded-md hover:bg-blue-600 transition-colors shadow-sm'
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                                    <polyline points="22,6 12,13 2,6" />
-                                                </svg>
-                                                Email
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Teléfono</label>
-                                    <div className='flex items-center gap-2'>
-                                        <p className='text-[#0A1635] font-mono'>{client.telefono || 'No especificado'}</p>
-                                        {client.telefono && (
-                                            <a
-                                                href={`https://wa.me/${client.telefono.replace(/\D/g, '')}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
-                                                className='inline-flex items-center gap-1 px-2 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-md hover:bg-emerald-600 transition-colors shadow-sm'
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                                </svg>
-                                                WhatsApp
-                                            </a>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className='grid grid-cols-2 gap-4'>
+
+                                <div className='grid grid-cols-1 gap-6'>
                                     <div>
-                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Etapa</label>
-                                        <span className={`inline-block px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest mt-1 border
-                                            ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
-                                                client.etapa === 'Negociación' ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                                                    client.etapa === 'Cerrado Perdido' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                        'bg-blue-100 text-blue-700 border-blue-200'}`}>
-                                            {client.etapa}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Calificación</label>
-                                        <div className='flex text-yellow-400 mt-1'>
-                                            {'★'.repeat(Math.max(0, Math.min(5, client?.calificacion || 0)))}{'☆'.repeat(Math.max(0, 5 - (client?.calificacion || 0)))}
+                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
+                                        <div className='flex flex-wrap gap-2'>
+                                            {client.email && (
+                                                <button
+                                                    onClick={() => onEmailClick(client.email!, client.nombre || client.empresa)}
+                                                    className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
+                                                >
+                                                    📧 {client.email}
+                                                </button>
+                                            )}
+                                            {client.telefono && (
+                                                <a
+                                                    href={`https://wa.me/${client.telefono.replace(/\D/g, '')}`}
+                                                    target='_blank'
+                                                    rel='noopener noreferrer'
+                                                    className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
+                                                >
+                                                    💬 {client.telefono}
+                                                </a>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Probabilidad de Cierre</label>
-                                    <div className='flex items-center gap-3 mt-1'>
-                                        <div className='flex-1 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-100 shadow-inner'>
-                                            <div
-                                                className={`h-full transition-all duration-700 ${(client as any).probabilidad >= 70 ? 'bg-emerald-500' : (client as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
-                                                style={{ width: `${(client as any).probabilidad || 0}%` }}
-                                            />
+
+                                <div className='grid grid-cols-2 gap-6 pt-4 border-t border-gray-50'>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Etapa Actual</label>
+                                        <div className='inline-block'>
+                                            <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2
+                                                ${client.etapa === 'Cerrado Ganado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                    client.etapa === 'Negociación' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                        client.etapa === 'Cerrado Perdido' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                            'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                                {client.etapa}
+                                            </span>
                                         </div>
-                                        <span className={`text-sm font-black ${(client as any).probabilidad >= 70 ? 'text-emerald-600' : (client as any).probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Calificación</label>
+                                        <div className='text-lg font-bold flex gap-0.5'>
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <span key={star} className={star <= (client.calificacion || 0) ? 'text-amber-400' : 'text-gray-200'}>
+                                                    ★
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className='space-y-3 pt-4 border-t border-gray-50'>
+                                    <div className='flex justify-between items-end'>
+                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Confianza de Cierre</label>
+                                        <span className={`text-xl font-black ${(client as any).probabilidad >= 70 ? 'text-emerald-500' : (client as any).probabilidad >= 40 ? 'text-amber-500' : 'text-slate-400'}`}>
                                             {(client as any).probabilidad || 0}%
                                         </span>
                                     </div>
+                                    <div className='h-3 bg-gray-100 rounded-full overflow-hidden p-0.5 border border-gray-50 shadow-inner'>
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-1000 ${(client as any).probabilidad >= 70 ? 'bg-emerald-500' : (client as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
+                                            style={{ width: `${(client as any).probabilidad || 0}%` }}
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Valor Estimado</label>
-                                    <p className='text-[#0A1635] font-bold text-xl'>
-                                        ${client?.valor_estimado?.toLocaleString() || '0'}
+
+                                <div className='pt-6 border-t border-gray-50'>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1'>Valor del Negocio</label>
+                                    <p className='text-3xl font-black text-[#0A1635] tracking-tight'>
+                                        <span className='text-blue-600 mr-1'>$</span>
+                                        {client?.valor_estimado?.toLocaleString() || '0'}
                                     </p>
-                                </div>
-                                <div className='grid grid-cols-2 gap-4'>
-                                    <div>
-                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Vendedor</label>
-                                        <p className='text-[#0A1635] font-medium flex items-center gap-1 mt-1'>
-                                            👤 {client.owner_username || 'Sistema'}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Fecha Registro</label>
-                                        <p className='text-[#0A1635] font-medium mt-1'>
-                                            📅 {client.fecha_registro ? new Date(client.fecha_registro).toLocaleDateString() : 'N/A'}
-                                        </p>
-                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Forecast Scoring Section (Admin / Closed Only) */}
-                        {client.forecast_scored_at && (
-                            <div className='bg-blue-50 p-6 rounded-2xl shadow-sm border border-blue-100'>
-                                <h2 className='text-lg font-bold text-[#1700AC] mb-4 border-b border-blue-100 pb-2'>
-                                    Auditoría de Pronóstico
-                                </h2>
-                                <div className='space-y-4'>
-                                    <div className='flex justify-between items-center'>
-                                        <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Log Loss</label>
-                                        <span className={`text-lg font-black ${(client.forecast_logloss ?? 1) < 0.2 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                            {client.forecast_logloss?.toFixed(4) || '0.0000'}
-                                        </span>
-                                    </div>
-                                    <div className='grid grid-cols-2 gap-4'>
-                                        <div>
-                                            <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Prob. Evaluada</label>
-                                            <p className='text-blue-900 font-bold'>{client.forecast_evaluated_probability}%</p>
-                                        </div>
-                                        <div>
-                                            <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Resultado</label>
-                                            <p className={`font-bold ${client.forecast_outcome === 1 ? 'text-emerald-700' : 'text-red-700'}`}>
-                                                {client.forecast_outcome === 1 ? 'GANADA' : 'PERDIDA'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className='text-[10px] text-blue-400 font-medium italic text-right'>
-                                        Evaluado el {new Date(client.forecast_scored_at).toLocaleString()}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                            <h2 className='text-lg font-bold text-[#0F2A44] mb-4 border-b pb-2'>
-                                Notas y Oportunidad
+                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
+                            <h2 className='text-xs font-black text-gray-400 mb-6 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                                🗒️ Notas y Estrategia
                             </h2>
-                            <div className='space-y-4'>
+                            <div className='space-y-6'>
                                 <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Oportunidad</label>
-                                    <p className='text-gray-700 mt-1 whitespace-pre-wrap'>{client.oportunidad || 'Sin descripción'}</p>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Oportunidad Detectada</label>
+                                    <p className='text-xs font-bold text-gray-700 leading-relaxed bg-gray-50/50 p-4 rounded-3xl border border-gray-50'>{client.oportunidad || 'Sin descripción de oportunidad.'}</p>
                                 </div>
-                                <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Notas</label>
-                                    <p className='text-gray-600 italic mt-1 bg-gray-50 p-3 rounded-lg border border-gray-100'>
-                                        {client.notas || 'Sin notas adicionales'}
-                                    </p>
+                                <div className='relative'>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Notas Internas</label>
+                                    <div className='p-4 bg-[#FFF9E6] rounded-3xl border border-[#F5E6B3]'>
+                                        <p className='text-[11px] font-bold text-[#856404] italic leading-loose whitespace-pre-wrap'>
+                                            {client.notes || 'No se han agregado notas adicionales aún.'}
+                                        </p>
+                                    </div>
+                                    <span className='absolute top-2 right-4 text-xl opacity-20'>✍️</span>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Meetings & Forecast Status */}
-                        {client.etapa === 'Negociación' && (
-                            <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl shadow-sm border border-blue-200'>
-                                <h2 className='text-lg font-bold text-[#0F2A44] mb-4 border-b border-blue-200 pb-2'>
-                                    📅 Estado del Pronóstico
-                                </h2>
-
-                                <div className='grid grid-cols-2 gap-4 mb-4'>
-                                    <div>
-                                        <p className='text-xs font-bold text-gray-600 uppercase tracking-wider'>Próxima Junta</p>
-                                        <p className='text-lg font-black text-blue-900 mt-1'>
-                                            {nextMeeting ? new Date(nextMeeting.start_time).toLocaleString('es-MX', {
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            }) : 'No agendada'}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className='text-xs font-bold text-gray-600 uppercase tracking-wider'>Pronóstico Editable Hasta</p>
-                                        <p className='text-lg font-black text-purple-900 mt-1'>
-                                            {nextMeeting ? new Date(nextMeeting.start_time).toLocaleString('es-MX', {
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            }) : 'N/A'}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className='flex items-center gap-3'>
-                                    <span className={`px-4 py-2 rounded-full text-xs font-black ${isProbEditable
-                                        ? 'bg-green-100 text-green-700 border-2 border-green-200'
-                                        : 'bg-red-100 text-red-700 border-2 border-red-200'
-                                        }`}>
-                                        {isProbEditable ? '✅ Editable' : '🔒 Bloqueado'}
-                                    </span>
-
-                                    {!nextMeeting && snapshots.length === 0 && (
-                                        <button
-                                            onClick={() => setIsMeetingModalOpen(true)}
-                                            className='px-4 py-2 bg-blue-600 text-white rounded-full text-xs font-bold hover:bg-blue-700 transition-colors shadow-md'
-                                        >
-                                            + Agendar Primera Reunión
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Meetings Section */}
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                            <div className='flex justify-between items-center mb-4'>
-                                <h2 className='text-lg font-bold text-[#0F2A44] border-b pb-2'>
-                                    📅 Reuniones
+                    {/* Column 2: Activities Hub */}
+                    <div className='space-y-8'>
+                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white flex flex-col'>
+                            <div className='flex justify-between items-center mb-8 border-b border-gray-50 pb-4'>
+                                <h2 className='text-xs font-black text-gray-400 uppercase tracking-[0.3em]'>
+                                    📅 Juntas Agendadas
                                 </h2>
                                 <button
                                     onClick={() => setIsMeetingModalOpen(true)}
-                                    className='px-4 py-2 bg-[#2048FF] text-white rounded-lg font-bold hover:bg-[#1700AC] transition-colors shadow-sm text-sm'
+                                    className='w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105 shadow-sm'
                                 >
-                                    + Nueva Reunión
+                                    ➕
                                 </button>
                             </div>
 
-                            <MeetingsList
-                                leadId={client.id}
-                                onRefresh={fetchMeetingsData}
-                            />
+                            <div className='flex-1 min-h-[300px]'>
+                                <MeetingsList
+                                    leadId={client.id}
+                                    onRefresh={fetchMeetingsData}
+                                />
+                            </div>
                         </div>
 
-                        {/* Tasks Section */}
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                            <div className='flex justify-between items-center mb-4'>
-                                <h2 className='text-lg font-bold text-[#0F2A44] border-b pb-2'>
-                                    📝 Pendientes (Follow-up)
+                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white flex flex-col'>
+                            <div className='flex justify-between items-center mb-8 border-b border-gray-50 pb-4'>
+                                <h2 className='text-xs font-black text-gray-400 uppercase tracking-[0.3em]'>
+                                    ✅ Tareas Pendientes
                                 </h2>
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
-                                    className='px-4 py-2 bg-[#8B5CF6] text-white rounded-lg font-bold hover:bg-violet-700 transition-colors shadow-sm text-sm'
+                                    className='w-10 h-10 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center hover:bg-purple-600 hover:text-white transition-all transform hover:scale-105 shadow-sm'
                                 >
-                                    + Nueva Tarea
+                                    ➕
                                 </button>
                             </div>
 
-                            <TasksList
-                                key={taskKey}
-                                leadId={client.id}
-                            />
+                            <div className='flex-1 min-h-[300px]'>
+                                <TasksList
+                                    key={taskKey}
+                                    leadId={client.id}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Column 3: Company & Intelligence */}
+                    <div className='space-y-8'>
+                        {/* Company Card */}
+                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white overflow-hidden'>
+                            <h2 className='text-xs font-black text-gray-400 mb-8 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                                🏢 Perfil Corporativo
+                            </h2>
+
+                            {loadingCompany ? (
+                                <div className='py-12 flex flex-col items-center justify-center gap-4'>
+                                    <div className='w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
+                                    <p className='text-[10px] font-black text-gray-400 uppercase animate-pulse'>Sincronizando...</p>
+                                </div>
+                            ) : company ? (
+                                <div className='space-y-8'>
+                                    <div className='flex items-center gap-6'>
+                                        <div className='w-24 h-24 rounded-3xl border-2 border-gray-50 shadow-xl overflow-hidden flex items-center justify-center bg-gray-50 shrink-0 transform -rotate-3'>
+                                            {company.logo_url ? (
+                                                <img src={company.logo_url} alt={company.nombre} className='w-full h-full object-cover' />
+                                            ) : (
+                                                <span className='text-4xl'>🏢</span>
+                                            )}
+                                        </div>
+                                        <div className='space-y-1'>
+                                            <h3 className='text-xl font-black text-[#0A1635] leading-tight tracking-tight'>{company.nombre}</h3>
+                                            <p className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>{company.industria}</p>
+                                            {company.website && (
+                                                <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target='_blank' className='text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-colors block'>🔗 {company.website}</a>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className='grid grid-cols-2 gap-4'>
+                                        <div className='bg-[#F8FAFC] p-4 rounded-3xl border border-gray-100 flex flex-col justify-between'>
+                                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Score de Tamaño</label>
+                                            <div className='flex items-center gap-2'>
+                                                <span className='text-3xl font-black text-[#1700AC] leading-none'>{company.tamano}</span>
+                                                <div className='flex-1 flex gap-1 h-2'>
+                                                    {[1, 2, 3, 4, 5].map(i => (
+                                                        <div key={i} className={`flex-1 rounded-full ${i <= company.tamano ? 'bg-[#1700AC]' : 'bg-gray-200'}`} />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className='bg-[#F8FAFC] p-4 rounded-3xl border border-gray-100'>
+                                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Ubicación Central</label>
+                                            <p className='text-[10px] font-black text-[#0F2A44] leading-relaxed break-words'>{company.ubicacion || 'Global / Multinacional'}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className='bg-gray-50 p-6 rounded-3xl border border-gray-100 relative group'>
+                                        <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Historia de Empresa</label>
+                                        <p className='text-[11px] font-bold text-gray-600 leading-loose max-h-[120px] overflow-y-auto custom-scrollbar pr-2'>
+                                            {company.descripcion || 'No hay una biografía corporativa disponible en este momento.'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => onEditClient(client)}
+                                    className='w-full py-12 flex flex-col items-center justify-center gap-4 bg-[#F8FAFC] rounded-[40px] border-2 border-dashed border-gray-100 text-gray-300 hover:bg-blue-50/50 hover:border-blue-100 hover:text-blue-500 transition-all group'
+                                >
+                                    <div className='w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform'>🏢</div>
+                                    <span className='text-[10px] font-black uppercase tracking-[0.3em]'>Vincular Empresa</span>
+                                </button>
+                            )}
                         </div>
 
-                        {/* Snapshots History */}
-                        {snapshots.length > 0 && (
-                            <div className='bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-200'>
-                                <h2 className='text-lg font-bold text-purple-900 mb-4 border-b border-purple-200 pb-2'>
-                                    📸 Historial de Pronósticos (Snapshots)
+                        {/* Audit & Intelligence */}
+                        {client.forecast_scored_at && (
+                            <div className='bg-gradient-to-br from-[#0F2A44] to-[#1700AC] p-8 rounded-[40px] shadow-2xl shadow-blue-900/40 border border-white/10 text-white relative overflow-hidden group'>
+                                <div className='absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/10 transition-all'></div>
+                                <h2 className='text-xs font-black mb-8 border-b border-white/10 pb-4 uppercase tracking-[0.3em]'>
+                                    📊 Análisis de IA
                                 </h2>
-                                <div className='space-y-3'>
+                                <div className='space-y-8'>
+                                    <div className='flex justify-between items-center'>
+                                        <div>
+                                            <label className='text-[10px] font-black text-blue-300 uppercase tracking-widest block mb-1'>Métrica Log Loss</label>
+                                            <p className='text-[9px] font-bold text-white/40 uppercase tracking-widest'>{(client.forecast_logloss ?? 1) < 0.2 ? 'Excelente Precisión' : 'Revisión Necesaria'}</p>
+                                        </div>
+                                        <div className='text-right'>
+                                            <span className={`text-4xl font-black tabular-nums ${(client.forecast_logloss ?? 1) < 0.2 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                {client.forecast_logloss?.toFixed(4) || '0.0000'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className='grid grid-cols-2 gap-6'>
+                                        <div className='bg-white/5 p-4 rounded-3xl border border-white/5'>
+                                            <label className='text-[9px] font-black text-blue-300 uppercase tracking-widest block mb-2'>Prob. IA</label>
+                                            <p className='text-2xl font-black'>{client.forecast_evaluated_probability}%</p>
+                                        </div>
+                                        <div className='bg-white/5 p-4 rounded-3xl border border-white/5'>
+                                            <label className='text-[9px] font-black text-blue-300 uppercase tracking-widest block mb-2'>Estado Final</label>
+                                            <p className={`text-xs font-black uppercase tracking-widest py-1.5 rounded-lg text-center ${client.forecast_outcome === 1 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                {client.forecast_outcome === 1 ? 'Ganada' : 'Perdida'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className='pt-6 border-t border-white/5 flex items-center justify-between opacity-50 hover:opacity-100 transition-opacity'>
+                                        <span className='text-[9px] font-black uppercase tracking-widest'>Última Auditoría</span>
+                                        <span className='text-[9px] font-bold'>{new Date(client.forecast_scored_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Snapshots Columnar */}
+                        {snapshots.length > 0 && (
+                            <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
+                                <h2 className='text-xs font-black text-gray-400 mb-6 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                                    📸 Snapshots
+                                </h2>
+                                <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
                                     {snapshots.map((snapshot) => (
-                                        <div key={snapshot.id} className='flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border border-purple-100'>
-                                            <div>
-                                                <p className='text-sm font-bold text-gray-700'>Snapshot #{snapshot.snapshot_number}</p>
-                                                <p className='text-xs text-gray-500 mt-1'>
-                                                    📅 {new Date(snapshot.snapshot_timestamp).toLocaleString('es-MX', {
-                                                        weekday: 'short',
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
+                                        <div key={snapshot.id} className='flex justify-between items-center p-4 bg-[#F8FAFC] rounded-3xl border border-gray-50 group hover:border-blue-100 hover:bg-white transition-all'>
+                                            <div className='space-y-1'>
+                                                <p className='text-[10px] font-black text-[#0A1635] uppercase tracking-widest group-hover:text-blue-600 transition-colors'>Corte #{snapshot.snapshot_number}</p>
+                                                <p className='text-[9px] font-bold text-gray-400 uppercase'>
+                                                    {new Date(snapshot.snapshot_timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                                                 </p>
                                             </div>
-                                            <div className='text-right'>
-                                                <span className='text-2xl font-black text-purple-700'>
+                                            <div className='h-10 w-10 bg-white rounded-2xl flex items-center justify-center border border-gray-100 shadow-sm'>
+                                                <span className='text-xs font-black text-[#0A1635]'>
                                                     {snapshot.probability}%
                                                 </span>
-                                                <p className='text-xs text-purple-600 mt-1'>Probabilidad</p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className='mt-4 p-3 bg-purple-100 rounded-lg border border-purple-200'>
-                                    <p className='text-xs text-purple-800 font-medium'>
-                                        💡 Estos snapshots se capturan automáticamente al inicio de cada reunión y se usan para evaluar la confiabilidad del vendedor.
-                                    </p>
-                                </div>
                             </div>
                         )}
                     </div>
-
-                    {/* Right Column: Company Details */}
-                    <div className='lg:col-span-2 space-y-6'>
-                        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200 h-full'>
-                            <h2 className='text-lg font-bold text-[#0F2A44] mb-6 border-b pb-2 flex justify-between items-center'>
-                                <span>Información de la Empresa</span>
-                                {!company && !loadingCompany && (
-                                    <span className='text-xs font-normal text-gray-500 italic'>No hay empresa vinculada</span>
-                                )}
-                            </h2>
-
-                            {loadingCompany ? (
-                                <div className='h-64 flex items-center justify-center text-gray-400 animate-pulse'>
-                                    Cargando detalles de la empresa...
-                                </div>
-                            ) : company ? (
-                                <div className='grid grid-cols-1 md:grid-cols-3 gap-8'>
-                                    {/* Logo & Basic Info */}
-                                    <div className='col-span-1 flex flex-col items-center text-center space-y-4 border-r border-gray-100 pr-4'>
-                                        <div className='w-40 h-40 rounded-full border-4 border-[#F5F6F8] shadow-lg overflow-hidden flex items-center justify-center bg-white'>
-                                            {company.logo_url ? (
-                                                <img src={company.logo_url} alt={company.nombre} className='w-full h-full object-cover' />
-                                            ) : (
-                                                <span className='text-6xl'>🏢</span>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <h3 className='text-2xl font-bold text-[#0F2A44]'>{company.nombre}</h3>
-                                            <p className='text-gray-500 text-sm mt-1'>{company.industria}</p>
-                                        </div>
-                                        {(company.website && company.website.includes('.') && !company.website.includes(' ')) ? (
-                                            <a
-                                                href={company.website.match(/^https?:\/\//) ? company.website : `https://${company.website}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
-                                                className='text-[#2048FF] hover:underline text-sm flex items-center gap-1 break-all justify-center'
-                                            >
-                                                🔗 <span className='truncate'>{company.website}</span>
-                                            </a>
-                                        ) : (
-                                            <span className='text-gray-600 text-sm flex items-center gap-1 break-all justify-center'>
-                                                {company.website && '🔗'} <span className='truncate'>{company.website || 'Sin sitio web'}</span>
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Detailed Info */}
-                                    <div className='col-span-2 space-y-6 pl-4'>
-                                        <div className='grid grid-cols-2 gap-6'>
-                                            <div className='bg-gray-50 p-4 rounded-xl'>
-                                                <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2'>Tamaño</label>
-                                                <div className='flex items-end gap-2'>
-                                                    <span className='text-3xl font-bold text-[#1700AC]'>{company.tamano}</span>
-                                                    <span className='text-sm text-gray-500 mb-1'>/ 5</span>
-                                                </div>
-                                                <div className='flex gap-1 mt-2'>
-                                                    {[1, 2, 3, 4, 5].map(i => (
-                                                        <div key={i} className={`h-2 flex-1 rounded-full ${i <= company.tamano ? 'bg-[#1700AC]' : 'bg-gray-200'}`} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <div className='bg-gray-50 p-4 rounded-xl'>
-                                                <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2'>Ubicación</label>
-                                                <p className='text-lg font-medium text-[#0F2A44]'>{company.ubicacion || 'No especificada'}</p>
-                                                <p className='text-xs text-gray-400 mt-1'>Sede Principal</p>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2'>Descripción</label>
-                                            <p className='text-gray-700 leading-relaxed bg-white p-4 rounded-xl border border-gray-100'>
-                                                {company.descripcion || 'Sin descripción disponible.'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className='flex flex-col items-center justify-center py-20 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200'>
-                                    <div className='text-4xl mb-4'>🏢</div>
-                                    <h3 className='text-lg font-medium text-gray-900'>No hay información de empresa</h3>
-                                    <p className='text-gray-500 max-w-sm mt-2'>
-                                        Este lead no tiene una empresa vinculada. Puedes agregar detalles en la configuración avanzada.
-                                    </p>
-                                    <button
-                                        onClick={() => onEditClient(client)}
-                                        className='mt-6 px-4 py-2 text-[#2048FF] bg-blue-50 hover:bg-blue-100 rounded-lg font-medium transition-colors'
-                                    >
-                                        Vincular Empresa
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
-            {/* Meeting Modal */}
+            {/* Modals */}
             {currentUser && (
                 <MeetingModal
                     isOpen={isMeetingModalOpen}
@@ -591,7 +496,6 @@ export default function ClientDetailView({
                     sellerId={currentUser.id}
                 />
             )}
-            {/* Task Modal */}
             <TaskModal
                 isOpen={isTaskModalOpen}
                 onClose={() => setIsTaskModalOpen(false)}
