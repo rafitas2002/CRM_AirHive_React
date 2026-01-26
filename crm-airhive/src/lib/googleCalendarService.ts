@@ -3,14 +3,6 @@
  * 
  * This service handles OAuth authentication and calendar operations
  * for @airhivemx.com Google Workspace accounts.
- * 
- * Setup Instructions:
- * 1. Go to Google Cloud Console (https://console.cloud.google.com)
- * 2. Create a new project or select existing one
- * 3. Enable Google Calendar API
- * 4. Create OAuth 2.0 credentials (Web application)
- * 5. Add authorized redirect URIs (e.g., http://localhost:3000/api/auth/google/callback)
- * 6. Add environment variables to .env.local
  */
 
 import { Database } from './supabase'
@@ -44,11 +36,6 @@ interface GoogleCalendarEvent {
 
 /**
  * Configuration for Google OAuth
- * Add these to your .env.local:
- * 
- * NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_client_id_here
- * GOOGLE_CLIENT_SECRET=your_client_secret_here
- * GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
  */
 const GOOGLE_CONFIG = {
     clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
@@ -57,6 +44,7 @@ const GOOGLE_CONFIG = {
     scopes: [
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/gmail.send',
         'openid',
         'email'
     ]
@@ -64,7 +52,6 @@ const GOOGLE_CONFIG = {
 
 /**
  * Generate Google OAuth URL for user authorization
- * This should be called when user clicks "Connect Google Calendar"
  */
 export function getGoogleAuthUrl(): string {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -82,7 +69,6 @@ export function getGoogleAuthUrl(): string {
         scope: GOOGLE_CONFIG.scopes.join(' '),
         access_type: 'offline',
         prompt: 'select_account consent'
-        // Removed hd: 'airhivemx.com' to allow any google account (including gmail)
     })
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
@@ -90,7 +76,6 @@ export function getGoogleAuthUrl(): string {
 
 /**
  * Exchange authorization code for access token
- * This should be called in your API route after OAuth redirect
  */
 export async function exchangeCodeForToken(code: string): Promise<{
     access_token: string
@@ -99,9 +84,7 @@ export async function exchangeCodeForToken(code: string): Promise<{
 }> {
     const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
             code,
             client_id: GOOGLE_CONFIG.clientId,
@@ -127,9 +110,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
 }> {
     const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
             refresh_token: refreshToken,
             client_id: GOOGLE_CONFIG.clientId,
@@ -168,7 +149,6 @@ export async function createGoogleCalendarEvent(
             timeZone: 'America/Mexico_City'
         },
         attendees: meeting.attendees?.map(email => ({ email })),
-        // Add Google Meet link for video meetings
         ...(meeting.meeting_type === 'video' && {
             conferenceData: {
                 createRequest: {
@@ -200,7 +180,7 @@ export async function createGoogleCalendarEvent(
     }
 
     const data = await response.json()
-    return data.id // Return Google Calendar event ID
+    return data.id
 }
 
 /**
@@ -214,31 +194,15 @@ export async function updateGoogleCalendarEvent(
 ): Promise<void> {
     const updates: Partial<GoogleCalendarEvent> = {}
 
-    if (meeting.title) {
-        updates.summary = meeting.title
-    }
-
-    if (meeting.notes !== undefined) {
-        updates.description = `Reunión para lead: ${leadName}\n\n${meeting.notes || ''}`
-    }
-
+    if (meeting.title) updates.summary = meeting.title
+    if (meeting.notes !== undefined) updates.description = `Reunión para lead: ${leadName}\n\n${meeting.notes || ''}`
     if (meeting.start_time) {
         const endTime = new Date(meeting.start_time)
         endTime.setMinutes(endTime.getMinutes() + (meeting.duration_minutes || 60))
-
-        updates.start = {
-            dateTime: meeting.start_time,
-            timeZone: 'America/Mexico_City'
-        }
-        updates.end = {
-            dateTime: endTime.toISOString(),
-            timeZone: 'America/Mexico_City'
-        }
+        updates.start = { dateTime: meeting.start_time, timeZone: 'America/Mexico_City' }
+        updates.end = { dateTime: endTime.toISOString(), timeZone: 'America/Mexico_City' }
     }
-
-    if (meeting.attendees) {
-        updates.attendees = meeting.attendees.map(email => ({ email }))
-    }
+    if (meeting.attendees) updates.attendees = meeting.attendees.map(email => ({ email }))
 
     const response = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
@@ -252,9 +216,7 @@ export async function updateGoogleCalendarEvent(
         }
     )
 
-    if (!response.ok) {
-        throw new Error('Failed to update calendar event')
-    }
+    if (!response.ok) throw new Error('Failed to update calendar event')
 }
 
 /**
@@ -268,30 +230,15 @@ export async function deleteGoogleCalendarEvent(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
         {
             method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
+            headers: { 'Authorization': `Bearer ${accessToken}` }
         }
     )
 
-    if (!response.ok) {
-        throw new Error('Failed to delete calendar event')
-    }
+    if (!response.ok) throw new Error('Failed to delete calendar event')
 }
 
 /**
  * Helper: Store user's Google tokens in Supabase
- * You'll need to create a table for this:
- * 
- * CREATE TABLE user_calendar_tokens (
- *   user_id UUID PRIMARY KEY REFERENCES auth.users(id),
- *   provider VARCHAR(50) NOT NULL,
- *   access_token TEXT NOT NULL,
- *   refresh_token TEXT NOT NULL,
- *   expires_at TIMESTAMPTZ NOT NULL,
- *   created_at TIMESTAMPTZ DEFAULT NOW(),
- *   updated_at TIMESTAMPTZ DEFAULT NOW()
- * );
  */
 export async function storeUserTokens(
     supabase: any,
@@ -305,7 +252,6 @@ export async function storeUserTokens(
     const expiresAt = new Date()
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in)
 
-    // Optional: Get user's Google email
     let email = null
     try {
         const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -330,10 +276,7 @@ export async function storeUserTokens(
             email: email
         })
 
-    if (error) {
-        console.error('Error storing tokens in Supabase:', error)
-        throw error
-    }
+    if (error) throw error
 }
 
 /**
@@ -350,24 +293,17 @@ export async function getUserAccessToken(
         .eq('provider', 'google')
         .single()
 
-    if (!data) {
-        return null
-    }
+    if (!data) return null
 
-    // Check if token is expired
     const expiresAt = new Date(data.expires_at)
     const now = new Date()
 
     if (now >= expiresAt) {
-        // Token expired, refresh it
         const newTokens = await refreshAccessToken(data.refresh_token)
-
-        // Update stored tokens
         await storeUserTokens(supabase, userId, {
             ...newTokens,
-            refresh_token: data.refresh_token // Keep same refresh token
+            refresh_token: data.refresh_token
         })
-
         return newTokens.access_token
     }
 

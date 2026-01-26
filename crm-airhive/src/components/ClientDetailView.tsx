@@ -55,6 +55,7 @@ interface ClientDetailViewProps {
     onClose: () => void
     onEditClient: (client: ClientData) => void
     onEditCompany: (company: CompanyData) => void
+    onEmailClick: (email: string, name: string) => void
     userEmail?: string
 }
 
@@ -64,6 +65,7 @@ export default function ClientDetailView({
     onClose,
     onEditClient,
     onEditCompany,
+    onEmailClick,
     userEmail
 }: ClientDetailViewProps) {
     const [company, setCompany] = useState<CompanyData | null>(null)
@@ -215,10 +217,8 @@ export default function ClientDetailView({
                                     <div className='flex items-center gap-2'>
                                         <p className='text-[#0A1635]'>{client.email || 'No especificado'}</p>
                                         {client.email && (
-                                            <a
-                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${client.email}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
+                                            <button
+                                                onClick={() => onEmailClick(client.email!, client.nombre || client.empresa)}
                                                 className='inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-[10px] font-bold rounded-md hover:bg-blue-600 transition-colors shadow-sm'
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -226,7 +226,7 @@ export default function ClientDetailView({
                                                     <polyline points="22,6 12,13 2,6" />
                                                 </svg>
                                                 Email
-                                            </a>
+                                            </button>
                                         )}
                                     </div>
                                 </div>

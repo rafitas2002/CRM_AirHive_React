@@ -6,6 +6,7 @@ import PreLeadsTable from '@/components/PreLeadsTable'
 import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
+import EmailComposerModal from '@/components/EmailComposerModal'
 import { useAuth } from '@/lib/auth'
 
 export default function PreLeadsPage() {
@@ -29,6 +30,11 @@ export default function PreLeadsPage() {
     const [vendedorFilter, setVendedorFilter] = useState('All')
     const [sortBy, setSortBy] = useState('recent')
 
+    // Email Composer State
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
+    const [emailRecipient, setEmailRecipient] = useState({ email: '', name: '' })
+    const [isCalendarConnected, setIsCalendarConnected] = useState(false)
+
     const fetchPreLeads = async () => {
         const isInitial = preLeads.length === 0
         if (isInitial) setLoading(true)
@@ -50,8 +56,30 @@ export default function PreLeadsPage() {
     useEffect(() => {
         if (!auth.loading && auth.loggedIn) {
             fetchPreLeads()
+            checkCalendarConnection()
         }
     }, [auth.loading, auth.loggedIn])
+
+    const checkCalendarConnection = async () => {
+        if (!auth.user) return
+        const { data } = await supabase
+            .from('user_calendar_tokens')
+            .select('id')
+            .eq('user_id', auth.user.id)
+            .single()
+        setIsCalendarConnected(!!data)
+    }
+
+    const handleEmailClick = (email: string, name: string) => {
+        if (!isCalendarConnected) {
+            if (confirm('Para enviar correos directamente desde el CRM, necesitas conectar tu cuenta de Google en la sección de Calendario. ¿Deseas ir ahora?')) {
+                window.location.href = '/calendario'
+            }
+            return
+        }
+        setEmailRecipient({ email, name })
+        setIsEmailModalOpen(true)
+    }
 
     const handleSave = async (data: any) => {
         try {
@@ -212,6 +240,7 @@ export default function PreLeadsPage() {
                                 onEdit={(pl) => { setModalMode('edit'); setCurrentPreLead(pl); setIsModalOpen(true); }}
                                 onDelete={(id) => { setDeleteId(id); setIsDeleteModalOpen(true); }}
                                 onRowClick={(pl) => { setSelectedPreLead(pl); setIsDetailViewOpen(true); }}
+                                onEmailClick={handleEmailClick}
                                 userEmail={auth.user?.email || undefined}
                             />
                         )}
@@ -233,6 +262,7 @@ export default function PreLeadsPage() {
                 isOpen={isDetailViewOpen}
                 onClose={() => setIsDetailViewOpen(false)}
                 onEdit={(pl) => { setIsDetailViewOpen(false); setModalMode('edit'); setCurrentPreLead(pl); setIsModalOpen(true); }}
+                onEmailClick={handleEmailClick}
                 userEmail={auth.user?.email || undefined}
             />
 
@@ -243,6 +273,13 @@ export default function PreLeadsPage() {
                 title="Eliminar Pre-Lead"
                 message="¿Estás seguro de que deseas eliminar este registro? Esta acción es permanente."
                 isDestructive
+            />
+
+            <EmailComposerModal
+                isOpen={isEmailModalOpen}
+                onClose={() => setIsEmailModalOpen(false)}
+                recipientEmail={emailRecipient.email}
+                recipientName={emailRecipient.name}
             />
         </div>
     )

@@ -7,6 +7,7 @@ interface PreLeadDetailViewProps {
     isOpen: boolean
     onClose: () => void
     onEdit: (pl: any) => void
+    onEmailClick: (email: string, name: string) => void
     userEmail?: string
 }
 
@@ -15,6 +16,7 @@ export default function PreLeadDetailView({
     isOpen,
     onClose,
     onEdit,
+    onEmailClick,
     userEmail
 }: PreLeadDetailViewProps) {
     if (!preLead) return null
@@ -89,18 +91,16 @@ export default function PreLeadDetailView({
                                             <a href={`mailto:${c}`} className='flex-1 bg-white border border-gray-100 p-2.5 rounded-xl text-xs font-bold text-gray-700 hover:border-blue-300 hover:shadow-sm transition-all truncate'>
                                                 {c}
                                             </a>
-                                            <a
-                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${c}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
+                                            <button
+                                                onClick={() => onEmailClick(c, preLead.nombre_contacto || preLead.nombre_empresa)}
                                                 className='w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-sm'
-                                                title='Redactar en Gmail'
+                                                title='Redactar en CRM'
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                                                     <polyline points="22,6 12,13 2,6" />
                                                 </svg>
-                                            </a>
+                                            </button>
                                         </div>
                                     ))
                                 ) : (

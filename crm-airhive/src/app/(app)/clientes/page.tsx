@@ -7,6 +7,7 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
+import EmailComposerModal from '@/components/EmailComposerModal'
 import { Database } from '@/lib/supabase'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
@@ -56,29 +57,49 @@ export default function LeadsPage() {
     const [filterStage, setFilterStage] = useState('All')
     const [filterOwner, setFilterOwner] = useState('All')
 
+    // Email Composer State
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
+    const [emailRecipient, setEmailRecipient] = useState({ email: '', name: '' })
+    const [isCalendarConnected, setIsCalendarConnected] = useState(false)
+
     // Sorting State
     const [sortBy, setSortBy] = useState('fecha_registro-desc')
 
-    // Persistence
     useEffect(() => {
-        const savedFilters = localStorage.getItem('leads_filters')
-        if (savedFilters) {
-            const { search, stage, owner, sort } = JSON.parse(savedFilters)
-            if (search) setFilterSearch(search)
-            if (stage) setFilterStage(stage)
-            if (owner) setFilterOwner(owner)
-            if (sort) setSortBy(sort)
-        }
+        fetchData()
+        checkCalendarConnection()
     }, [])
 
-    useEffect(() => {
-        localStorage.setItem('leads_filters', JSON.stringify({
-            search: filterSearch,
-            stage: filterStage,
-            owner: filterOwner,
-            sort: sortBy
-        }))
-    }, [filterSearch, filterStage, filterOwner, sortBy])
+    const fetchData = async () => {
+        setLoading(true)
+        const { data, error } = await supabase.from('clientes').select('*').order('created_at', { ascending: false })
+        if (data) setLeads(data)
+        setLoading(false)
+    }
+
+    const checkCalendarConnection = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        setCurrentUser(user)
+
+        const { data } = await supabase
+            .from('user_calendar_tokens')
+            .select('id')
+            .eq('user_id', user.id)
+            .single()
+        setIsCalendarConnected(!!data)
+    }
+
+    const handleEmailClick = (email: string, name: string) => {
+        if (!isCalendarConnected) {
+            if (confirm('Para enviar correos directamente desde el CRM, necesitas conectar tu cuenta de Google en la sección de Calendario. ¿Deseas ir ahora?')) {
+                window.location.href = '/calendario'
+            }
+            return
+        }
+        setEmailRecipient({ email, name })
+        setIsEmailModalOpen(true)
+    }
 
     // Memoized initial data to avoid reference changes on every render
     const memoizedInitialLead = useMemo(() => {
@@ -481,6 +502,7 @@ export default function LeadsPage() {
                             onEdit={openEditModal}
                             onDelete={handleDeleteClick}
                             onRowClick={handleRowClick}
+                            onEmailClick={handleEmailClick}
                             userEmail={currentUser?.email || undefined}
                         />
                     )}
@@ -506,6 +528,7 @@ export default function LeadsPage() {
                 onClose={() => setIsDetailViewOpen(false)}
                 onEditClient={(lead) => handleEditLeadFromDetail(lead as any)}
                 onEditCompany={handleEditCompanyFromDetail}
+                onEmailClick={handleEmailClick}
                 userEmail={currentUser?.email || undefined}
             />
 
@@ -517,6 +540,13 @@ export default function LeadsPage() {
                 title="Eliminar Lead"
                 message="¿Estás seguro de que deseas eliminar este lead? Esta acción no se puede deshacer."
                 isDestructive={true}
+            />
+
+            <EmailComposerModal
+                isOpen={isEmailModalOpen}
+                onClose={() => setIsEmailModalOpen(false)}
+                recipientEmail={emailRecipient.email}
+                recipientName={emailRecipient.name}
             />
         </div>
     )

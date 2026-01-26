@@ -10,10 +10,11 @@ interface ClientsTableProps {
     onEdit?: (cliente: Cliente) => void
     onDelete?: (id: number) => void
     onRowClick?: (cliente: Cliente) => void
+    onEmailClick: (email: string, name: string) => void
     userEmail?: string
 }
 
-export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick, userEmail }: ClientsTableProps) {
+export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick, onEmailClick, userEmail }: ClientsTableProps) {
     if (!clientes || clientes.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm'>
@@ -71,19 +72,19 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                     {cliente.email ? (
                                         <div className='flex items-center gap-1.5'>
                                             <span className='truncate'>{cliente.email}</span>
-                                            <a
-                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${cliente.email}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
-                                                onClick={(e) => e.stopPropagation()}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEmailClick(cliente.email!, cliente.nombre || cliente.empresa || '');
+                                                }}
                                                 className='text-blue-500 hover:text-blue-600 transition-colors flex-shrink-0'
-                                                title='Redactar en Gmail'
+                                                title='Redactar en CRM'
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                                                     <polyline points="22,6 12,13 2,6" />
                                                 </svg>
-                                            </a>
+                                            </button>
                                         </div>
                                     ) : '-'}
                                 </td>
