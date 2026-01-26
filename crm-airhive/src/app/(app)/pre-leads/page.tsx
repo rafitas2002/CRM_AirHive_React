@@ -33,8 +33,8 @@ export default function PreLeadsPage() {
         const isInitial = preLeads.length === 0
         if (isInitial) setLoading(true)
         try {
-            const { data, error } = await supabase
-                .from('pre_leads')
+            const { data, error } = await (supabase
+                .from('pre_leads') as any)
                 .select('*')
                 .order('created_at', { ascending: false })
 
@@ -55,16 +55,16 @@ export default function PreLeadsPage() {
 
     const handleSave = async (data: any) => {
         try {
+            const table = supabase.from('pre_leads') as any
             if (modalMode === 'create') {
-                const { error } = await supabase.from('pre_leads').insert({
+                const { error } = await table.insert({
                     ...data,
                     vendedor_id: auth.user?.id,
                     vendedor_name: auth.profile?.full_name || auth.username
                 })
                 if (error) throw error
             } else {
-                const { error } = await supabase
-                    .from('pre_leads')
+                const { error } = await table
                     .update(data)
                     .eq('id', currentPreLead.id)
                 if (error) throw error
@@ -80,7 +80,7 @@ export default function PreLeadsPage() {
     const handleDelete = async () => {
         if (!deleteId) return
         try {
-            const { error } = await supabase.from('pre_leads').delete().eq('id', deleteId)
+            const { error } = await (supabase.from('pre_leads') as any).delete().eq('id', deleteId)
             if (error) throw error
             setIsDeleteModalOpen(false)
             fetchPreLeads()

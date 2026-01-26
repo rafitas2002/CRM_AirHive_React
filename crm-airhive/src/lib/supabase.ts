@@ -112,6 +112,50 @@ export type Database = {
                     last_snapshot_at?: string | null
                 }
             }
+            pre_leads: {
+                Row: {
+                    id: number
+                    nombre_empresa: string
+                    correos: string[] | null
+                    nombre_contacto: string | null
+                    telefonos: string[] | null
+                    ubicacion: string | null
+                    giro_empresa: string | null
+                    vendedor_id: string | null
+                    vendedor_name: string | null
+                    notas: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: number
+                    nombre_empresa: string
+                    correos?: string[] | null
+                    nombre_contacto?: string | null
+                    telefonos?: string[] | null
+                    ubicacion?: string | null
+                    giro_empresa?: string | null
+                    vendedor_id?: string | null
+                    vendedor_name?: string | null
+                    notas?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: number
+                    nombre_empresa?: string
+                    correos?: string[] | null
+                    nombre_contacto?: string | null
+                    telefonos?: string[] | null
+                    ubicacion?: string | null
+                    giro_empresa?: string | null
+                    vendedor_id?: string | null
+                    vendedor_name?: string | null
+                    notas?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
             meetings: {
                 Row: {
                     id: string
