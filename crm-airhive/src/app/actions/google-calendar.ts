@@ -37,7 +37,8 @@ async function refreshAccessToken(refreshToken: string) {
 
 // Action: Exchange Auth Code for Tokens
 export async function exchangeCodeForTokenAction(code: string, redirectUri: string) {
-    const supabase = createClient(cookies())
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
 
     // 1. Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -146,7 +147,8 @@ async function getValidAccessToken(supabase: any, userId: string) {
 
 // Action: Create Google Calendar Event
 export async function createGoogleEventAction(meeting: MeetingInsert, leadName: string) {
-    const supabase = createClient(cookies())
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
@@ -208,7 +210,8 @@ export async function createGoogleEventAction(meeting: MeetingInsert, leadName: 
 
 // Action: Update Google Calendar Event
 export async function updateGoogleEventAction(eventId: string, meeting: Partial<MeetingInsert>, leadName: string) {
-    const supabase = createClient(cookies())
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
@@ -250,7 +253,8 @@ export async function updateGoogleEventAction(eventId: string, meeting: Partial<
 
 // Action: Delete Google Calendar Event
 export async function deleteGoogleEventAction(eventId: string) {
-    const supabase = createClient(cookies())
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Unauthorized')
 
@@ -277,7 +281,8 @@ export async function deleteGoogleEventAction(eventId: string) {
 
 // Action: Check Status (useful for UI to re-verify if needed)
 export async function checkGoogleConnectionAction() {
-    const supabase = createClient(cookies())
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { connected: false }
 
