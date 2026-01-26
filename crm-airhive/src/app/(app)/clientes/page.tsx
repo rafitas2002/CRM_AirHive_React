@@ -30,11 +30,16 @@ const normalizeLead = (lead: Lead) => ({
     probabilidad: (lead as any).probabilidad || 0
 })
 
+import { useAuth } from '@/lib/auth'
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
     const router = useRouter()
+
+    // Auth Hook
+    const { user, loading: authLoading } = useAuth()
 
     // Modal & Editing State
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -66,34 +71,28 @@ export default function LeadsPage() {
     const [sortBy, setSortBy] = useState('fecha_registro-desc')
 
     useEffect(() => {
-        fetchData()
-        checkCalendarConnection()
-    }, [])
+        if (!authLoading && user) {
+            setCurrentUser(user)
+            checkCalendarConnection(user.id)
+        }
+    }, [user, authLoading])
 
-    const fetchData = async () => {
-        setLoading(true)
-        const { data, error } = await supabase.from('clientes').select('*').order('created_at', { ascending: false })
-        if (data) setLeads(data)
-        setLoading(false)
-    }
-
-    const checkCalendarConnection = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        setCurrentUser(user)
-
+    const checkCalendarConnection = async (userId: string) => {
         const { data } = await supabase
             .from('user_calendar_tokens')
             .select('id')
-            .eq('user_id', user.id)
-            .single()
+            .eq('user_id', userId)
+            .eq('provider', 'google')
+            .maybeSingle() // Use maybeSingle to avoid errors if multiple rows exist (though shouldn't)
+
         setIsCalendarConnected(!!data)
     }
 
     const handleEmailClick = (email: string, name: string) => {
+        // If calendar is NOT connected, prompt to connect
         if (!isCalendarConnected) {
             if (confirm('Para enviar correos directamente desde el CRM, necesitas conectar tu cuenta de Google en la sección de Calendario. ¿Deseas ir ahora?')) {
-                window.location.href = '/calendario'
+                router.push('/settings/cuentas') // Better UX: Go to settings/cuentas where the button is
             }
             return
         }

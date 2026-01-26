@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { createClient, Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { getGoogleAuthUrl, exchangeCodeForToken, storeUserTokens } from '@/lib/googleCalendarService'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 type ConnectionStatus = {
@@ -21,15 +20,14 @@ export default function CuentasPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
 
-    // Check for callback code
-    const code = searchParams.get('code')
+    // Check for errors from callback
     const error = searchParams.get('error')
+    const statusParam = searchParams.get('status')
 
     const [status, setStatus] = useState<ConnectionStatus>({
         google: { connected: false }
     })
     const [loading, setLoading] = useState(true)
-    const [isConnecting, setIsConnecting] = useState(false)
 
     useEffect(() => {
         if (auth.loggedIn) {
@@ -37,41 +35,16 @@ export default function CuentasPage() {
         }
     }, [auth.loggedIn])
 
-    // Handle OAuth Callback Client Side (Simpler and more reliable for SPA)
     useEffect(() => {
-        if (code && auth.user && !isConnecting) {
-            handleCallback(code)
-        }
-    }, [code, auth.user])
-
-    const handleCallback = async (authCode: string) => {
-        setIsConnecting(true)
-        try {
-            // Updated: Use Server Action
-            const { exchangeCodeForTokenAction } = await import('@/app/actions/google-calendar')
-
-            // Redirect URI must match exactly what was sent to auth screen
-            const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/settings/cuentas` : ''
-
-            const result = await exchangeCodeForTokenAction(authCode, redirectHere)
-
-            if (!result.success) {
-                throw new Error(result.error)
-            }
-
-            // Clean URL
-            window.history.replaceState({}, '', '/settings/cuentas')
-
-            // Re-check status
-            await checkConnectionStatus()
+        if (statusParam === 'connected') {
             alert('¡Cuenta conectada exitosamente!')
-        } catch (error) {
-            console.error('Error connecting Google:', error)
-            alert('Hubo un error al conectar la cuenta. Por favor intenta de nuevo.')
-        } finally {
-            setIsConnecting(false)
+            // clear params
+            window.history.replaceState({}, '', '/settings/cuentas')
+            checkConnectionStatus()
+        } else if (error) {
+            alert(`Error al conectar: ${error}`)
         }
-    }
+    }, [statusParam, error])
 
     const checkConnectionStatus = async () => {
         if (!auth.user) return
@@ -107,9 +80,9 @@ export default function CuentasPage() {
     }
 
     const handleConnectGoogle = () => {
-        // Redirect to same page but with callback
-        // We override the redirect URI to point here: /settings/cuentas
-        const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/settings/cuentas` : ''
+        // Use the API route as callback to avoid mismatch errors and handle code on server
+        // This MUST match the authorized URI in Google Console
+        const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/api/auth/google/callback` : ''
 
         // Manual override of getGoogleAuthUrl to force this page as callback
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -150,13 +123,8 @@ export default function CuentasPage() {
         }
     }
 
-    if (error) {
-        return (
-            <div className="p-8 text-center">
-                <p className="text-red-500 font-bold">Error en la conexión: {error}</p>
-                <button onClick={() => window.location.href = '/settings/cuentas'} className="mt-4 text-blue-600 underline">Volver a intentar</button>
-            </div>
-        )
+    if (loading) {
+        return <div className="p-8">Cargando...</div>
     }
 
     return (
@@ -225,59 +193,28 @@ export default function CuentasPage() {
                         </ul>
                     </div>
 
-                    {isConnecting ? (
-                        <div className="w-full py-4 text-center bg-blue-50 text-blue-600 rounded-lg font-bold animate-pulse">
-                            Conectando con Google...
-                        </div>
-                    ) : status.google.connected ? (
-                        <div className='space-y-3'>
-                            <div className='p-3 rounded-lg' style={{ background: 'var(--hover-bg)' }}>
-                                <p className='text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                    <span className='font-semibold' style={{ color: 'var(--text-primary)' }}>Cuenta: </span>
-                                    {status.google.email}
-                                </p>
+                    <div>
+                        {status.google.connected ? (
+                            <div className='flex items-center gap-4'>
+                                <div className='text-sm text-gray-500'>
+                                    {status.google.email && `Conectado como: ${status.google.email}`}
+                                </div>
+                                <button
+                                    onClick={handleDisconnectGoogle}
+                                    className='px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-bold text-sm'
+                                >
+                                    Desconectar
+                                </button>
                             </div>
+                        ) : (
                             <button
-                                onClick={handleDisconnectGoogle}
-                                className='w-full px-6 py-3 rounded-lg font-semibold text-sm transition-all hover:scale-105'
-                                style={{
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none'
-                                }}
+                                onClick={handleConnectGoogle}
+                                className='px-6 py-2.5 bg-[#2048FF] text-white rounded-lg hover:bg-[#1700AC] transition-all shadow-md font-bold text-sm'
                             >
-                                Desconectar cuenta
+                                Conectar Cuenta de Google
                             </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={handleConnectGoogle}
-                            className='w-full px-6 py-3 rounded-lg font-semibold text-sm transition-all hover:scale-105'
-                            style={{
-                                background: '#2048FF',
-                                color: 'white',
-                                border: 'none'
-                            }}
-                        >
-                            🔗 Conectar cuenta de Google
-                        </button>
-                    )}
-                </div>
-
-                {/* Info Card */}
-                <div
-                    className='p-4 rounded-lg border'
-                    style={{
-                        background: 'var(--card-bg)',
-                        borderColor: 'var(--card-border)'
-                    }}
-                >
-                    <p className='text-sm flex items-start gap-2' style={{ color: 'var(--text-secondary)' }}>
-                        <span className='text-base'>💡</span>
-                        <span>
-                            Al conectar tu cuenta de Google, tus reuniones creadas en el CRM se sincronizarán automáticamente con Google Calendar y se enviarán invitaciones por correo a los asistentes.
-                        </span>
-                    </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
