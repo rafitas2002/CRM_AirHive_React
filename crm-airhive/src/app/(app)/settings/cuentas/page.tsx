@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { getGoogleAuthUrl } from '@/lib/googleCalendarService'
+import { getGoogleAuthUrl, exchangeCodeForToken, storeUserTokens } from '@/lib/googleCalendarService'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 type ConnectionStatus = {
     google: {
@@ -15,14 +16,55 @@ type ConnectionStatus = {
 
 export default function CuentasPage() {
     const auth = useAuth()
+    const router = useRouter()
+    const searchParams = useSearchParams()
+
+    // Check for callback code
+    const code = searchParams.get('code')
+    const error = searchParams.get('error')
+
     const [status, setStatus] = useState<ConnectionStatus>({
         google: { connected: false }
     })
     const [loading, setLoading] = useState(true)
+    const [isConnecting, setIsConnecting] = useState(false)
 
     useEffect(() => {
-        checkConnectionStatus()
-    }, [])
+        if (auth.loggedIn) {
+            checkConnectionStatus()
+        }
+    }, [auth.loggedIn])
+
+    // Handle OAuth Callback Client Side (Simpler and more reliable for SPA)
+    useEffect(() => {
+        if (code && auth.user && !isConnecting) {
+            handleCallback(code)
+        }
+    }, [code, auth.user])
+
+    const handleCallback = async (authCode: string) => {
+        setIsConnecting(true)
+        try {
+            // Exchange code
+            const tokens = await exchangeCodeForToken(authCode)
+
+            // Store locally in component to fix UI immediately
+            const supabase = createClient()
+            await storeUserTokens(supabase, auth.user!.id, tokens)
+
+            // Clean URL
+            window.history.replaceState({}, '', '/settings/cuentas')
+
+            // Re-check status
+            await checkConnectionStatus()
+            alert('¡Cuenta conectada exitosamente!')
+        } catch (error) {
+            console.error('Error connecting Google:', error)
+            alert('Hubo un error al conectar la cuenta. Por favor intenta de nuevo.')
+        } finally {
+            setIsConnecting(false)
+        }
+    }
 
     const checkConnectionStatus = async () => {
         if (!auth.user) return
@@ -30,20 +72,22 @@ export default function CuentasPage() {
         try {
             const supabase = createClient()
             const { data } = await supabase
-                .from('google_connections')
+                .from('user_calendar_tokens')
                 .select('*')
                 .eq('user_id', auth.user.id)
+                .eq('provider', 'google')
                 .single()
 
             if (data) {
-                const conn = data as any
                 setStatus({
                     google: {
                         connected: true,
-                        email: conn.email || undefined,
-                        lastSync: new Date(conn.updated_at).toLocaleDateString()
+                        email: data.email || undefined,
+                        lastSync: data.created_at ? new Date(data.created_at).toLocaleDateString() : undefined
                     }
                 })
+            } else {
+                setStatus({ google: { connected: false } })
             }
         } catch (error) {
             console.error('Error checking connection status:', error)
@@ -53,8 +97,28 @@ export default function CuentasPage() {
     }
 
     const handleConnectGoogle = () => {
-        const authUrl = getGoogleAuthUrl()
-        window.location.href = authUrl
+        // Redirect to same page but with callback
+        // We override the redirect URI to point here: /settings/cuentas
+        const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/settings/cuentas` : ''
+
+        // Manual override of getGoogleAuthUrl to force this page as callback
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        const params = new URLSearchParams({
+            client_id: clientId || '',
+            redirect_uri: redirectHere,
+            response_type: 'code',
+            scope: [
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/gmail.send',
+                'openid',
+                'email'
+            ].join(' '),
+            access_type: 'offline',
+            prompt: 'select_account consent'
+        })
+
+        window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
     }
 
     const handleDisconnectGoogle = async () => {
@@ -63,7 +127,7 @@ export default function CuentasPage() {
         try {
             const supabase = createClient()
             const { error } = await supabase
-                .from('google_connections')
+                .from('user_calendar_tokens')
                 .delete()
                 .eq('user_id', auth.user!.id)
 
@@ -74,6 +138,15 @@ export default function CuentasPage() {
             console.error('Error deleting connection:', error)
             alert('Error al desconectar')
         }
+    }
+
+    if (error) {
+        return (
+            <div className="p-8 text-center">
+                <p className="text-red-500 font-bold">Error en la conexión: {error}</p>
+                <button onClick={() => window.location.href = '/settings/cuentas'} className="mt-4 text-blue-600 underline">Volver a intentar</button>
+            </div>
+        )
     }
 
     return (
@@ -142,7 +215,11 @@ export default function CuentasPage() {
                         </ul>
                     </div>
 
-                    {status.google.connected ? (
+                    {isConnecting ? (
+                        <div className="w-full py-4 text-center bg-blue-50 text-blue-600 rounded-lg font-bold animate-pulse">
+                            Conectando con Google...
+                        </div>
+                    ) : status.google.connected ? (
                         <div className='space-y-3'>
                             <div className='p-3 rounded-lg' style={{ background: 'var(--hover-bg)' }}>
                                 <p className='text-sm' style={{ color: 'var(--text-secondary)' }}>
