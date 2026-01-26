@@ -46,7 +46,8 @@ export default function CuentasPage() {
         setIsConnecting(true)
         try {
             // Exchange code
-            const tokens = await exchangeCodeForToken(authCode)
+            const redirectHere = `${window.location.origin}/settings/cuentas`
+            const tokens = await exchangeCodeForToken(authCode, redirectHere)
 
             // Store locally in component to fix UI immediately
             const supabase = createClient()

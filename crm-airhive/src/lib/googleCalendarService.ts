@@ -77,11 +77,13 @@ export function getGoogleAuthUrl(): string {
 /**
  * Exchange authorization code for access token
  */
-export async function exchangeCodeForToken(code: string): Promise<{
+export async function exchangeCodeForToken(code: string, redirectUriOverride?: string): Promise<{
     access_token: string
     refresh_token: string
     expires_in: number
 }> {
+    const redirectUri = redirectUriOverride || GOOGLE_CONFIG.redirectUri
+
     const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -89,13 +91,15 @@ export async function exchangeCodeForToken(code: string): Promise<{
             code,
             client_id: GOOGLE_CONFIG.clientId,
             client_secret: GOOGLE_CONFIG.clientSecret,
-            redirect_uri: GOOGLE_CONFIG.redirectUri,
+            redirect_uri: redirectUri,
             grant_type: 'authorization_code'
         })
     })
 
     if (!response.ok) {
-        throw new Error('Failed to exchange code for token')
+        const error = await response.json()
+        console.error('Token exchange failed:', error)
+        throw new Error(`Failed to exchange code for token: ${error.error_description || error.error}`)
     }
 
     return await response.json()
