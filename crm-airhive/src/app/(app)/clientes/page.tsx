@@ -481,6 +481,7 @@ export default function LeadsPage() {
                             onEdit={openEditModal}
                             onDelete={handleDeleteClick}
                             onRowClick={handleRowClick}
+                            userEmail={currentUser?.email || undefined}
                         />
                     )}
                 </div>
@@ -505,6 +506,7 @@ export default function LeadsPage() {
                 onClose={() => setIsDetailViewOpen(false)}
                 onEditClient={(lead) => handleEditLeadFromDetail(lead as any)}
                 onEditCompany={handleEditCompanyFromDetail}
+                userEmail={currentUser?.email || undefined}
             />
 
             {/* Delete Confirmation Modal */}

@@ -21,6 +21,7 @@ interface PreLeadsTableProps {
     onEdit: (preLead: PreLead) => void
     onDelete: (id: number) => void
     onRowClick: (preLead: PreLead) => void
+    userEmail?: string
 }
 
 export default function PreLeadsTable({
@@ -28,7 +29,8 @@ export default function PreLeadsTable({
     isEditingMode,
     onEdit,
     onDelete,
-    onRowClick
+    onRowClick,
+    userEmail
 }: PreLeadsTableProps) {
     if (preLeads.length === 0) {
         return (
@@ -78,7 +80,7 @@ export default function PreLeadsTable({
                                             <div key={i} className='flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-md'>
                                                 <span className='text-[10px] font-bold text-gray-500 truncate max-w-[120px]'>{c}</span>
                                                 <a
-                                                    href={`https://mail.google.com/mail/?view=cm&fs=1&to=${c}`}
+                                                    href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${c}`}
                                                     target='_blank'
                                                     rel='noopener noreferrer'
                                                     onClick={(e) => e.stopPropagation()}

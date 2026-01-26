@@ -212,6 +212,7 @@ export default function PreLeadsPage() {
                                 onEdit={(pl) => { setModalMode('edit'); setCurrentPreLead(pl); setIsModalOpen(true); }}
                                 onDelete={(id) => { setDeleteId(id); setIsDeleteModalOpen(true); }}
                                 onRowClick={(pl) => { setSelectedPreLead(pl); setIsDetailViewOpen(true); }}
+                                userEmail={auth.user?.email || undefined}
                             />
                         )}
                     </div>
@@ -232,6 +233,7 @@ export default function PreLeadsPage() {
                 isOpen={isDetailViewOpen}
                 onClose={() => setIsDetailViewOpen(false)}
                 onEdit={(pl) => { setIsDetailViewOpen(false); setModalMode('edit'); setCurrentPreLead(pl); setIsModalOpen(true); }}
+                userEmail={auth.user?.email || undefined}
             />
 
             <ConfirmModal

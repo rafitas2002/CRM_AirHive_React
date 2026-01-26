@@ -7,13 +7,15 @@ interface PreLeadDetailViewProps {
     isOpen: boolean
     onClose: () => void
     onEdit: (pl: any) => void
+    userEmail?: string
 }
 
 export default function PreLeadDetailView({
     preLead,
     isOpen,
     onClose,
-    onEdit
+    onEdit,
+    userEmail
 }: PreLeadDetailViewProps) {
     if (!preLead) return null
 
@@ -88,7 +90,7 @@ export default function PreLeadDetailView({
                                                 {c}
                                             </a>
                                             <a
-                                                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${c}`}
+                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${c}`}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
                                                 className='w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-sm'

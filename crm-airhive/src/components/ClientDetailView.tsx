@@ -55,6 +55,7 @@ interface ClientDetailViewProps {
     onClose: () => void
     onEditClient: (client: ClientData) => void
     onEditCompany: (company: CompanyData) => void
+    userEmail?: string
 }
 
 export default function ClientDetailView({
@@ -62,7 +63,8 @@ export default function ClientDetailView({
     isOpen,
     onClose,
     onEditClient,
-    onEditCompany
+    onEditCompany,
+    userEmail
 }: ClientDetailViewProps) {
     const [company, setCompany] = useState<CompanyData | null>(null)
     const [loadingCompany, setLoadingCompany] = useState(false)
@@ -214,7 +216,7 @@ export default function ClientDetailView({
                                         <p className='text-[#0A1635]'>{client.email || 'No especificado'}</p>
                                         {client.email && (
                                             <a
-                                                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${client.email}`}
+                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${client.email}`}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
                                                 className='inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-[10px] font-bold rounded-md hover:bg-blue-600 transition-colors shadow-sm'

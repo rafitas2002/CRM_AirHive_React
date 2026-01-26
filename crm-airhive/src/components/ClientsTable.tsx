@@ -10,9 +10,10 @@ interface ClientsTableProps {
     onEdit?: (cliente: Cliente) => void
     onDelete?: (id: number) => void
     onRowClick?: (cliente: Cliente) => void
+    userEmail?: string
 }
 
-export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick }: ClientsTableProps) {
+export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick, userEmail }: ClientsTableProps) {
     if (!clientes || clientes.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm'>
@@ -71,7 +72,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                         <div className='flex items-center gap-1.5'>
                                             <span className='truncate'>{cliente.email}</span>
                                             <a
-                                                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${cliente.email}`}
+                                                href={`https://mail.google.com/mail/u/${userEmail || ''}/?view=cm&fs=1&to=${cliente.email}`}
                                                 target='_blank'
                                                 rel='noopener noreferrer'
                                                 onClick={(e) => e.stopPropagation()}
