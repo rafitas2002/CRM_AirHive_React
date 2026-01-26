@@ -213,6 +213,18 @@ export default function TopBar() {
                         <span className='truncate max-w-[150px]'>{auth.loading ? 'Cargando...' : auth.username}</span>
                     </div>
 
+                    {/* Settings Gear Icon */}
+                    <Link
+                        href='/settings'
+                        className='relative text-white font-semibold text-xl px-2 py-2 group transition-all hover:scale-110'
+                        title='Configuración'
+                    >
+                        ⚙️
+                        <span
+                            className='absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF] transition-all duration-300 ease-out w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
+                        />
+                    </Link>
+
                     <button
                         type='button'
                         disabled={auth.busy || auth.loading}

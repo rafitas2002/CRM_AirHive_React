@@ -3,6 +3,7 @@
 import TopBar from '@/components/TopBar'
 import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
 import { useAuth } from '@/lib/auth'
+import { ThemeProvider } from '@/lib/ThemeContext'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -27,11 +28,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!auth.loggedIn) return null
 
     return (
-        <div className='h-screen flex flex-col bg-[#F1F3F5] overflow-hidden'>
-            <TopBar />
-            <main className='flex-1 overflow-hidden bg-[#E9ECEF]'>
-                {children}
-            </main>
-        </div>
+        <ThemeProvider>
+            <GlobalMeetingHandler />
+            <div className='h-screen flex flex-col overflow-hidden' style={{ background: 'var(--background)' }}>
+                <TopBar />
+                <main className='flex-1 overflow-hidden' style={{ background: 'var(--background)' }}>
+                    {children}
+                </main>
+            </div>
+        </ThemeProvider>
     )
 }
