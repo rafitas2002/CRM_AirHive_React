@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (!user) {
-            return NextResponse.redirect(new URL('/auth/login', request.url))
+            return NextResponse.redirect(new URL('/login', request.url))
         }
 
         // Exchange code for tokens
