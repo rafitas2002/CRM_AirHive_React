@@ -15,9 +15,11 @@ type LeadUpdate = Database['public']['Tables']['clientes']['Update']
 
 // Helper to normalize lead data for the form (handle nulls)
 const normalizeLead = (lead: Lead) => ({
+    id: lead.id,
     empresa: lead.empresa || '',
     nombre: lead.nombre || '',
-    contacto: lead.contacto || '',
+    email: lead.email || '',
+    telefono: lead.telefono || '',
     etapa: lead.etapa || 'Prospección',
     valor_estimado: lead.valor_estimado || 0,
     oportunidad: lead.oportunidad || '',
@@ -90,7 +92,8 @@ export default function LeadsPage() {
             const matchesSearch = !filterSearch ||
                 lead.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
                 lead.empresa?.toLowerCase().includes(filterSearch.toLowerCase()) ||
-                lead.contacto?.toLowerCase().includes(filterSearch.toLowerCase())
+                lead.email?.toLowerCase().includes(filterSearch.toLowerCase()) ||
+                lead.telefono?.toLowerCase().includes(filterSearch.toLowerCase())
 
             const matchesStage = filterStage === 'All' || lead.etapa === filterStage
             const matchesOwner = filterOwner === 'All' || lead.owner_username === filterOwner
@@ -200,9 +203,17 @@ export default function LeadsPage() {
         }
 
         if (modalMode === 'create') {
-            const payload: LeadInsert = {
-                ...leadData,
+            const payload: any = {
                 empresa: finalEmpresaName,
+                nombre: leadData.nombre,
+                email: leadData.email,
+                telefono: leadData.telefono,
+                etapa: leadData.etapa,
+                valor_estimado: leadData.valor_estimado,
+                oportunidad: leadData.oportunidad,
+                calificacion: leadData.calificacion,
+                notas: leadData.notas,
+                probabilidad: leadData.probabilidad,
                 owner_id: currentUser.id,
                 owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
                 empresa_id: finalEmpresaId as string
@@ -233,9 +244,17 @@ export default function LeadsPage() {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String(currentLead.probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
 
-            const payload: LeadUpdate = {
-                ...leadData,
+            const payload: any = {
                 empresa: finalEmpresaName,
+                nombre: leadData.nombre,
+                email: leadData.email,
+                telefono: leadData.telefono,
+                etapa: leadData.etapa,
+                valor_estimado: leadData.valor_estimado,
+                oportunidad: leadData.oportunidad,
+                calificacion: leadData.calificacion,
+                notas: leadData.notas,
+                probabilidad: leadData.probabilidad,
                 empresa_id: finalEmpresaId as string
             }
 

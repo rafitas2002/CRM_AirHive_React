@@ -83,9 +83,23 @@ export default function PreLeadDetailView({
                             <div className='flex flex-col gap-2'>
                                 {preLead.correos?.length > 0 ? (
                                     preLead.correos.map((c: string, i: number) => (
-                                        <a key={i} href={`mailto:${c}`} className='bg-white border border-gray-100 p-2.5 rounded-xl text-xs font-bold text-blue-600 hover:border-blue-300 hover:shadow-sm transition-all truncate'>
-                                            {c}
-                                        </a>
+                                        <div key={i} className='flex items-center gap-2'>
+                                            <a href={`mailto:${c}`} className='flex-1 bg-white border border-gray-100 p-2.5 rounded-xl text-xs font-bold text-gray-700 hover:border-blue-300 hover:shadow-sm transition-all truncate'>
+                                                {c}
+                                            </a>
+                                            <a
+                                                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${c}`}
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-sm'
+                                                title='Redactar en Gmail'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                                    <polyline points="22,6 12,13 2,6" />
+                                                </svg>
+                                            </a>
+                                        </div>
                                     ))
                                 ) : (
                                     <span className='text-xs text-gray-300 italic'>Sin correos</span>
@@ -101,9 +115,22 @@ export default function PreLeadDetailView({
                             <div className='flex flex-col gap-2'>
                                 {preLead.telefonos?.length > 0 ? (
                                     preLead.telefonos.map((t: string, i: number) => (
-                                        <a key={i} href={`tel:${t}`} className='bg-white border border-gray-100 p-2.5 rounded-xl text-xs font-bold text-emerald-600 hover:border-emerald-300 hover:shadow-sm transition-all'>
-                                            {t}
-                                        </a>
+                                        <div key={i} className='flex items-center gap-2'>
+                                            <a href={`tel:${t}`} className='flex-1 bg-white border border-gray-100 p-2.5 rounded-xl text-xs font-bold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all'>
+                                                {t}
+                                            </a>
+                                            <a
+                                                href={`https://wa.me/${t.replace(/\D/g, '')}`}
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center hover:bg-emerald-600 transition-all shadow-sm'
+                                                title='WhatsApp'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                                </svg>
+                                            </a>
+                                        </div>
                                     ))
                                 ) : (
                                     <span className='text-xs text-gray-300 italic'>Sin teléfonos</span>

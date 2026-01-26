@@ -62,6 +62,8 @@ export type Database = {
                     probability_locked: boolean | null
                     next_meeting_id: string | null
                     last_snapshot_at: string | null
+                    email: string | null
+                    telefono: string | null
                 }
                 Insert: {
                     id?: number

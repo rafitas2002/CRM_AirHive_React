@@ -31,6 +31,8 @@ type ClientData = {
     probability_locked?: boolean | null
     next_meeting_id?: string | null
     last_snapshot_at?: string | null
+    email?: string | null
+    telefono?: string | null
 }
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
@@ -207,8 +209,43 @@ export default function ClientDetailView({
                                     <p className='text-[#0A1635] font-medium text-lg'>{client.empresa}</p>
                                 </div>
                                 <div>
-                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Contacto</label>
-                                    <p className='text-[#0A1635]'>{client.contacto}</p>
+                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Correo Electrónico</label>
+                                    <div className='flex items-center gap-2'>
+                                        <p className='text-[#0A1635]'>{client.email || 'No especificado'}</p>
+                                        {client.email && (
+                                            <a
+                                                href={`https://mail.google.com/mail/?view=cm&fs=1&to=${client.email}`}
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-[10px] font-bold rounded-md hover:bg-blue-600 transition-colors shadow-sm'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                                    <polyline points="22,6 12,13 2,6" />
+                                                </svg>
+                                                Email
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Teléfono</label>
+                                    <div className='flex items-center gap-2'>
+                                        <p className='text-[#0A1635] font-mono'>{client.telefono || 'No especificado'}</p>
+                                        {client.telefono && (
+                                            <a
+                                                href={`https://wa.me/${client.telefono.replace(/\D/g, '')}`}
+                                                target='_blank'
+                                                rel='noopener noreferrer'
+                                                className='inline-flex items-center gap-1 px-2 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-md hover:bg-emerald-600 transition-colors shadow-sm'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                                </svg>
+                                                WhatsApp
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className='grid grid-cols-2 gap-4'>
                                     <div>
