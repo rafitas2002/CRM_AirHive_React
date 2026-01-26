@@ -47,13 +47,17 @@ export default function CuentasPage() {
     const handleCallback = async (authCode: string) => {
         setIsConnecting(true)
         try {
-            // Exchange code
-            const redirectHere = `${window.location.origin}/settings/cuentas`
-            const tokens = await exchangeCodeForToken(authCode, redirectHere)
+            // Updated: Use Server Action
+            const { exchangeCodeForTokenAction } = await import('@/app/actions/google-calendar')
 
-            // Store locally in component to fix UI immediately
-            const supabase = createClient()
-            await storeUserTokens(supabase, auth.user!.id, tokens)
+            // Redirect URI must match exactly what was sent to auth screen
+            const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/settings/cuentas` : ''
+
+            const result = await exchangeCodeForTokenAction(authCode, redirectHere)
+
+            if (!result.success) {
+                throw new Error(result.error)
+            }
 
             // Clean URL
             window.history.replaceState({}, '', '/settings/cuentas')

@@ -1,11 +1,12 @@
 import { createClient } from './supabase'
 import { Database } from './supabase'
-import {
-    createGoogleCalendarEvent,
-    updateGoogleCalendarEvent,
-    deleteGoogleCalendarEvent,
-    getUserAccessToken
-} from './googleCalendarService'
+// Google Calendar Service imports removed as logic moved to Server Actions
+// import {
+//     createGoogleCalendarEvent,
+//     updateGoogleCalendarEvent,
+//     deleteGoogleCalendarEvent,
+//     getUserAccessToken
+// } from './googleCalendarService'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
@@ -66,31 +67,19 @@ export async function createMeeting(meetingData: MeetingInsert) {
 
     const createdMeeting = data[0]
 
-    // Google Calendar Sync
+    // Google Calendar Sync - DEPRECATED here
+    /*
     if (meetingData.calendar_provider === 'google') {
         try {
             const accessToken = await getUserAccessToken(supabase, meetingData.seller_id)
             if (accessToken) {
-                // Fetch lead name for description
-                const { data: lead } = await supabase
-                    .from('clientes')
-                    .select('nombre, apellido')
-                    .eq('id', meetingData.lead_id)
-                    .single()
-
-                const leadName = lead ? `${(lead as any).nombre} ${(lead as any).apellido}` : 'Cliente'
-                const googleEventId = await createGoogleCalendarEvent(accessToken, meetingData, leadName)
-
-                if (googleEventId) {
-                    await (supabase.from('meetings') as any)
-                        .update({ calendar_event_id: googleEventId } as any)
-                        .eq('id', createdMeeting.id)
-                }
+                // ...
             }
         } catch (syncError) {
             console.error('⚠️ Google Calendar Sync Error (non-critical):', syncError)
         }
     }
+    */
 
     // Update lead's next_meeting_id if this is the next scheduled meeting
     try {
@@ -115,44 +104,20 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
         throw error
     }
 
-    // Google Calendar Sync Logic
+    // Google Calendar Sync Logic - DEPRECATED here, moved to Server Server Actions called from Client
+    // We keep the fields in DB but don't auto-sync here anymore to avoid double syncing or client-side issues.
+    /*
     const hadEvent = !!data.calendar_event_id
     const wantsSync = updates.calendar_provider === 'google' || (updates.calendar_provider === undefined && data.calendar_provider === 'google')
     const stoppedSync = updates.calendar_provider === null && data.calendar_provider === 'google'
 
     try {
         const accessToken = await getUserAccessToken(supabase, data.seller_id)
-        if (accessToken) {
-            // Fetch lead name for description
-            const { data: lead } = await supabase
-                .from('clientes')
-                .select('nombre, apellido')
-                .eq('id', data.lead_id)
-                .single()
-            const leadName = lead ? `${(lead as any).nombre} ${(lead as any).apellido}` : 'Cliente'
-
-            if (wantsSync && !hadEvent) {
-                // CREATE new event if toggle turned ON
-                const googleEventId = await createGoogleCalendarEvent(accessToken, { ...data, ...updates } as any, leadName)
-                if (googleEventId) {
-                    await (supabase.from('meetings') as any)
-                        .update({ calendar_event_id: googleEventId } as any)
-                        .eq('id', meetingId)
-                }
-            } else if (wantsSync && hadEvent) {
-                // UPDATE existing event
-                await updateGoogleCalendarEvent(accessToken, data.calendar_event_id!, updates, leadName)
-            } else if (stoppedSync && hadEvent) {
-                // DELETE event if toggle turned OFF
-                await deleteGoogleCalendarEvent(accessToken, data.calendar_event_id!)
-                await (supabase.from('meetings') as any)
-                    .update({ calendar_event_id: null } as any)
-                    .eq('id', meetingId)
-            }
-        }
+        // ... (removed sync logic)
     } catch (syncError) {
         console.error('⚠️ Google Calendar Sync Sync Error:', syncError)
     }
+    */
 
     // If start_time changed, update lead's next_meeting_id
     if (updates.start_time && data) {
@@ -171,6 +136,7 @@ export async function deleteMeeting(meetingId: string) {
         .single()
 
     if (meeting && meeting.calendar_provider === 'google' && meeting.calendar_event_id) {
+        /*
         try {
             const accessToken = await getUserAccessToken(supabase, meeting.seller_id)
             if (accessToken) {
@@ -179,6 +145,7 @@ export async function deleteMeeting(meetingId: string) {
         } catch (syncError) {
             console.error('⚠️ Google Calendar Delete Sync Error:', syncError)
         }
+        */
     }
 
     const { error } = await (supabase

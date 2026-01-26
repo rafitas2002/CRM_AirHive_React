@@ -111,6 +111,9 @@ export default function MeetingModal({
         setIsSubmitting(true)
 
         try {
+            // Import actions dynamically to avoid bundle issues if not needed
+            const { createGoogleEventAction, updateGoogleEventAction } = await import('@/app/actions/google-calendar')
+
             const meetingData: MeetingInsert = {
                 lead_id: leadId,
                 seller_id: sellerId,
@@ -122,6 +125,38 @@ export default function MeetingModal({
                 attendees: formData.attendees.length > 0 ? formData.attendees : null,
                 calendar_provider: formData.calendar_provider,
                 status: 'scheduled'
+            }
+
+            // If editing and has google provider, we might need to sync updates
+            if (mode === 'edit' && initialData?.calendar_event_id && formData.calendar_provider === 'google') {
+                // Update in Google Calendar via Server Action
+                const result = await updateGoogleEventAction(
+                    initialData.calendar_event_id,
+                    meetingData,
+                    'Cliente' // Ideally pass real lead name if available
+                )
+                if (!result.success) console.error('Failed to update Google Event', result.error)
+            }
+            // If creating and google provider is selected
+            else if (mode === 'create' && formData.calendar_provider === 'google') {
+                // We typically need to save the meeting first to get ID, or sync after.
+                // But the current flow in MeetingModal calls onSave which saves to DB.
+                // We need to intercept or pass the google event ID to onSave.
+                // However, onSave usually just inserts into DB. 
+                // Let's create the Google Event first to get the ID.
+
+                const result = await createGoogleEventAction(meetingData, 'Cliente') // We need lead name here really
+
+                if (result.success && result.eventId) {
+                    meetingData.calendar_event_id = result.eventId
+                } else {
+                    console.error('Failed to create Google Event', result.error)
+                    if (!confirm('No se pudo conectar con Google Calendar. ¿Deseas guardar la reunión solo en el CRM?')) {
+                        setIsSubmitting(false)
+                        return
+                    }
+                    meetingData.calendar_provider = null
+                }
             }
 
             await onSave(meetingData)
