@@ -62,22 +62,43 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                                 </div>
                             </div>
 
-                            <div className='h-6 bg-gray-50 rounded-full overflow-hidden relative border border-gray-100 p-1'>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${Math.min(100, progress)}%` }}
-                                    transition={{ duration: 1.5, delay: index * 0.1, ease: 'easeOut' }}
-                                    className={`h-full rounded-full shadow-lg relative ${index === 0 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
+                            <div className='relative h-10 flex items-end'>
+                                <div className='h-6 w-full bg-gray-50 rounded-full overflow-hidden relative border border-gray-100 p-1'>
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${Math.min(100, progress)}%` }}
+                                        transition={{ duration: 1.5, delay: index * 0.1, ease: 'easeOut' }}
+                                        className={`h-full rounded-full shadow-lg relative ${index === 0 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
                                             index === 1 ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
                                                 'bg-gradient-to-r from-gray-400 to-gray-500'
-                                        }`}
+                                            }`}
+                                    >
+                                        {/* Particle effect at the end of the bar */}
+                                        <motion.div
+                                            animate={{ opacity: [0.5, 1, 0.5] }}
+                                            transition={{ repeat: Infinity, duration: 1 }}
+                                            className='absolute right-0 top-0 bottom-0 w-2 bg-white/30 rounded-full'
+                                        />
+                                    </motion.div>
+                                </div>
+
+                                { /* Runner Mascot - Outside the clipped div */}
+                                <motion.div
+                                    initial={{ left: '0%', scaleX: -1 }}
+                                    animate={{
+                                        left: `${Math.min(100, progress)}%`,
+                                        y: [0, -4, 0], // Bobbing up and down
+                                        rotate: [0, -5, 5, 0], // Slight running tilt
+                                        scaleX: -1
+                                    }}
+                                    transition={{
+                                        left: { duration: 4.5, delay: index * 0.2, ease: 'easeInOut' },
+                                        y: { repeat: Infinity, duration: 1.0, ease: 'easeInOut' },
+                                        rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' }
+                                    }}
+                                    className='absolute -top-1 -ml-4 text-2xl select-none pointer-events-none drop-shadow-md z-10'
                                 >
-                                    {/* Particle effect at the end of the bar */}
-                                    <motion.div
-                                        animate={{ opacity: [0.5, 1, 0.5] }}
-                                        transition={{ repeat: Infinity, duration: 1 }}
-                                        className='absolute right-0 top-0 bottom-0 w-2 bg-white/30 rounded-full'
-                                    />
+                                    🏃‍♂️
                                 </motion.div>
                             </div>
 
