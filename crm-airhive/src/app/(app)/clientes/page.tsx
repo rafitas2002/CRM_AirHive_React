@@ -7,7 +7,6 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
-import EmailComposerModal from '@/components/EmailComposerModal'
 import { Database } from '@/lib/supabase'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
@@ -88,15 +87,8 @@ export default function LeadsPage() {
     }
 
     const handleEmailClick = (email: string, name: string) => {
-        // If calendar is NOT connected, prompt to connect
-        if (!isCalendarConnected) {
-            if (confirm('Para enviar correos directamente desde el CRM, necesitas conectar tu cuenta de Google en la sección de Calendario. ¿Deseas ir ahora?')) {
-                router.push('/settings/cuentas') // Better UX: Go to settings/cuentas where the button is
-            }
-            return
-        }
-        setEmailRecipient({ email, name })
-        setIsEmailModalOpen(true)
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+        window.open(gmailUrl, '_blank')
     }
 
     // Memoized initial data to avoid reference changes on every render
@@ -562,12 +554,6 @@ export default function LeadsPage() {
                 isDestructive={true}
             />
 
-            <EmailComposerModal
-                isOpen={isEmailModalOpen}
-                onClose={() => setIsEmailModalOpen(false)}
-                recipientEmail={emailRecipient.email}
-                recipientName={emailRecipient.name}
-            />
         </div >
     )
 }

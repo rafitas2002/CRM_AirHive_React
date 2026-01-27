@@ -6,7 +6,6 @@ import PreLeadsTable from '@/components/PreLeadsTable'
 import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
-import EmailComposerModal from '@/components/EmailComposerModal'
 import { useAuth } from '@/lib/auth'
 
 export default function PreLeadsPage() {
@@ -71,14 +70,8 @@ export default function PreLeadsPage() {
     }
 
     const handleEmailClick = (email: string, name: string) => {
-        if (!isCalendarConnected) {
-            if (confirm('Para enviar correos directamente desde el CRM, necesitas conectar tu cuenta de Google en la sección de Calendario. ¿Deseas ir ahora?')) {
-                window.location.href = '/calendario'
-            }
-            return
-        }
-        setEmailRecipient({ email, name })
-        setIsEmailModalOpen(true)
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+        window.open(gmailUrl, '_blank')
     }
 
     const handleSave = async (data: any) => {
@@ -275,12 +268,6 @@ export default function PreLeadsPage() {
                 isDestructive
             />
 
-            <EmailComposerModal
-                isOpen={isEmailModalOpen}
-                onClose={() => setIsEmailModalOpen(false)}
-                recipientEmail={emailRecipient.email}
-                recipientName={emailRecipient.name}
-            />
         </div>
     )
 }
