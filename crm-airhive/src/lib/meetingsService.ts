@@ -1,12 +1,6 @@
 import { createClient } from './supabase'
 import { Database } from './supabase'
-// Google Calendar Service imports removed as logic moved to Server Actions
-// import {
-//     createGoogleCalendarEvent,
-//     updateGoogleCalendarEvent,
-//     deleteGoogleCalendarEvent,
-//     getUserAccessToken
-// } from './googleCalendarService'
+// Google Calendar Service logic moved to Server Actions
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
@@ -67,19 +61,7 @@ export async function createMeeting(meetingData: MeetingInsert) {
 
     const createdMeeting = data[0]
 
-    // Google Calendar Sync - DEPRECATED here
-    /*
-    if (meetingData.calendar_provider === 'google') {
-        try {
-            const accessToken = await getUserAccessToken(supabase, meetingData.seller_id)
-            if (accessToken) {
-                // ...
-            }
-        } catch (syncError) {
-            console.error('⚠️ Google Calendar Sync Error (non-critical):', syncError)
-        }
-    }
-    */
+    // Google Calendar Sync - Handled via Server Actions separately
 
     // Update lead's next_meeting_id if this is the next scheduled meeting
     try {
@@ -104,20 +86,7 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
         throw error
     }
 
-    // Google Calendar Sync Logic - DEPRECATED here, moved to Server Server Actions called from Client
-    // We keep the fields in DB but don't auto-sync here anymore to avoid double syncing or client-side issues.
-    /*
-    const hadEvent = !!data.calendar_event_id
-    const wantsSync = updates.calendar_provider === 'google' || (updates.calendar_provider === undefined && data.calendar_provider === 'google')
-    const stoppedSync = updates.calendar_provider === null && data.calendar_provider === 'google'
-
-    try {
-        const accessToken = await getUserAccessToken(supabase, data.seller_id)
-        // ... (removed sync logic)
-    } catch (syncError) {
-        console.error('⚠️ Google Calendar Sync Sync Error:', syncError)
-    }
-    */
+    // Google Calendar Sync - Handled via Server Actions separately
 
     // If start_time changed, update lead's next_meeting_id
     if (updates.start_time && data) {
@@ -135,18 +104,8 @@ export async function deleteMeeting(meetingId: string) {
         .eq('id', meetingId)
         .single()
 
-    if (meeting && meeting.calendar_provider === 'google' && meeting.calendar_event_id) {
-        /*
-        try {
-            const accessToken = await getUserAccessToken(supabase, meeting.seller_id)
-            if (accessToken) {
-                await deleteGoogleCalendarEvent(accessToken, meeting.calendar_event_id)
-            }
-        } catch (syncError) {
-            console.error('⚠️ Google Calendar Delete Sync Error:', syncError)
-        }
-        */
-    }
+    // Google Calendar Sync logic has been moved to Server Actions and is triggered separately
+    // We no longer sync directly here to avoid issues.
 
     const { error } = await (supabase
         .from('meetings') as any)

@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getUserAccessToken } from '@/lib/googleCalendarService'
-import { sendGmailMessage } from '@/lib/gmailService'
+import { sendGoogleEmailAction } from '@/app/actions/google-integration'
 
 interface EmailComposerModalProps {
     isOpen: boolean
@@ -30,29 +29,20 @@ export default function EmailComposerModal({
         setStatus('idle')
 
         try {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
+            const result = await sendGoogleEmailAction(recipientEmail, subject, body)
 
-            if (!user) throw new Error('Usuario no autenticado')
-
-            const accessToken = await getUserAccessToken(supabase, user.id)
-            if (!accessToken) {
-                throw new Error('No se encontró una conexión activa con Google. Favor de conectarla en el Calendario.')
+            if (result.success) {
+                setStatus('success')
+                setTimeout(() => {
+                    onClose()
+                    // Reset state after closing
+                    setSubject('')
+                    setBody('')
+                    setStatus('idle')
+                }, 2000)
+            } else {
+                throw new Error(result.error || 'Error al enviar el correo')
             }
-
-            // Convert plain text body to simple HTML (replace newlines with <br/>)
-            const htmlBody = body.replace(/\n/g, '<br/>')
-
-            await sendGmailMessage(accessToken, recipientEmail, subject, htmlBody)
-
-            setStatus('success')
-            setTimeout(() => {
-                onClose()
-                // Reset state after closing
-                setSubject('')
-                setBody('')
-                setStatus('idle')
-            }, 2000)
         } catch (error: any) {
             console.error('Error sending email:', error)
             setStatus('error')

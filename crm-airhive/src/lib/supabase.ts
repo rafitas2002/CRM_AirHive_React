@@ -395,34 +395,37 @@ export type Database = {
                     created_at?: string
                 }
             }
-            user_calendar_tokens: {
+            google_integrations: {
                 Row: {
+                    id: string
                     user_id: string
-                    provider: string
+                    email: string
                     access_token: string
                     refresh_token: string
                     expires_at: string
-                    email: string | null
+                    scope: string
                     created_at: string
                     updated_at: string
                 }
                 Insert: {
+                    id?: string
                     user_id: string
-                    provider: string
+                    email: string
                     access_token: string
                     refresh_token: string
                     expires_at: string
-                    email?: string | null
+                    scope: string
                     created_at?: string
                     updated_at?: string
                 }
                 Update: {
+                    id?: string
                     user_id?: string
-                    provider?: string
+                    email?: string
                     access_token?: string
                     refresh_token?: string
                     expires_at?: string
-                    email?: string | null
+                    scope?: string
                     created_at?: string
                     updated_at?: string
                 }

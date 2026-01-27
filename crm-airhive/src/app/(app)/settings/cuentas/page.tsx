@@ -1,125 +1,85 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient, Database } from '@/lib/supabase'
-import { useAuth } from '@/lib/auth'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { getGoogleAuthUrl, getGoogleConnectionStatus, disconnectGoogle } from '@/app/actions/google-integration'
 
 type ConnectionStatus = {
-    google: {
-        connected: boolean
-        email?: string
-        lastSync?: string
-    }
+    connected: boolean
+    email?: string
+    connectedAt?: string
 }
 
-type UserCalendarToken = Database['public']['Tables']['user_calendar_tokens']['Row']
-
 export default function CuentasPage() {
-    const auth = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
 
     // Check for errors from callback
-    const error = searchParams.get('error')
+    const error = searchParams.get('google_error') || searchParams.get('error')
     const statusParam = searchParams.get('status')
 
-    const [status, setStatus] = useState<ConnectionStatus>({
-        google: { connected: false }
-    })
+    const [status, setStatus] = useState<ConnectionStatus>({ connected: false })
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (auth.loggedIn) {
-            checkConnectionStatus()
-        }
-    }, [auth.loggedIn])
+        checkStatus()
+    }, [])
 
     useEffect(() => {
         if (statusParam === 'connected') {
-            alert('¡Cuenta conectada exitosamente!')
-            // clear params
-            window.history.replaceState({}, '', '/settings/cuentas')
-            checkConnectionStatus()
+            // Clear params
+            router.replace('/settings/cuentas')
+            checkStatus()
         } else if (error) {
-            alert(`Error al conectar: ${error}`)
+            alert(`Error al conectar con Google: ${error}`)
         }
-    }, [statusParam, error])
+    }, [statusParam, error, router])
 
-    const checkConnectionStatus = async () => {
-        if (!auth.user) return
-
+    const checkStatus = async () => {
         try {
-            const supabase = createClient()
-            const response = await supabase
-                .from('user_calendar_tokens')
-                .select('*')
-                .eq('user_id', auth.user.id)
-                .eq('provider', 'google')
-                .single()
-
-            // Explicit cast to avoid 'never' issue with build
-            const data = response.data as UserCalendarToken | null
-
+            const data = await getGoogleConnectionStatus()
             if (data) {
                 setStatus({
-                    google: {
-                        connected: true,
-                        email: data.email || undefined,
-                        lastSync: data.created_at ? new Date(data.created_at).toLocaleDateString() : undefined
-                    }
+                    connected: true,
+                    email: data.email,
+                    connectedAt: data.connectedAt
                 })
             } else {
-                setStatus({ google: { connected: false } })
+                setStatus({ connected: false })
             }
-        } catch (error) {
-            console.error('Error checking connection status:', error)
+        } catch (err) {
+            console.error('Error checking status:', err)
         } finally {
             setLoading(false)
         }
     }
 
-    const handleConnectGoogle = () => {
-        // Use the API route as callback to avoid mismatch errors and handle code on server
-        // This MUST match the authorized URI in Google Console
-        const redirectHere = typeof window !== 'undefined' ? `${window.location.origin}/api/auth/google/callback` : ''
-
-        // Manual override of getGoogleAuthUrl to force this page as callback
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        const params = new URLSearchParams({
-            client_id: clientId || '',
-            redirect_uri: redirectHere,
-            response_type: 'code',
-            scope: [
-                'https://www.googleapis.com/auth/calendar',
-                'https://www.googleapis.com/auth/calendar.events',
-                'https://www.googleapis.com/auth/gmail.send',
-                'openid',
-                'email'
-            ].join(' '),
-            access_type: 'offline',
-            prompt: 'select_account consent'
-        })
-
-        window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+    const handleConnectGoogle = async () => {
+        try {
+            const url = await getGoogleAuthUrl()
+            window.location.href = url
+        } catch (err) {
+            console.error('Error getting auth url:', err)
+            alert('Error al iniciar conexión')
+        }
     }
 
     const handleDisconnectGoogle = async () => {
         if (!confirm('¿Estás seguro de desconectar tu cuenta de Google? Dejarán de sincronizarse las reuniones.')) return
 
+        setLoading(true)
         try {
-            const supabase = createClient()
-            const { error } = await supabase
-                .from('user_calendar_tokens')
-                .delete()
-                .eq('user_id', auth.user!.id)
-
-            if (error) throw error
-
-            setStatus({ google: { connected: false } })
+            const result = await disconnectGoogle()
+            if (result.success) {
+                setStatus({ connected: false })
+            } else {
+                alert('Error al desconectar: ' + result.error)
+            }
         } catch (error) {
             console.error('Error deleting connection:', error)
             alert('Error al desconectar')
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -162,7 +122,7 @@ export default function CuentasPage() {
                             </div>
                         </div>
 
-                        {status.google.connected ? (
+                        {status.connected ? (
                             <span className='px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-300'>
                                 ✓ Conectado
                             </span>
@@ -194,10 +154,10 @@ export default function CuentasPage() {
                     </div>
 
                     <div>
-                        {status.google.connected ? (
+                        {status.connected ? (
                             <div className='flex items-center gap-4'>
                                 <div className='text-sm text-gray-500'>
-                                    {status.google.email && `Conectado como: ${status.google.email}`}
+                                    {status.email && `Conectado como: ${status.email}`}
                                 </div>
                                 <button
                                     onClick={handleDisconnectGoogle}

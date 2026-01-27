@@ -6,7 +6,7 @@ import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
 import { useAuth } from '@/lib/auth'
 import MeetingModal from '@/components/MeetingModal'
 import { updateMeeting, deleteMeeting } from '@/lib/meetingsService'
-import { getGoogleAuthUrl, getUserAccessToken } from '@/lib/googleCalendarService'
+import { getGoogleAuthUrl, getGoogleConnectionStatus } from '@/app/actions/google-integration'
 import { createClient } from '@/lib/supabase'
 
 import CalendarWeekView from '@/components/CalendarWeekView'
@@ -44,16 +44,9 @@ export default function CalendarioPage() {
 
     const fetchCalendarStatus = async () => {
         try {
-            if (!auth.user) return
-            const supabase = createClient()
-            const { data } = await supabase
-                .from('user_calendar_tokens')
-                .select('email')
-                .eq('user_id', auth.user.id)
-                .single()
-
-            if (data) {
-                setCalendarStatus({ connected: true, email: (data as any).email })
+            const status = await getGoogleConnectionStatus()
+            if (status) {
+                setCalendarStatus({ connected: true, email: status.email })
             }
         } catch (error) {
             console.error('Error fetching calendar status:', error)
@@ -88,8 +81,8 @@ export default function CalendarioPage() {
         }
     }
 
-    const handleConnectGoogle = () => {
-        const url = getGoogleAuthUrl()
+    const handleConnectGoogle = async () => {
+        const url = await getGoogleAuthUrl()
         window.location.href = url
     }
 

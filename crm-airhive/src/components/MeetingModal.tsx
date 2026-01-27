@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Database } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase'
-import { getUserAccessToken } from '@/lib/googleCalendarService'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -70,7 +69,7 @@ export default function MeetingModal({
             try {
                 const supabase = createClient()
                 const { data } = await supabase
-                    .from('user_calendar_tokens')
+                    .from('google_integrations')
                     .select('user_id')
                     .eq('user_id', sellerId)
                     .single()

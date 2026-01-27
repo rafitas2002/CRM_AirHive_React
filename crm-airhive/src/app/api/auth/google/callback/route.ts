@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exchangeCodeForTokenAction } from '@/app/actions/google-calendar'
+import { exchangeGoogleCode } from '@/app/actions/google-integration'
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const redirectUrl = new URL('/settings/cuentas', request.url)
 
     if (error) {
-        redirectUrl.searchParams.set('error', error)
+        redirectUrl.searchParams.set('google_error', error)
         return NextResponse.redirect(redirectUrl)
     }
 
@@ -18,11 +18,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(redirectUrl)
     }
 
-    // Construct the exactly matching redirect URI for verification
-    const callbackUrl = `${request.nextUrl.origin}${request.nextUrl.pathname}`
-
     try {
-        const result = await exchangeCodeForTokenAction(code, callbackUrl)
+        const result = await exchangeGoogleCode(code)
 
         if (result.success) {
             redirectUrl.searchParams.set('status', 'connected')

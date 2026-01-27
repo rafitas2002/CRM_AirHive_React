@@ -63,10 +63,10 @@ export default function PreLeadsPage() {
     const checkCalendarConnection = async () => {
         if (!auth.user) return
         const { data } = await supabase
-            .from('user_calendar_tokens')
+            .from('google_integrations')
             .select('id')
             .eq('user_id', auth.user.id)
-            .single()
+            .maybeSingle()
         setIsCalendarConnected(!!data)
     }
 

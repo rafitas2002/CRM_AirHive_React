@@ -79,10 +79,9 @@ export default function LeadsPage() {
 
     const checkCalendarConnection = async (userId: string) => {
         const { data } = await supabase
-            .from('user_calendar_tokens')
+            .from('google_integrations')
             .select('id')
             .eq('user_id', userId)
-            .eq('provider', 'google')
             .maybeSingle() // Use maybeSingle to avoid errors if multiple rows exist (though shouldn't)
 
         setIsCalendarConnected(!!data)
