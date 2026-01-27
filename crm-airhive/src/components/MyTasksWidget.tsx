@@ -21,8 +21,32 @@ export default function MyTasksWidget() {
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
 
+    useEffect(() => {
+        fetchTasks()
+
+        // Real-time listener for tasks changes
+        const channel = supabase
+            .channel('dashboard-tasks')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'tareas'
+                },
+                () => {
+                    console.log('Real-time task update in widget')
+                    fetchTasks()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [])
+
     const fetchTasks = async () => {
-        setLoading(true)
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
@@ -42,10 +66,6 @@ export default function MyTasksWidget() {
             setLoading(false)
         }
     }
-
-    useEffect(() => {
-        fetchTasks()
-    }, [])
 
     const toggleStatus = async (task: Task) => {
         const { error } = await (supabase
@@ -112,8 +132,8 @@ export default function MyTasksWidget() {
                                                 {new Date(task.fecha_vencimiento).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                                             </span>
                                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${task.prioridad === 'alta' ? 'bg-red-50 text-red-500' :
-                                                    task.prioridad === 'media' ? 'bg-amber-50 text-amber-500' :
-                                                        'bg-blue-50 text-blue-500'
+                                                task.prioridad === 'media' ? 'bg-amber-50 text-amber-500' :
+                                                    'bg-blue-50 text-blue-500'
                                                 }`}>
                                                 {task.prioridad}
                                             </span>

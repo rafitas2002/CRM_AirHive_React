@@ -103,23 +103,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const handleUserSession = async (authUser: User) => {
         setUser(authUser)
+
+        // 1. Instant Cache Check
+        const cacheKey = `airhive_profile_${authUser.id}`
+        const cached = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null
+
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached)
+                setProfile(parsed)
+                setLoading(false) // UNLOCK UI IMMEDIATELY
+            } catch (e) {
+                console.warn('Failed to parse cached profile')
+            }
+        }
+
         try {
-            // Fetch profile with timeout
-            const profilePromise = supabase
+            // 2. Background Revalidation (no timeout here to ensure data integrity)
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', authUser.id)
                 .single()
 
-            const { data, error } = await Promise.race([
-                profilePromise,
-                new Promise<any>(resolve => setTimeout(() => resolve({ error: { message: 'Timeout' } }), 5000))
-            ])
-
             if (data) {
                 setProfile(data)
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem(cacheKey, JSON.stringify(data))
+                }
             } else if (error) {
-                console.warn('Error fetching profile (or timeout):', error)
+                console.warn('Error fetching profile:', error)
             }
         } catch (err) {
             console.error('Unexpected error fetching profile:', err)
@@ -175,6 +188,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ])
         } catch (err) {
             console.error('Unexpected error signing out:', err)
+        }
+
+        // Clear cache
+        if (typeof window !== 'undefined' && user) {
+            localStorage.removeItem(`airhive_profile_${user.id}`)
         }
 
         setUser(null)

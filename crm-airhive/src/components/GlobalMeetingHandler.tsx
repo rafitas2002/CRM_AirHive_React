@@ -11,6 +11,7 @@ import {
 } from '@/lib/confirmationService'
 import MeetingConfirmationModal from './MeetingConfirmationModal'
 import { Bell, X, Calendar, Clock } from 'lucide-react'
+import { createClient } from '@/lib/supabase'
 
 export default function GlobalMeetingHandler() {
     const auth = useAuth()
@@ -18,6 +19,7 @@ export default function GlobalMeetingHandler() {
     const [activeAlerts, setActiveAlerts] = useState<any[]>([])
     const [showConfirmationModal, setShowConfirmationModal] = useState(false)
     const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
+    const [supabase] = useState(() => createClient())
 
     const checkUpdates = useCallback(async () => {
         if (!auth.user || auth.loading) return
@@ -69,15 +71,56 @@ export default function GlobalMeetingHandler() {
     useEffect(() => {
         if (!auth.user) return
 
-        // Request notification permission if not already granted
+        // 1. Initial Check
+        checkUpdates()
+
+        // 2. Real-time Subscription
+        const channel = supabase
+            .channel('global-notifications')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'meeting_alerts',
+                    filter: `user_id=eq.${auth.user.id}`
+                },
+                () => {
+                    console.log('Real-time alert change detected')
+                    checkUpdates()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'meetings',
+                    filter: `seller_id=eq.${auth.user.id}`
+                },
+                (payload) => {
+                    const newStatus = payload.new.meeting_status
+                    console.log('Real-time meeting status update:', newStatus)
+                    if (newStatus === 'pending_confirmation') {
+                        checkUpdates()
+                    }
+                }
+            )
+            .subscribe()
+
+        // Request notification permission
         if (Notification.permission === 'default') {
             Notification.requestPermission()
         }
 
-        checkUpdates()
-        const interval = setInterval(checkUpdates, 60 * 1000)
-        return () => clearInterval(interval)
-    }, [auth.user, checkUpdates])
+        // Keep 2min interval as a safety fallback, but much less frequent
+        const interval = setInterval(checkUpdates, 120 * 1000)
+
+        return () => {
+            supabase.removeChannel(channel)
+            clearInterval(interval)
+        }
+    }, [auth.user, checkUpdates, supabase])
 
     const handleConfirmMeeting = async (wasHeld: boolean, notes: string) => {
         if (!selectedMeeting || !auth.user) return

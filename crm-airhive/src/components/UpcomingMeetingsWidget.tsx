@@ -12,25 +12,42 @@ export default function UpcomingMeetingsWidget() {
 
     useEffect(() => {
         fetchMeetings()
+
+        // Real-time listener for meeting changes
+        const channel = supabase
+            .channel('dashboard-meetings')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'meetings'
+                },
+                () => {
+                    console.log('Real-time meeting update in widget')
+                    fetchMeetings()
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
     }, [])
 
     const fetchMeetings = async () => {
-        setLoading(true)
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) {
-                console.log('No user found')
                 setLoading(false)
                 return
             }
 
-            console.log('Fetching meetings for user:', user.id)
             const upcomingMeetings = await getUpcomingMeetings(user.id, 5)
-            console.log('Got meetings:', upcomingMeetings.length)
             setMeetings(upcomingMeetings)
         } catch (error) {
             console.error('Error in fetchMeetings:', error)
-            setMeetings([]) // Set empty array on error
+            setMeetings([])
         } finally {
             setLoading(false)
         }
