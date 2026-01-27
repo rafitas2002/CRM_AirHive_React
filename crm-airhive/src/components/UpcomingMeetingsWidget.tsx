@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getUpcomingMeetings, getUrgencyColor, type MeetingWithUrgency } from '@/lib/confirmationService'
+import { getUpcomingMeetings, getUrgencyColor, calculateMeetingUrgency, type MeetingWithUrgency } from '@/lib/confirmationService'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -9,6 +9,12 @@ export default function UpcomingMeetingsWidget() {
     const [meetings, setMeetings] = useState<MeetingWithUrgency[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
+    const [currentTime, setCurrentTime] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 10000)
+        return () => clearInterval(timer)
+    }, [])
 
     useEffect(() => {
         fetchMeetings()
@@ -94,7 +100,9 @@ export default function UpcomingMeetingsWidget() {
 
             <div className='space-y-3'>
                 {meetings.map((meeting) => {
-                    const urgency = getUrgencyColor(meeting.urgencyLevel || 'scheduled')
+                    // Recalculate status in real-time
+                    const { level, hoursUntil: liveHoursUntil } = calculateMeetingUrgency(meeting.start_time, meeting.duration_minutes, currentTime)
+                    const urgency = getUrgencyColor(level || 'scheduled')
                     const startTime = new Date(meeting.start_time)
 
                     return (
@@ -133,14 +141,14 @@ export default function UpcomingMeetingsWidget() {
                                 </div>
 
                                 {/* Time until */}
-                                {meeting.hoursUntil !== undefined && meeting.hoursUntil > 0 && (
+                                {liveHoursUntil !== undefined && liveHoursUntil > 0 && (
                                     <div className='text-right'>
                                         <p className={`text-xs font-bold ${urgency.text}`}>
-                                            {meeting.hoursUntil < 1
-                                                ? `${Math.round(meeting.hoursUntil * 60)} min`
-                                                : meeting.hoursUntil < 24
-                                                    ? `${Math.round(meeting.hoursUntil)} hrs`
-                                                    : `${Math.round(meeting.hoursUntil / 24)} días`}
+                                            {liveHoursUntil < 1
+                                                ? `${Math.round(liveHoursUntil * 60)} min`
+                                                : liveHoursUntil < 24
+                                                    ? `${Math.round(liveHoursUntil)} hrs`
+                                                    : `${Math.round(liveHoursUntil / 24)} días`}
                                         </p>
                                     </div>
                                 )}

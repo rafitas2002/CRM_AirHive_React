@@ -26,7 +26,7 @@ export async function confirmMeeting(
     try {
         console.log('Confirming meeting:', meetingId, 'Held:', wasHeld, 'User:', userId)
 
-        // 1. Get meeting with frozen probability (Fetch WITHOUT join first to be safe)
+        // 1. Get meeting with frozen probability
         const { data: meeting, error: meetingError } = await (supabase
             .from('meetings') as any)
             .select('*')
@@ -45,12 +45,9 @@ export async function confirmMeeting(
         let snapshotId: string | null = null
         let snapshotCreated = false
 
-        // 2. If meeting was held, create snapshot
-        // If frozen_probability_value is null, use current client probability (fallback)
         let frozenProbability = meeting.frozen_probability_value
 
         if (wasHeld && frozenProbability === null) {
-            // Fetch client probability separately
             const { data: clientData, error: clientError } = await supabase
                 .from('clientes')
                 .select('probabilidad')
@@ -66,18 +63,16 @@ export async function confirmMeeting(
         }
 
         if (wasHeld && frozenProbability !== null) {
-            // Get next snapshot number
             const { data: lastSnapshot } = await (supabase
                 .from('forecast_snapshots') as any)
                 .select('snapshot_number')
                 .eq('lead_id', meeting.lead_id)
                 .order('snapshot_number', { ascending: false })
                 .limit(1)
-                .single()
+                .maybeSingle()
 
             const snapshotNumber = lastSnapshot ? lastSnapshot.snapshot_number + 1 : 1
 
-            // Create snapshot with frozen value
             const { data: snapshot, error: snapshotError } = await (supabase
                 .from('forecast_snapshots') as any)
                 .insert({
@@ -102,7 +97,7 @@ export async function confirmMeeting(
         await (supabase
             .from('meetings') as any)
             .update({
-                status: 'completed', // Important: Mark as completed to prevent re-fetching as 'pending'
+                status: 'completed',
                 meeting_status: wasHeld ? 'held' : 'not_held',
                 confirmation_timestamp: new Date().toISOString(),
                 confirmed_by: userId,
@@ -110,7 +105,7 @@ export async function confirmMeeting(
             })
             .eq('id', meetingId)
 
-        // 4. Record confirmation in history
+        // 4. Record confirmation
         const confirmationData: MeetingConfirmation = {
             meeting_id: meetingId,
             confirmed_by: userId,
@@ -124,7 +119,7 @@ export async function confirmMeeting(
             .from('meeting_confirmations') as any)
             .insert(confirmationData)
 
-        // 5. Update lead's next_meeting_id and unlock probability if needed
+        // 5. Update lead's next_meeting_id
         const { data: nextMeeting } = await (supabase
             .from('meetings') as any)
             .select('id')
@@ -134,10 +129,9 @@ export async function confirmMeeting(
             .gt('start_time', new Date().toISOString())
             .order('start_time', { ascending: true })
             .limit(1)
-            .single()
+            .maybeSingle()
 
         if (nextMeeting) {
-            // Unlock probability for next meeting
             await (supabase
                 .from('clientes') as any)
                 .update({
@@ -146,7 +140,6 @@ export async function confirmMeeting(
                 })
                 .eq('id', meeting.lead_id)
         } else {
-            // No more meetings, unlock probability and clear next meeting
             await (supabase
                 .from('clientes') as any)
                 .update({
@@ -173,11 +166,6 @@ export async function confirmMeeting(
 
 export async function getPendingConfirmations(userId: string) {
     try {
-        console.log('Fetching pending confirmations for user:', userId)
-
-        // 1. Fetch meetings only (simplified query)
-        // Fetch both 'pending_confirmation' AND 'scheduled' meetings in the past
-        // But ONLY if the duration has passed
         const { data: meetings, error: meetingsError } = await (supabase
             .from('meetings') as any)
             .select('*')
@@ -190,11 +178,8 @@ export async function getPendingConfirmations(userId: string) {
             return []
         }
 
-        if (!meetings || meetings.length === 0) {
-            return []
-        }
+        if (!meetings || meetings.length === 0) return []
 
-        // Filter out meetings that are still "in progress"
         const now = new Date()
         const historicalMeetings = (meetings as Meeting[]).filter(m => {
             const start = new Date(m.start_time)
@@ -203,38 +188,23 @@ export async function getPendingConfirmations(userId: string) {
             return now > end || m.meeting_status === 'pending_confirmation'
         })
 
-        if (historicalMeetings.length === 0) {
-            return []
-        }
+        if (historicalMeetings.length === 0) return []
 
-        // 2. Fetch clients for these meetings
         const leadIds = Array.from(new Set(historicalMeetings.map(m => m.lead_id)))
-        // console.log('Fetching properties for leads:', leadIds) // Debug if needed
-
-        const { data: clients, error: clientsError } = await supabase
+        const { data: clients } = await supabase
             .from('clientes')
             .select('id, empresa, etapa')
             .in('id', leadIds)
-
-        if (clientsError) {
-            console.error('Error fetching clients for confirmations:', clientsError)
-        } else if (!clients || clients.length === 0) {
-            console.warn('No clients found for pending meetings. Lead IDs:', leadIds)
-        }
 
         const clientsMap = (clients || []).reduce((acc: any, client: any) => {
             acc[client.id] = client
             return acc
         }, {})
 
-        // 3. Combine data
-        const combined = (meetings as Meeting[]).map(meeting => ({
+        return historicalMeetings.map(meeting => ({
             ...meeting,
             clientes: clientsMap[meeting.lead_id] || { empresa: 'Desconocida', etapa: '-' }
         }))
-
-        console.log('Fetched pending confirmations:', combined.length)
-        return combined
     } catch (err) {
         console.error('Exception in getPendingConfirmations:', err)
         return []
@@ -268,11 +238,6 @@ export async function getPendingAlerts(userId: string) {
             .lte('alert_time', new Date().toISOString())
             .order('alert_time', { ascending: true })
 
-        if (error) {
-            console.error('Error fetching pending alerts:', JSON.stringify(error, null, 2))
-            return []
-        }
-
         return data || []
     } catch (err) {
         console.error('Exception in getPendingAlerts:', err)
@@ -281,37 +246,19 @@ export async function getPendingAlerts(userId: string) {
 }
 
 export async function dismissAlert(alertId: string) {
-    const { error } = await (supabase
-        .from('meeting_alerts') as any)
-        .update({
-            dismissed: true,
-            dismissed_at: new Date().toISOString()
-        })
-        .eq('id', alertId)
-
-    if (error) {
-        console.error('Error dismissing alert:', error)
-        throw error
-    }
-
-    return true
+    const { error } = await (supabase.from('meeting_alerts') as any).update({
+        dismissed: true,
+        dismissed_at: new Date().toISOString()
+    }).eq('id', alertId)
+    return !error
 }
 
 export async function markAlertAsSent(alertId: string) {
-    const { error } = await (supabase
-        .from('meeting_alerts') as any)
-        .update({
-            sent: true,
-            sent_at: new Date().toISOString()
-        })
-        .eq('id', alertId)
-
-    if (error) {
-        console.error('Error marking alert as sent:', error)
-        throw error
-    }
-
-    return true
+    const { error } = await (supabase.from('meeting_alerts') as any).update({
+        sent: true,
+        sent_at: new Date().toISOString()
+    }).eq('id', alertId)
+    return !error
 }
 
 // ============================================
@@ -326,211 +273,98 @@ export interface MeetingWithUrgency extends Meeting {
     seller_name?: string
 }
 
+export function calculateMeetingUrgency(startTimeStr: string, durationMinutes: number = 60, now: Date = new Date()): { level: MeetingWithUrgency['urgencyLevel']; hoursUntil: number } {
+    const startTime = new Date(startTimeStr)
+    const hoursUntil = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+    const durationMs = durationMinutes * 60 * 1000
+    const endTime = new Date(startTime.getTime() + durationMs)
+
+    let level: MeetingWithUrgency['urgencyLevel']
+
+    if (now >= startTime && now <= endTime) {
+        level = 'in_progress'
+    } else if (hoursUntil < 0) {
+        level = 'overdue'
+    } else if (hoursUntil < 2) {
+        level = 'urgent'
+    } else if (hoursUntil < 24) {
+        level = 'today'
+    } else if (hoursUntil < 48) {
+        level = 'soon'
+    } else {
+        level = 'scheduled'
+    }
+
+    return { level, hoursUntil }
+}
+
 export async function getUpcomingMeetings(userId: string, limit: number = 10, allMeetings: boolean = false, userEmail?: string): Promise<MeetingWithUrgency[]> {
     try {
-        console.log('Fetching upcoming meetings for user:', userId, 'Email:', userEmail, 'All meetings:', allMeetings)
-
-        // 1. Fetch meetings
-        let query = supabase
-            .from('meetings')
-            .select('*')
-
-        // If not viewing all (Admin filter or specific view), we filter by seller OR attendee
+        let query = supabase.from('meetings').select('*')
         if (!allMeetings) {
-            if (userEmail) {
-                // Fetch meetings where user is owner OR attendee
-                query = query.or(`seller_id.eq.${userId},attendees.cs.{"${userEmail}"}`)
-            } else {
-                query = query.eq('seller_id', userId)
-            }
+            if (userEmail) query = query.or(`seller_id.eq.${userId},attendees.cs.{"${userEmail}"}`)
+            else query = query.eq('seller_id', userId)
         }
 
-        const { data: meetings, error: meetingsError } = await query
+        const { data: meetings, error } = await query
             .eq('status', 'scheduled')
             .order('start_time', { ascending: true })
             .limit(limit * 2)
 
-        if (meetingsError) {
-            console.error('Error fetching upcoming meetings:', meetingsError)
-            console.error('Error details:', JSON.stringify(meetingsError, null, 2))
-            return []
-        }
+        if (error) return []
 
-        // Filter status manually
         const filteredMeetings = (meetings || []).filter((m: any) =>
             m.meeting_status === 'scheduled' || m.meeting_status === 'pending_confirmation'
         ).slice(0, limit)
 
-        if (filteredMeetings.length === 0) {
-            return []
-        }
+        if (filteredMeetings.length === 0) return []
 
-        // 2. Fetch clients
         const leadIds = Array.from(new Set(filteredMeetings.map((m: any) => m.lead_id)))
-        const { data: clients, error: clientsError } = await supabase
-            .from('clientes')
-            .select('id, empresa, etapa')
-            .in('id', leadIds)
+        const { data: clients } = await supabase.from('clientes').select('id, empresa, etapa').in('id', leadIds)
+        const clientsMap = (clients || []).reduce((acc: any, client: any) => { acc[client.id] = client; return acc }, {})
 
-        if (clientsError) {
-            console.error('Error fetching clients for meetings:', clientsError)
-        }
-
-        const clientsMap = (clients || []).reduce((acc: any, client: any) => {
-            acc[client.id] = client
-            return acc
-        }, {})
-
-        // 2.1 Fetch sellers (profiles) if viewing all meetings
         let sellersMap: Record<string, string> = {}
         if (allMeetings) {
             const sellerIds = Array.from(new Set(filteredMeetings.map((m: any) => m.seller_id)))
-            const { data: profiles, error: profilesError } = await supabase
-                .from('profiles')
-                .select('id, username, full_name')
-                .in('id', sellerIds)
-
-            if (!profilesError && profiles) {
-                sellersMap = profiles.reduce((acc: any, p: any) => {
-                    acc[p.id] = p.full_name || p.username || 'Desconocido'
-                    return acc
-                }, {})
-            }
+            const { data: profiles } = await supabase.from('profiles').select('id, username, full_name').in('id', sellerIds)
+            if (profiles) sellersMap = profiles.reduce((acc: any, p: any) => { acc[p.id] = p.full_name || p.username || 'Desconocido'; return acc }, {})
         }
 
-        // 3. Combine and calculate urgency
         const now = new Date()
         return filteredMeetings.map((meeting: any) => {
             const client = clientsMap[meeting.lead_id]
-            const startTime = new Date(meeting.start_time)
-            const hoursUntil = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-
-            let urgencyLevel: 'overdue' | 'urgent' | 'today' | 'soon' | 'scheduled' | 'in_progress'
-
-            // Calculate end time (default duration 60 mins if missing)
-            const durationMs = (meeting.duration_minutes || 60) * 60 * 1000
-            const endTime = new Date(startTime.getTime() + durationMs)
-
-            if (now >= startTime && now <= endTime) {
-                urgencyLevel = 'in_progress'
-            } else if (hoursUntil < 0) {
-                urgencyLevel = 'overdue'
-            } else if (hoursUntil < 2) {
-                urgencyLevel = 'urgent'
-            } else if (hoursUntil < 24) {
-                urgencyLevel = 'today'
-            } else if (hoursUntil < 48) {
-                urgencyLevel = 'soon'
-            } else {
-                urgencyLevel = 'scheduled'
-            }
-
+            const { level, hoursUntil } = calculateMeetingUrgency(meeting.start_time, meeting.duration_minutes, now)
             return {
                 ...meeting,
                 empresa: client?.empresa,
                 etapa: client?.etapa,
                 hoursUntil,
-                urgencyLevel,
+                urgencyLevel: level,
                 seller_name: sellersMap[meeting.seller_id]
             }
         })
     } catch (err) {
-        console.error('Exception in getUpcomingMeetings:', err)
         return []
     }
 }
 
-// ============================================
-// Urgency Helper
-// ============================================
-
-export function getUrgencyColor(urgencyLevel: string): {
-    bg: string
-    border: string
-    text: string
-    label: string
-} {
+export function getUrgencyColor(urgencyLevel: string): { bg: string, border: string, text: string, label: string } {
     switch (urgencyLevel) {
-        case 'in_progress':
-            return {
-                bg: 'bg-indigo-100',
-                border: 'border-indigo-500',
-                text: 'text-indigo-800',
-                label: 'En transcurso'
-            }
-        case 'overdue':
-            return {
-                bg: 'bg-red-100',
-                border: 'border-red-500',
-                text: 'text-red-800',
-                label: 'Vencida'
-            }
-        case 'urgent':
-            return {
-                bg: 'bg-orange-100',
-                border: 'border-orange-500',
-                text: 'text-orange-800',
-                label: 'Urgente'
-            }
-        case 'today':
-            return {
-                bg: 'bg-yellow-100',
-                border: 'border-yellow-500',
-                text: 'text-yellow-800',
-                label: 'Hoy'
-            }
-        case 'soon':
-            return {
-                bg: 'bg-blue-100',
-                border: 'border-blue-400',
-                text: 'text-blue-800',
-                label: 'Próxima'
-            }
-        default:
-            return {
-                bg: 'bg-gray-100',
-                border: 'border-gray-300',
-                text: 'text-gray-700',
-                label: 'Programada'
-            }
+        case 'in_progress': return { bg: 'bg-indigo-100', border: 'border-indigo-500', text: 'text-indigo-800', label: 'En transcurso' }
+        case 'overdue': return { bg: 'bg-red-100', border: 'border-red-500', text: 'text-red-800', label: 'Vencida' }
+        case 'urgent': return { bg: 'bg-orange-100', border: 'border-orange-500', text: 'text-orange-800', label: 'Urgente' }
+        case 'today': return { bg: 'bg-yellow-100', border: 'border-yellow-500', text: 'text-yellow-800', label: 'Hoy' }
+        case 'soon': return { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800', label: 'Próxima' }
+        default: return { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-700', label: 'Programada' }
     }
 }
 
-export function getStageColor(etapa: string): {
-    bg: string
-    border: string
-    text: string
-} {
+export function getStageColor(etapa: string): { bg: string, border: string, text: string } {
     switch (etapa) {
-        case 'Negociación':
-            return {
-                bg: 'bg-amber-100',
-                border: 'border-amber-400',
-                text: 'text-amber-800'
-            }
-        case 'Prospección':
-            return {
-                bg: 'bg-blue-100',
-                border: 'border-blue-400',
-                text: 'text-blue-800'
-            }
-        case 'Cerrado Ganado':
-            return {
-                bg: 'bg-emerald-100',
-                border: 'border-emerald-400',
-                text: 'text-emerald-800'
-            }
-        case 'Cerrado Perdido':
-            return {
-                bg: 'bg-gray-100',
-                border: 'border-gray-400',
-                text: 'text-gray-800'
-            }
-        default:
-            return {
-                bg: 'bg-gray-100',
-                border: 'border-gray-300',
-                text: 'text-gray-700'
-            }
+        case 'Negociación': return { bg: 'bg-amber-100', border: 'border-amber-400', text: 'text-amber-800' }
+        case 'Prospección': return { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-800' }
+        case 'Cerrado Ganado': return { bg: 'bg-emerald-100', border: 'border-emerald-400', text: 'text-emerald-800' }
+        case 'Cerrado Perdido': return { bg: 'bg-gray-100', border: 'border-gray-400', text: 'text-gray-800' }
+        default: return { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-700' }
     }
 }

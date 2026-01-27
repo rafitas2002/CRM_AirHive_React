@@ -113,8 +113,8 @@ export default function GlobalMeetingHandler() {
             Notification.requestPermission()
         }
 
-        // Keep 2min interval as a safety fallback, but much less frequent
-        const interval = setInterval(checkUpdates, 120 * 1000)
+        // Hyper-reactive check: Every 15 seconds to catch meetings ending in real-time
+        const interval = setInterval(checkUpdates, 15 * 1000)
 
         return () => {
             supabase.removeChannel(channel)

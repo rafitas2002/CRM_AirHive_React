@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getUpcomingMeetings, type MeetingWithUrgency } from '@/lib/confirmationService'
+import { getUpcomingMeetings, type MeetingWithUrgency, calculateMeetingUrgency } from '@/lib/confirmationService'
 import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
 import { useAuth } from '@/lib/auth'
 import MeetingModal from '@/components/MeetingModal'
@@ -240,7 +240,9 @@ export default function CalendarioPage() {
                                             </div>
                                             <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
                                                 {dayMeetings.map((meeting) => {
-                                                    const urgency = getUrgencyColor(meeting.urgencyLevel || 'scheduled')
+                                                    // Recalculate urgency in real-time using the clock state
+                                                    const { level: currentUrgencyLevel } = calculateMeetingUrgency(meeting.start_time, meeting.duration_minutes, currentTime)
+                                                    const urgency = getUrgencyColor(currentUrgencyLevel || 'scheduled')
                                                     const stage = getStageColor(meeting.etapa || '')
                                                     const startTime = new Date(meeting.start_time)
 
