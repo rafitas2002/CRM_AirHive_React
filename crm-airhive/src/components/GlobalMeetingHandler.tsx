@@ -9,6 +9,7 @@ import {
     markAlertAsSent,
     dismissAlert
 } from '@/lib/confirmationService'
+import { freezeMeetingProbability } from '@/lib/meetingsService'
 import MeetingConfirmationModal from './MeetingConfirmationModal'
 import { Bell, X, Calendar, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -29,6 +30,23 @@ export default function GlobalMeetingHandler() {
         if (auth.profile?.role === 'admin') return
 
         try {
+            // 0. Freeze meetings starting NOW
+            const nowIso = new Date().toISOString()
+            const { data: startingMeetings } = await (createClient()
+                .from('meetings') as any)
+                .select('id, lead_id')
+                .eq('seller_id', auth.user.id)
+                .eq('meeting_status', 'scheduled')
+                .lte('start_time', nowIso)
+                .is('frozen_probability_value', null)
+
+            if (startingMeetings && startingMeetings.length > 0) {
+                console.log(`❄️ Freezing ${startingMeetings.length} starting meetings`)
+                for (const mtg of startingMeetings) {
+                    await freezeMeetingProbability(mtg.id, mtg.lead_id)
+                }
+            }
+
             // 1. Check for pending confirmations
             const pending = await getPendingConfirmations(auth.user.id)
             setPendingConfirmations(pending)

@@ -253,23 +253,59 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         .from('clientes') as any)
         .update({
             probability_locked: true,
-            last_snapshot_at: meeting.start_time
+            last_snapshot_at: meeting.start_time,
+            next_meeting_id: null // Clear this as this meeting just started/snapshotted
         })
         .eq('id', leadId)
 
-    // Check for next meeting and unlock if exists
-    const nextMeeting = await getNextMeeting(leadId)
-    if (nextMeeting) {
-        await (supabase
-            .from('clientes') as any)
-            .update({
-                probability_locked: false,
-                next_meeting_id: nextMeeting.id
-            })
-            .eq('id', leadId)
-    }
+    // Check for future meetings and update next_meeting_id if exists
+    // (This will also potentially unlock if updateLeadNextMeeting is called)
+    await updateLeadNextMeeting(leadId)
 
     return snapshot
+}
+
+export async function freezeMeetingProbability(meetingId: string, leadId: number): Promise<boolean> {
+    try {
+        console.log(`❄️ Freezing probability for meeting ${meetingId} (Lead ${leadId})`)
+
+        // 1. Get current lead probability
+        const { data: lead, error: leadError } = await (supabase
+            .from('clientes') as any)
+            .select('probabilidad, owner_id')
+            .eq('id', leadId)
+            .single()
+
+        if (leadError || !lead) {
+            console.error('Error fetching lead for freezing:', leadError)
+            return false
+        }
+
+        // 2. Update meeting with the frozen value
+        const { error: updateError } = await (supabase
+            .from('meetings') as any)
+            .update({
+                frozen_probability_value: lead.probabilidad || 50
+            })
+            .eq('id', meetingId)
+
+        if (updateError) {
+            console.error('Error updating meeting with frozen value:', updateError)
+            return false
+        }
+
+        // 3. Lock the lead's probability field in the DB
+        await (supabase
+            .from('clientes') as any)
+            .update({ probability_locked: true })
+            .eq('id', leadId)
+
+        console.log('✅ Probability frozen and locked successfully')
+        return true
+    } catch (err) {
+        console.error('Exception in freezeMeetingProbability:', err)
+        return false
+    }
 }
 
 export async function getLeadSnapshots(leadId: number): Promise<Snapshot[]> {
@@ -320,7 +356,7 @@ export async function isProbabilityEditable(
         }
     }
 
-    // 2. User must be the owner
+    // 2. User must be the owner (unless admin, but for now strict)
     if (lead.owner_id !== currentUserId) {
         return {
             editable: false,
@@ -328,32 +364,35 @@ export async function isProbabilityEditable(
         }
     }
 
-    // 3. Check if there's a next meeting
+    // 3. Check for the absolute next meeting (scheduled and in the future)
     const nextMeeting = await getNextMeeting(lead.id)
 
     if (!nextMeeting) {
-        // User request: Should be editable even without a scheduled meeting
-        // (Unless we want to force scheduling, but user said "nunca bloquear")
+        // No future meetings scheduled means we can edit
         return {
             editable: true,
             nextMeeting: null
         }
     }
 
-    // 4. Check if meeting is CURRENTLY happening (Lock ONLY during meeting)
+    // 4. Check if meeting is CURRENTLY happening (Lock ONLY during core meeting time)
     const now = new Date()
     const meetingStart = new Date(nextMeeting.start_time)
     const durationMs = (nextMeeting.duration_minutes || 60) * 60 * 1000
     const meetingEnd = new Date(meetingStart.getTime() + durationMs)
 
-    if (now >= meetingStart && now <= meetingEnd) {
+    // Safety margin: Lock 5 minutes before and until it ends
+    const lockStart = new Date(meetingStart.getTime() - 5 * 60 * 1000)
+
+    if (now >= lockStart && now <= meetingEnd) {
         return {
             editable: false,
-            reason: 'La reunión está en curso. El pronóstico está temporalmente congelado.',
+            reason: 'La reunión está por iniciar o en curso. El pronóstico está temporalmente congelado.',
             nextMeeting
         }
     }
 
+    // If it's in the future and not starting in the next 5 mins, it's editable
     return {
         editable: true,
         nextMeeting
@@ -361,27 +400,28 @@ export async function isProbabilityEditable(
 }
 
 export async function updateLeadNextMeeting(leadId: number) {
+    console.log('🔄 Updating next_meeting_id for lead:', leadId)
+
     const nextMeeting = await getNextMeeting(leadId)
 
     const updates: any = {
         next_meeting_id: nextMeeting?.id || null
     }
 
-    // If there's a next meeting and lead is in Negociación, unlock probability
-    const { data: lead } = await (supabase
-        .from('clientes') as any)
-        .select('etapa')
-        .eq('id', leadId)
-        .single()
+    // IMPORTANT: If a next meeting exists, we MUST unlock it so the user can prepare
+    // the forecast for THAT meeting. 
+    // The only time it should be locked is DURING the meeting (handled by isProbabilityEditable)
+    // or if the DB flag probability_locked is true (which should only happen until next meeting is set)
 
-    if (lead?.etapa === 'Negociación') {
-        updates.probability_locked = !nextMeeting
-    }
+    // We unlock whenever a new meeting is found or if there's no meeting at all (to avoid getting stuck)
+    updates.probability_locked = false
 
     await (supabase
         .from('clientes') as any)
         .update(updates)
         .eq('id', leadId)
+
+    console.log('✅ Lead updated. Next meeting:', nextMeeting?.id || 'None', 'Unlocked: true')
 }
 
 // ============================================

@@ -371,8 +371,22 @@ export default function ClientModal({
                                 value={formData.probabilidad || 50}
                                 onChange={(e) => setFormData({ ...formData, probabilidad: Number(e.target.value) })}
                                 disabled={!isProbEditable}
-                                className='w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-600'
+                                className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-600 ${!isProbEditable ? 'opacity-30 grayscale cursor-not-allowed' : 'bg-gray-100'}`}
                             />
+                            {!isProbEditable && editabilityReason && (
+                                <div className='p-3 bg-amber-50 rounded-xl border border-amber-100'>
+                                    <p className='text-[9px] font-bold text-amber-700 leading-tight'>
+                                        ⚠️ {editabilityReason}
+                                    </p>
+                                    <button
+                                        type='button'
+                                        onClick={() => setIsProbEditable(true)}
+                                        className='text-[8px] font-black text-amber-900 border-b border-amber-900 mt-2 hover:text-amber-600 transition-colors uppercase'
+                                    >
+                                        Forzar Desbloqueo Manual
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         <div className='space-y-4'>

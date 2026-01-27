@@ -119,35 +119,29 @@ export async function confirmMeeting(
             .from('meeting_confirmations') as any)
             .insert(confirmationData)
 
-        // 5. Update lead's next_meeting_id
-        const { data: nextMeeting } = await (supabase
+        // 5. Update lead's next_meeting_id and UNLOCK probability
+        const nowStr = new Date().toISOString()
+        const { data: nextMeeting, error: nextError } = await (supabase
             .from('meetings') as any)
             .select('id')
             .eq('lead_id', meeting.lead_id)
             .eq('status', 'scheduled')
-            .eq('meeting_status', 'scheduled')
-            .gt('start_time', new Date().toISOString())
+            .gt('start_time', nowStr)
             .order('start_time', { ascending: true })
             .limit(1)
             .maybeSingle()
 
-        if (nextMeeting) {
-            await (supabase
-                .from('clientes') as any)
-                .update({
-                    probability_locked: false,
-                    next_meeting_id: nextMeeting.id
-                })
-                .eq('id', meeting.lead_id)
-        } else {
-            await (supabase
-                .from('clientes') as any)
-                .update({
-                    probability_locked: false,
-                    next_meeting_id: null
-                })
-                .eq('id', meeting.lead_id)
-        }
+        if (nextError) console.error('Error finding next meeting after confirmation:', nextError)
+
+        console.log('🔓 Unlocking lead and setting next meeting:', nextMeeting?.id || 'None')
+
+        await (supabase
+            .from('clientes') as any)
+            .update({
+                probability_locked: false, // Always unlock after confirmation so they can prepare for the next one
+                next_meeting_id: nextMeeting?.id || null
+            })
+            .eq('id', meeting.lead_id)
 
         return {
             success: true,
