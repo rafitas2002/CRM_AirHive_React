@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Database } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase'
+import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -46,7 +47,7 @@ export default function MeetingModal({
             if (initialData) {
                 setFormData({
                     title: initialData.title || '',
-                    start_time: initialData.start_time ? new Date(initialData.start_time).toISOString().slice(0, 16) : '',
+                    start_time: toLocalISOString(initialData.start_time),
                     duration_minutes: initialData.duration_minutes || 60,
                     meeting_type: initialData.meeting_type || 'video',
                     notes: initialData.notes || '',
@@ -117,7 +118,7 @@ export default function MeetingModal({
                 lead_id: leadId,
                 seller_id: sellerId,
                 title: formData.title,
-                start_time: new Date(formData.start_time).toISOString(),
+                start_time: fromLocalISOString(formData.start_time).toISOString(),
                 duration_minutes: formData.duration_minutes,
                 meeting_type: formData.meeting_type,
                 notes: formData.notes || null,
