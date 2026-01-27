@@ -21,10 +21,11 @@ export async function getValidAccessToken(userId: string) {
     }
 
     // Check expiration (buffer of 5 mins)
-    const expiresAt = new Date(data.expires_at).getTime()
+    const integrationData = data as any
+    const expiresAt = new Date(integrationData.expires_at).getTime()
     const now = Date.now()
     if (expiresAt - now > 5 * 60 * 1000) {
-        return data.access_token
+        return integrationData.access_token
     }
 
     console.log('Refreshing Google Token for user:', userId)
@@ -39,7 +40,7 @@ export async function getValidAccessToken(userId: string) {
             body: new URLSearchParams({
                 client_id: GOOGLE_CLIENT_ID,
                 client_secret: GOOGLE_CLIENT_SECRET,
-                refresh_token: data.refresh_token,
+                refresh_token: integrationData.refresh_token,
                 grant_type: 'refresh_token',
             }),
         })
@@ -54,14 +55,14 @@ export async function getValidAccessToken(userId: string) {
 
         // Update DB
         const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-        const { error: updateError } = await supabase
-            .from('google_integrations')
+        const { error: updateError } = await (supabase
+            .from('google_integrations') as any)
             .update({
                 access_token: tokens.access_token,
                 expires_at: newExpiresAt,
                 updated_at: new Date().toISOString()
             })
-            .eq('id', data.id)
+            .eq('id', integrationData.id)
 
         if (updateError) {
             console.error('Error updating refreshed token:', updateError)

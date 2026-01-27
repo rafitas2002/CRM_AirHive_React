@@ -8,7 +8,7 @@ import { sendGmailMessage } from '@/lib/gmailService'
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
 // Fallback for Vercel where it might be named without NEXT_PUBLIC
-const GOOGLE_REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI!
+const GOOGLE_REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI || ''
 
 export async function getGoogleAuthUrl() {
     const scopes = [
@@ -23,9 +23,9 @@ export async function getGoogleAuthUrl() {
         client_id: GOOGLE_CLIENT_ID,
         redirect_uri: GOOGLE_REDIRECT_URI,
         response_type: 'code',
-        access_type: 'offline', // crucial for refresh token
-        prompt: 'consent', // force consent to get refresh token
-        scope: scopes.join(' ')
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: scopes.join(' '),
     })
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
@@ -79,8 +79,8 @@ export async function exchangeGoogleCode(code: string) {
         const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
         // 4. Save to Database
-        const { error: dbError } = await supabase
-            .from('google_integrations')
+        const { error: dbError } = await (supabase
+            .from('google_integrations') as any)
             .upsert({
                 user_id: user.id,
                 email: googleUser.email,
@@ -118,10 +118,11 @@ export async function getGoogleConnectionStatus() {
 
     if (error || !data) return null
 
+    const integrationData = data as any
     return {
         connected: true,
-        email: data.email,
-        connectedAt: data.created_at
+        email: integrationData.email,
+        connectedAt: integrationData.created_at
     }
 }
 

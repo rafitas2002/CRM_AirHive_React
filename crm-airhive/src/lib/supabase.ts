@@ -395,6 +395,41 @@ export type Database = {
                     created_at?: string
                 }
             }
+            empresas: {
+                Row: {
+                    id: string
+                    nombre: string
+                    industria: string | null
+                    ubicacion: string | null
+                    sitio_web: string | null
+                    tamano: number | null
+                    owner_id: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    nombre: string
+                    industria?: string | null
+                    ubicacion?: string | null
+                    sitio_web?: string | null
+                    tamano?: number | null
+                    owner_id?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    nombre?: string
+                    industria?: string | null
+                    ubicacion?: string | null
+                    sitio_web?: string | null
+                    tamano?: number | null
+                    owner_id?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
             google_integrations: {
                 Row: {
                     id: string
