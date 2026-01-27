@@ -25,9 +25,10 @@ export default function GlobalMeetingHandler() {
     const checkUpdates = useCallback(async () => {
         if (!auth.user || auth.loading) return
 
-        // ADM REQ: Don't show global popups/alerts to admins
-        // They can still see meetings in the dashboard but won't be interrupted
-        if (auth.profile?.role === 'admin') return
+        // ADM REQ: Don't show global popups/alerts to admins unless they are the seller
+        // The underlying services (getPendingConfirmations, etc) already filter by seller_id
+        // which naturally allows an admin-seller to see their own alerts.
+        // We'll proceed without the global admin block.
 
         try {
             // 0. Freeze meetings starting NOW

@@ -94,7 +94,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
             if (snapshot) {
                 return <span className='px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full'>✅ Snapshot capturado</span>
             } else {
-                return <span className='px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full'>⏳ Procesando...</span>
+                return <span className='px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full'>⏳ Esperando confirmación</span>
             }
         }
 
@@ -129,8 +129,8 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                     <div
                         key={meeting.id}
                         className={`p-4 rounded-lg border-2 transition-all ${isUpcoming && meeting.status === 'scheduled'
-                                ? 'bg-blue-50 border-blue-200'
-                                : 'bg-white border-gray-200'
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-white border-gray-200'
                             }`}
                     >
                         <div className='flex items-start justify-between gap-3'>
