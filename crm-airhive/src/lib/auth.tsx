@@ -69,7 +69,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     }
                 }
 
-                const { data: { session } } = await supabase.auth.getSession()
+                const sessionPromise = supabase.auth.getSession()
+                const { data: { session }, error: sessionError } = await Promise.race([
+                    sessionPromise,
+                    new Promise<any>(resolve => setTimeout(() => resolve({ data: { session: null }, error: { message: 'Timeout' } }), 5000))
+                ])
+
                 if (session?.user) {
                     await handleUserSession(session.user)
                 } else {
@@ -119,12 +124,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            // 2. Background Revalidation (no timeout here to ensure data integrity)
-            const { data, error } = await supabase
+            // 2. Background Revalidation with Timeout
+            const profilePromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', authUser.id)
                 .single()
+
+            const { data, error } = await Promise.race([
+                profilePromise,
+                new Promise<any>(resolve => setTimeout(() => resolve({ error: { message: 'Timeout' } }), 5000))
+            ])
 
             if (data) {
                 setProfile(data)
@@ -132,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     localStorage.setItem(cacheKey, JSON.stringify(data))
                 }
             } else if (error) {
-                console.warn('Error fetching profile:', error)
+                console.warn('Error fetching profile (or timeout):', error)
             }
         } catch (err) {
             console.error('Unexpected error fetching profile:', err)
