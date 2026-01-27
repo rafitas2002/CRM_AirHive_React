@@ -64,6 +64,7 @@ export default function LeadsPage() {
     // Email Composer State
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
     const [emailRecipient, setEmailRecipient] = useState({ email: '', name: '' })
+    const [connectedGoogleEmail, setConnectedGoogleEmail] = useState<string | null>(null)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
 
     // Sorting State
@@ -77,17 +78,29 @@ export default function LeadsPage() {
     }, [user, authLoading])
 
     const checkCalendarConnection = async (userId: string) => {
-        const { data } = await supabase
-            .from('google_integrations')
-            .select('id')
+        const { data } = await (supabase
+            .from('google_integrations') as any)
+            .select('email')
             .eq('user_id', userId)
-            .maybeSingle() // Use maybeSingle to avoid errors if multiple rows exist (though shouldn't)
+            .maybeSingle()
 
-        setIsCalendarConnected(!!data)
+        if (data) {
+            setIsCalendarConnected(true)
+            setConnectedGoogleEmail(data.email)
+        } else {
+            setIsCalendarConnected(false)
+            setConnectedGoogleEmail(null)
+        }
     }
 
     const handleEmailClick = (email: string, name: string) => {
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+        // Prepare Gmail URL with authuser to force the correct account
+        let gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+
+        if (connectedGoogleEmail) {
+            gmailUrl += `&authuser=${encodeURIComponent(connectedGoogleEmail)}`
+        }
+
         window.open(gmailUrl, '_blank')
     }
 
