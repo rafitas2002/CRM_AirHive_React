@@ -493,7 +493,7 @@ export default function ClientDetailView({
                     onClose={() => setIsMeetingModalOpen(false)}
                     onSave={handleCreateMeeting}
                     leadId={client.id}
-                    sellerId={currentUser.id}
+                    sellerId={client.owner_id || currentUser.id}
                 />
             )}
             <TaskModal

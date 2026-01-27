@@ -22,6 +22,10 @@ export default function GlobalMeetingHandler() {
     const checkUpdates = useCallback(async () => {
         if (!auth.user || auth.loading) return
 
+        // ADM REQ: Don't show global popups/alerts to admins
+        // They can still see meetings in the dashboard but won't be interrupted
+        if (auth.profile?.role === 'admin') return
+
         try {
             // 1. Check for pending confirmations
             const pending = await getPendingConfirmations(auth.user.id)
