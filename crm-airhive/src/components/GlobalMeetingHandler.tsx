@@ -10,6 +10,7 @@ import {
     dismissAlert
 } from '@/lib/confirmationService'
 import { freezeMeetingProbability } from '@/lib/meetingsService'
+import { syncGoogleEventsAction } from '@/app/actions/google-calendar'
 import MeetingConfirmationModal from './MeetingConfirmationModal'
 import { Bell, X, Calendar, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -92,6 +93,15 @@ export default function GlobalMeetingHandler() {
 
         // 1. Initial Check
         checkUpdates()
+        // Immediate sync-back on load
+        syncGoogleEventsAction(auth.user.id).then(res => {
+            if (res.success && res.updatedCount && res.updatedCount > 0) {
+                console.log(`✅ Auto-synced ${res.updatedCount} events from Google`)
+                // If meetings changed, we might want to refresh UI data, 
+                // but since this is a global handler, usually pages have their own loaders.
+                // However, checkUpdates already handles frozen probabilities etc.
+            }
+        })
 
         // 2. Real-time Subscription
         const channel = supabase
@@ -135,9 +145,17 @@ export default function GlobalMeetingHandler() {
         // Hyper-reactive check: Every 15 seconds to catch meetings ending in real-time
         const interval = setInterval(checkUpdates, 15 * 1000)
 
+        // Sync-back check: Every 5 minutes (to avoid Google API rate limits/unnecessary load)
+        const syncInterval = setInterval(() => {
+            if (auth.user) {
+                syncGoogleEventsAction(auth.user.id)
+            }
+        }, 5 * 60 * 1000)
+
         return () => {
             supabase.removeChannel(channel)
             clearInterval(interval)
+            clearInterval(syncInterval)
         }
     }, [auth.user, checkUpdates, supabase])
 
