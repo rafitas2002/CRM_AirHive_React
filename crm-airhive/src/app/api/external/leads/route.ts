@@ -21,8 +21,8 @@ export async function POST(request: Request) {
 
         const supabase = createAdminClient()
 
-        const { data, error } = await supabase
-            .from('clientes')
+        const { data, error } = await (supabase
+            .from('clientes') as any)
             .insert([{
                 empresa,
                 nombre,
