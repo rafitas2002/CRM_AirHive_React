@@ -29,6 +29,10 @@ export default function CalendarioPage() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
     const [meetingToDelete, setMeetingToDelete] = useState<any>(null)
 
+    // Alert Modal State (for errors)
+    const [isAlertModalOpen, setIsAlertModalOpen] = useState(false)
+    const [alertConfig, setAlertConfig] = useState({ title: '', message: '' })
+
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
         return () => clearInterval(timer)
@@ -104,12 +108,20 @@ export default function CalendarioPage() {
             if (res.success) {
                 await fetchData()
             } else {
-                alert(res.error || 'Error al eliminar la reunión')
+                setAlertConfig({
+                    title: 'Error al eliminar',
+                    message: res.error || 'No se pudo eliminar la reunión. Inténtalo de nuevo.'
+                })
+                setIsAlertModalOpen(true)
             }
             setMeetingToDelete(null)
         } catch (error) {
             console.error('Error deleting meeting:', error)
-            alert('Error al eliminar la reunión')
+            setAlertConfig({
+                title: 'Error Inesperado',
+                message: 'Ocurrió un error al procesar la solicitud.'
+            })
+            setIsAlertModalOpen(true)
         }
     }
 
@@ -355,6 +367,14 @@ export default function CalendarioPage() {
                 title="Eliminar Reunión"
                 message="¿Estás seguro de que deseas eliminar esta reunión? Esta acción no se puede deshacer."
                 isDestructive={true}
+            />
+            <ConfirmModal
+                isOpen={isAlertModalOpen}
+                onClose={() => setIsAlertModalOpen(false)}
+                onConfirm={() => setIsAlertModalOpen(false)}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                isDestructive={false}
             />
         </div>
     )

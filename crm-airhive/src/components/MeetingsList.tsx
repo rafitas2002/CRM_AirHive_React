@@ -68,11 +68,23 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                         await fetchData()
                         onRefresh?.()
                     } else {
-                        alert(res.error || 'Error al eliminar la reunión')
+                        setConfirmConfig({
+                            isOpen: true,
+                            title: 'Error',
+                            message: res.error || 'Error al eliminar la reunión',
+                            isDestructive: false,
+                            onConfirm: async () => { }
+                        })
                     }
                 } catch (error) {
                     console.error('Error deleting meeting:', error)
-                    alert('Error al eliminar la reunión')
+                    setConfirmConfig({
+                        isOpen: true,
+                        title: 'Error',
+                        message: 'Error al eliminar la reunión',
+                        isDestructive: false,
+                        onConfirm: async () => { }
+                    })
                 }
             }
         })
