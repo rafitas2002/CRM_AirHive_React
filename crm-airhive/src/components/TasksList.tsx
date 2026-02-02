@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import ConfirmModal from './ConfirmModal'
 
 interface Task {
     id: number
@@ -19,6 +20,10 @@ interface TasksListProps {
 export default function TasksList({ leadId, onRefresh }: TasksListProps) {
     const [tasks, setTasks] = useState<Task[]>([])
     const [loading, setLoading] = useState(true)
+
+    // Modal State
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+    const [taskToDelete, setTaskToDelete] = useState<number | null>(null)
     const supabase = createClient()
 
     const fetchTasks = async () => {
@@ -51,12 +56,18 @@ export default function TasksList({ leadId, onRefresh }: TasksListProps) {
     }
 
     const deleteTask = async (id: number) => {
-        if (!confirm('¿Eliminar esta tarea?')) return
-        const { error } = await supabase.from('tareas').delete().eq('id', id)
+        setTaskToDelete(id)
+        setIsConfirmModalOpen(true)
+    }
+
+    const confirmDeleteTask = async () => {
+        if (taskToDelete === null) return
+        const { error } = await supabase.from('tareas').delete().eq('id', taskToDelete)
         if (!error) {
             fetchTasks()
             if (onRefresh) onRefresh()
         }
+        setTaskToDelete(null)
     }
 
     if (loading) return <div className='py-4 text-center text-xs text-gray-400 animate-pulse'>Cargando tareas...</div>
@@ -91,6 +102,15 @@ export default function TasksList({ leadId, onRefresh }: TasksListProps) {
                     </button>
                 </div>
             ))}
+
+            <ConfirmModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={confirmDeleteTask}
+                title="Eliminar Tarea"
+                message="¿Estás seguro de que deseas eliminar esta tarea?"
+                isDestructive={true}
+            />
         </div>
     )
 }

@@ -5,7 +5,9 @@ import { getUpcomingMeetings, type MeetingWithUrgency, calculateMeetingUrgency }
 import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
 import { useAuth } from '@/lib/auth'
 import MeetingModal from '@/components/MeetingModal'
-import { updateMeeting, deleteMeeting } from '@/lib/meetingsService'
+import ConfirmModal from '@/components/ConfirmModal'
+import { updateMeeting } from '@/lib/meetingsService'
+import { deleteMeetingAction } from '@/app/actions/meetings'
 import { getGoogleAuthUrl, getGoogleConnectionStatus } from '@/app/actions/google-integration'
 import { createClient } from '@/lib/supabase'
 
@@ -22,6 +24,10 @@ export default function CalendarioPage() {
     const [calendarStatus, setCalendarStatus] = useState<{ connected: boolean; email?: string | null }>({ connected: false })
     const [sellers, setSellers] = useState<{ id: string; full_name: string | null; username: string | null }[]>([])
     const [selectedSellerId, setSelectedSellerId] = useState<string>('all')
+
+    // Confirmation Modal State
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+    const [meetingToDelete, setMeetingToDelete] = useState<any>(null)
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -87,10 +93,20 @@ export default function CalendarioPage() {
     }
 
     const handleDeleteMeeting = async (meeting: any) => {
-        if (!confirm('¿Estás seguro de que deseas eliminar esta reunión? Esta acción no se puede deshacer.')) return
+        setMeetingToDelete(meeting)
+        setIsConfirmModalOpen(true)
+    }
+
+    const confirmDeleteMeeting = async () => {
+        if (!meetingToDelete) return
         try {
-            await deleteMeeting(meeting.id)
-            await fetchData()
+            const res = await deleteMeetingAction(meetingToDelete.id)
+            if (res.success) {
+                await fetchData()
+            } else {
+                alert(res.error || 'Error al eliminar la reunión')
+            }
+            setMeetingToDelete(null)
         } catch (error) {
             console.error('Error deleting meeting:', error)
             alert('Error al eliminar la reunión')
@@ -331,6 +347,15 @@ export default function CalendarioPage() {
                     mode='edit'
                 />
             )}
+
+            <ConfirmModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setIsConfirmModalOpen(false)}
+                onConfirm={confirmDeleteMeeting}
+                title="Eliminar Reunión"
+                message="¿Estás seguro de que deseas eliminar esta reunión? Esta acción no se puede deshacer."
+                isDestructive={true}
+            />
         </div>
     )
 }

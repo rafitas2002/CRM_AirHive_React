@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { Database } from '@/lib/supabase'
-import { getLeadMeetings, getLeadSnapshots, deleteMeeting, cancelMeeting } from '@/lib/meetingsService'
+import { getLeadMeetings, getLeadSnapshots, cancelMeeting } from '@/lib/meetingsService'
+import { deleteMeetingAction } from '@/app/actions/meetings'
+import ConfirmModal from './ConfirmModal'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
@@ -17,6 +19,21 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     const [meetings, setMeetings] = useState<Meeting[]>([])
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
     const [loading, setLoading] = useState(true)
+
+    // Modal State
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => Promise<void>;
+        isDestructive?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: async () => { },
+        isDestructive: false
+    })
 
     useEffect(() => {
         fetchData()
@@ -39,29 +56,45 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     }
 
     const handleDelete = async (meetingId: string) => {
-        if (!confirm('¿Estás seguro de eliminar esta reunión?')) return
-
-        try {
-            await deleteMeeting(meetingId)
-            await fetchData()
-            onRefresh?.()
-        } catch (error) {
-            console.error('Error deleting meeting:', error)
-            alert('Error al eliminar la reunión')
-        }
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Eliminar Reunión',
+            message: '¿Estás seguro de eliminar esta reunión? Esta acción no se puede deshacer.',
+            isDestructive: true,
+            onConfirm: async () => {
+                try {
+                    const res = await deleteMeetingAction(meetingId)
+                    if (res.success) {
+                        await fetchData()
+                        onRefresh?.()
+                    } else {
+                        alert(res.error || 'Error al eliminar la reunión')
+                    }
+                } catch (error) {
+                    console.error('Error deleting meeting:', error)
+                    alert('Error al eliminar la reunión')
+                }
+            }
+        })
     }
 
     const handleCancel = async (meetingId: string) => {
-        if (!confirm('¿Cancelar esta reunión?')) return
-
-        try {
-            await cancelMeeting(meetingId)
-            await fetchData()
-            onRefresh?.()
-        } catch (error) {
-            console.error('Error cancelling meeting:', error)
-            alert('Error al cancelar la reunión')
-        }
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Cancelar Reunión',
+            message: '¿Estás seguro de que deseas cancelar esta reunión?',
+            isDestructive: false,
+            onConfirm: async () => {
+                try {
+                    await cancelMeeting(meetingId)
+                    await fetchData()
+                    onRefresh?.()
+                } catch (error) {
+                    console.error('Error cancelling meeting:', error)
+                    alert('Error al cancelar la reunión')
+                }
+            }
+        })
     }
 
     const getSnapshotForMeeting = (meetingId: string) => {
@@ -232,6 +265,15 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                     </div>
                 )
             })}
+
+            <ConfirmModal
+                isOpen={confirmConfig.isOpen}
+                onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmConfig.onConfirm}
+                title={confirmConfig.title}
+                message={confirmConfig.message}
+                isDestructive={confirmConfig.isDestructive}
+            />
         </div>
     )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Database } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase'
 import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
+import ConfirmModal from './ConfirmModal'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -38,6 +39,10 @@ export default function MeetingModal({
     const [attendeeInput, setAttendeeInput] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isGoogleConnected, setIsGoogleConnected] = useState(false)
+
+    // Sync Fail Modal State
+    const [showSyncFailModal, setShowSyncFailModal] = useState(false)
+    const [pendingMeetingData, setPendingMeetingData] = useState<MeetingInsert | null>(null)
 
     useEffect(() => {
         const init = async () => {
@@ -151,11 +156,10 @@ export default function MeetingModal({
                     meetingData.calendar_event_id = result.eventId
                 } else {
                     console.error('Failed to create Google Event', result.error)
-                    if (!confirm('No se pudo conectar con Google Calendar. ¿Deseas guardar la reunión solo en el CRM?')) {
-                        setIsSubmitting(false)
-                        return
-                    }
-                    meetingData.calendar_provider = null
+                    setPendingMeetingData(meetingData)
+                    setShowSyncFailModal(true)
+                    setIsSubmitting(false)
+                    return
                 }
             }
 
@@ -386,6 +390,24 @@ export default function MeetingModal({
                     </button>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={showSyncFailModal}
+                onClose={() => {
+                    setShowSyncFailModal(false)
+                    setPendingMeetingData(null)
+                }}
+                onConfirm={async () => {
+                    if (pendingMeetingData) {
+                        const sanitized = { ...pendingMeetingData, calendar_provider: null }
+                        await onSave(sanitized as any)
+                        onClose()
+                    }
+                }}
+                title="Google Calendar Error"
+                message="No se pudo conectar con Google Calendar. ¿Deseas guardar la reunión solo en el CRM?"
+                isDestructive={false}
+            />
         </div>
     )
 }
