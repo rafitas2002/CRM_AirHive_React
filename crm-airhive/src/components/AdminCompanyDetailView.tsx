@@ -83,7 +83,7 @@ export default function AdminCompanyDetailView({
                     <div className='h-8 w-[1px] bg-white/20' />
                     <div className='flex items-center gap-4'>
                         {company.logo_url && (
-                            <img src={company.logo_url} alt={company.nombre} className='h-10 w-10 object-contain bg-white rounded-lg p-1' />
+                            <img src={company.logo_url} alt={company.nombre} className='h-10 w-10 object-cover bg-white rounded-lg' />
                         )}
                         <h1 className='text-2xl font-black text-white tracking-tight'>
                             {company.nombre}

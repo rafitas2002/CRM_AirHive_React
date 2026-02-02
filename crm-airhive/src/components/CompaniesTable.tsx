@@ -61,7 +61,7 @@ export default function CompaniesTable({
                                                 alt={company.nombre}
                                                 width={48}
                                                 height={48}
-                                                className='object-contain w-full h-full'
+                                                className='object-cover w-full h-full'
                                             />
                                         ) : (
                                             <span className='text-gray-300 text-2xl font-bold'>

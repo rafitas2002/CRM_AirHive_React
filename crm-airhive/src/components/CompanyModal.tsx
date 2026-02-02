@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
+import ImageCropper from './ImageCropper'
 
 export type CompanyData = {
     id?: string
@@ -43,6 +44,10 @@ export default function CompanyModal({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
     const [supabase] = useState(() => createClient())
+
+    // Cropping state
+    const [tempImage, setTempImage] = useState<string | null>(null)
+    const [isCropping, setIsCropping] = useState(false)
 
     // Autocomplete state
     const [filteredCompanies, setFilteredCompanies] = useState<CompanyData[]>([])
@@ -99,33 +104,43 @@ export default function CompanyModal({
         setShowSuggestions(false)
     }
 
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) {
             return
         }
-        setUploadingLogo(true)
         const file = e.target.files[0]
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
+        const reader = new FileReader()
+        reader.onload = () => {
+            setTempImage(reader.result as string)
+            setIsCropping(true)
+        }
+        reader.readAsDataURL(file)
+    }
+
+    const handleConfirmCrop = async (croppedBlob: Blob) => {
+        setIsCropping(false)
+        setUploadingLogo(true)
+
+        const fileName = `${Math.random()}.png`
         const filePath = `${fileName}`
 
         try {
             const { error: uploadError } = await supabase.storage
                 .from('company-logos')
-                .upload(filePath, file)
+                .upload(filePath, croppedBlob)
 
             if (uploadError) {
                 throw uploadError
             }
 
             const { data } = supabase.storage.from('company-logos').getPublicUrl(filePath)
-
             setFormData(prev => ({ ...prev, logo_url: data.publicUrl }))
         } catch (error) {
             console.error('Error uploading logo:', error)
             alert('Error al subir el logo')
         } finally {
             setUploadingLogo(false)
+            setTempImage(null)
         }
     }
 
@@ -333,6 +348,16 @@ export default function CompanyModal({
                     </button>
                 </div>
             </div>
+            {isCropping && tempImage && (
+                <ImageCropper
+                    imageSrc={tempImage}
+                    onCropComplete={handleConfirmCrop}
+                    onCancel={() => {
+                        setIsCropping(false)
+                        setTempImage(null)
+                    }}
+                />
+            )}
         </div>
     )
 }
