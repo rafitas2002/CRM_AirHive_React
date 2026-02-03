@@ -39,7 +39,11 @@ export async function createGoogleEventAction(meeting: any, leadName: string) {
             throw new Error(data.error?.message || 'Error creating Google event')
         }
 
-        return { success: true, eventId: data.id }
+        return {
+            success: true,
+            eventId: data.id,
+            hangoutLink: data.hangoutLink
+        }
     } catch (error: any) {
         console.error('Create Google Event Error:', error)
         return { success: false, error: error.message }

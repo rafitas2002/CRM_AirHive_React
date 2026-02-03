@@ -154,6 +154,13 @@ export default function MeetingModal({
 
                 if (result.success && result.eventId) {
                     meetingData.calendar_event_id = result.eventId
+                    // Save Meet link in notes if available
+                    if (result.hangoutLink) {
+                        const meetMarker = `[MEET_LINK]:${result.hangoutLink}`
+                        meetingData.notes = meetingData.notes
+                            ? `${meetMarker}\n${meetingData.notes}`
+                            : meetMarker
+                    }
                 } else {
                     console.error('Failed to create Google Event', result.error)
                     setPendingMeetingData(meetingData)

@@ -101,6 +101,27 @@ export default function CalendarWeekView({
                                                     <p className='text-[10px] font-black leading-tight mt-0.5 break-words line-clamp-2'>
                                                         {mtg.title}
                                                     </p>
+
+                                                    {mtg.notes?.includes('[MEET_LINK]:') && (
+                                                        <div className='absolute bottom-1 right-1'>
+                                                            {(() => {
+                                                                const meetLink = mtg.notes?.match(/\[MEET_LINK\]:(https:\/\/\S+)/)?.[1];
+                                                                if (!meetLink) return null;
+                                                                return (
+                                                                    <a
+                                                                        href={meetLink}
+                                                                        target='_blank'
+                                                                        rel='noopener noreferrer'
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className='w-5 h-5 bg-white/20 hover:bg-white/40 rounded flex items-center justify-center text-[10px] transition-colors'
+                                                                        title="Unirse a Google Meet"
+                                                                    >
+                                                                        🎥
+                                                                    </a>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )
                                         })}

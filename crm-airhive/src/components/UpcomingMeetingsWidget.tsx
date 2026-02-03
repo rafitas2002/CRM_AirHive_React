@@ -138,6 +138,26 @@ export default function UpcomingMeetingsWidget() {
                                             minute: '2-digit'
                                         })}
                                     </p>
+
+                                    {meeting.notes?.includes('[MEET_LINK]:') && (
+                                        <div className='mt-2'>
+                                            {(() => {
+                                                const meetLink = meeting.notes?.match(/\[MEET_LINK\]:(https:\/\/\S+)/)?.[1];
+                                                if (!meetLink) return null;
+                                                return (
+                                                    <a
+                                                        href={meetLink}
+                                                        target='_blank'
+                                                        rel='noopener noreferrer'
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className='inline-flex items-center gap-1.5 px-3 py-1 bg-[#2048FF] text-white text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-[#1700AC] transition-all'
+                                                    >
+                                                        <span>🎥</span> Unirse
+                                                    </a>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Time until */}

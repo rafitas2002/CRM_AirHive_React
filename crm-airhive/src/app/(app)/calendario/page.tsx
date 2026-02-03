@@ -304,6 +304,34 @@ export default function CalendarioPage() {
                                                                         </p>
                                                                     )}
                                                                 </div>
+
+                                                                {/* Meet Link Button */}
+                                                                {meeting.notes?.includes('[MEET_LINK]:') && (
+                                                                    <div className='mt-2'>
+                                                                        {(() => {
+                                                                            const meetLink = meeting.notes?.match(/\[MEET_LINK\]:(https:\/\/\S+)/)?.[1];
+                                                                            if (!meetLink) return null;
+                                                                            return (
+                                                                                <a
+                                                                                    href={meetLink}
+                                                                                    target='_blank'
+                                                                                    rel='noopener noreferrer'
+                                                                                    onClick={(e) => e.stopPropagation()}
+                                                                                    className='inline-flex items-center gap-2 px-4 py-2 bg-[#2048FF] text-white text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-[#1700AC] transition-all shadow-md shadow-blue-500/20'
+                                                                                >
+                                                                                    <span>🎥</span> Unirse a Meet
+                                                                                </a>
+                                                                            );
+                                                                        })()}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Clean Notes display */}
+                                                                {meeting.notes && (
+                                                                    <p className='text-[10px] text-gray-500 line-clamp-2 mt-2 italic'>
+                                                                        {meeting.notes.replace(/\[MEET_LINK\]:https:\/\/\S+/, '').trim()}
+                                                                    </p>
+                                                                )}
                                                             </div>
 
                                                             {meeting.frozen_probability_value !== null && (
