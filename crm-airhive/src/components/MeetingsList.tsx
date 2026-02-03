@@ -213,23 +213,37 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                     )}
 
                                     {meeting.notes && (
-                                        <p className='text-xs text-gray-500 italic mt-2 bg-gray-50 p-2 rounded'>
-                                            {meeting.notes}
-                                        </p>
+                                        <div className='mt-2'>
+                                            <p className='text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1'>Notas de Preparación</p>
+                                            <p className='text-xs text-gray-600 italic bg-gray-50 p-2 rounded-lg border border-gray-100'>
+                                                {meeting.notes}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {meeting.confirmation_notes && (
+                                        <div className='mt-3'>
+                                            <p className='text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1'>Notas de la Junta</p>
+                                            <p className='text-xs text-emerald-900 font-medium bg-emerald-50/50 p-3 rounded-xl border border-emerald-100'>
+                                                {meeting.confirmation_notes}
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
 
                                 {/* Snapshot Info */}
                                 {snapshot && (
-                                    <div className='mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg'>
-                                        <p className='text-xs font-bold text-purple-900 mb-1'>
-                                            📸 Snapshot #{snapshot.snapshot_number}
-                                        </p>
+                                    <div className='mt-3 p-3 bg-purple-50 border border-purple-200 rounded-xl'>
+                                        <div className='flex justify-between items-center mb-1'>
+                                            <p className='text-[10px] font-black text-purple-900 uppercase tracking-widest'>
+                                                📸 Snapshot #{snapshot.snapshot_number}
+                                            </p>
+                                            <p className='text-[9px] font-bold text-purple-600'>
+                                                {new Date(snapshot.snapshot_timestamp).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
                                         <p className='text-sm font-black text-purple-700'>
                                             Probabilidad registrada: {snapshot.probability}%
-                                        </p>
-                                        <p className='text-xs text-purple-600 mt-1'>
-                                            {new Date(snapshot.snapshot_timestamp).toLocaleString('es-MX')}
                                         </p>
                                     </div>
                                 )}

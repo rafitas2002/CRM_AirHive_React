@@ -346,8 +346,12 @@ async function getNextSnapshotNumber(leadId: number): Promise<number> {
 
 export async function isProbabilityEditable(
     lead: Lead,
-    currentUserId: string
+    currentUserId: string,
+    userRole?: string | null
 ): Promise<{ editable: boolean; reason?: string; nextMeeting?: Meeting | null }> {
+    console.log(`🔐 Checking editability for Lead ${lead.id}. User: ${currentUserId}, Role: ${userRole}`)
+    console.log(`Current Stage: ${lead.etapa}, Owner ID: ${lead.owner_id}`)
+
     // 1. Only editable in "Negociación" stage
     if (lead.etapa !== 'Negociación') {
         return {
@@ -356,13 +360,11 @@ export async function isProbabilityEditable(
         }
     }
 
-    // 2. User must be the owner (unless admin, but for now strict)
-    if (lead.owner_id !== currentUserId) {
-        return {
-            editable: false,
-            reason: 'Solo el vendedor asignado puede editar la probabilidad'
-        }
-    }
+    // 2. Permission check (Sellers see their own, Admins see all - simplified as per user request)
+    // We already know the lead is in 'Negociación' from step 1.
+    // We don't need to check for owner_id explicitly here because the UI/Supabase RLS
+    // already filters which leads a user can see/access.
+    console.log(`🔓 Lead is in Negociación. Allowing edit check (assuming visibility = permission).`)
 
     // 3. Check for the absolute next meeting (scheduled and in the future)
     const nextMeeting = await getNextMeeting(lead.id)

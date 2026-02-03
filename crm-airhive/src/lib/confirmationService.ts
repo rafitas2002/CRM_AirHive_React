@@ -24,7 +24,7 @@ export async function confirmMeeting(
     userId: string
 ): Promise<{ success: boolean; snapshotCreated: boolean; snapshotId?: string }> {
     try {
-        console.log('Confirming meeting:', meetingId, 'Held:', wasHeld, 'User:', userId)
+        console.log('🚀 Starting confirmMeeting:', { meetingId, wasHeld, userId })
 
         // 1. Get meeting with frozen probability
         const { data: meeting, error: meetingError } = await (supabase
@@ -34,12 +34,22 @@ export async function confirmMeeting(
             .single()
 
         if (meetingError) {
-            console.error('Error fetching meeting to confirm:', meetingError)
-            throw new Error(`Error finding meeting: ${meetingError.message}`)
+            console.error('❌ Error fetching meeting:', meetingError)
+            throw new Error(`Error al buscar la junta: ${meetingError.message}`)
         }
         if (!meeting) {
-            console.error('Meeting not found (null data) for ID:', meetingId)
-            throw new Error('Meeting not found')
+            console.error('❌ Meeting not found for ID:', meetingId)
+            throw new Error('La junta no existe')
+        }
+
+        // --- IDEMPOTENCY CHECK ---
+        if (meeting.status === 'completed' || meeting.meeting_status === 'held' || meeting.meeting_status === 'not_held') {
+            console.log('✅ Meeting already confirmed, returning success (Idempotency)')
+            return {
+                success: true,
+                snapshotCreated: !!meeting.frozen_probability_value,
+                snapshotId: undefined // We don't necessarily need the ID if it's already done
+            }
         }
 
         let snapshotId: string | null = null
@@ -47,7 +57,9 @@ export async function confirmMeeting(
 
         let frozenProbability = meeting.frozen_probability_value
 
+        // Fallback if not frozen (unlikely but possible)
         if (wasHeld && frozenProbability === null) {
+            console.log('⚠️ Frozen probability missing, fetching current lead probability as fallback')
             const { data: clientData, error: clientError } = await supabase
                 .from('clientes')
                 .select('probabilidad')
@@ -57,44 +69,66 @@ export async function confirmMeeting(
             if (!clientError && clientData) {
                 frozenProbability = (clientData as any).probabilidad
             } else {
-                console.warn('Could not fetch client probability for fallback:', clientError)
+                console.warn('⚠️ Could not fetch client probability for fallback:', clientError)
                 frozenProbability = 50 // Default fallback
             }
         }
 
+        // 2. Create Snapshot if held
         if (wasHeld && frozenProbability !== null) {
-            const { data: lastSnapshot } = await (supabase
+            // Check if snapshot already exists for this meeting (Idempotency)
+            const { data: existingSnapshot } = await (supabase
                 .from('forecast_snapshots') as any)
-                .select('snapshot_number')
-                .eq('lead_id', meeting.lead_id)
-                .order('snapshot_number', { ascending: false })
-                .limit(1)
+                .select('id')
+                .eq('meeting_id', meetingId)
                 .maybeSingle()
 
-            const snapshotNumber = lastSnapshot ? lastSnapshot.snapshot_number + 1 : 1
-
-            const { data: snapshot, error: snapshotError } = await (supabase
-                .from('forecast_snapshots') as any)
-                .insert({
-                    lead_id: meeting.lead_id,
-                    seller_id: meeting.seller_id,
-                    meeting_id: meetingId,
-                    snapshot_number: snapshotNumber,
-                    probability: frozenProbability,
-                    snapshot_timestamp: meeting.start_time,
-                    source: 'meeting_confirmed_held'
-                })
-                .select()
-                .single()
-
-            if (!snapshotError && snapshot) {
-                snapshotId = snapshot.id
+            if (existingSnapshot) {
+                console.log('✅ Snapshot already exists for this meeting:', existingSnapshot.id)
+                snapshotId = existingSnapshot.id
                 snapshotCreated = true
+            } else {
+                console.log('📸 Creating snapshot with probability:', frozenProbability)
+                const { data: lastSnapshot } = await (supabase
+                    .from('forecast_snapshots') as any)
+                    .select('snapshot_number')
+                    .eq('lead_id', meeting.lead_id)
+                    .order('snapshot_number', { ascending: false })
+                    .limit(1)
+                    .maybeSingle()
+
+                const snapshotNumber = lastSnapshot ? lastSnapshot.snapshot_number + 1 : 1
+
+                const { data: snapshot, error: snapshotError } = await (supabase
+                    .from('forecast_snapshots') as any)
+                    .insert({
+                        lead_id: meeting.lead_id,
+                        seller_id: meeting.seller_id,
+                        meeting_id: meetingId,
+                        snapshot_number: snapshotNumber,
+                        probability: frozenProbability,
+                        snapshot_timestamp: meeting.start_time,
+                        source: 'meeting_confirmed_held'
+                    })
+                    .select()
+                    .single()
+
+                if (snapshotError) {
+                    console.error('❌ Error creating snapshot:', snapshotError)
+                    throw new Error(`Error al crear el snapshot: ${snapshotError.message}`)
+                }
+
+                if (snapshot) {
+                    snapshotId = snapshot.id
+                    snapshotCreated = true
+                    console.log('✅ Snapshot created:', snapshotId)
+                }
             }
         }
 
         // 3. Update meeting status
-        await (supabase
+        console.log('📝 Updating meeting status to completed')
+        const { error: updateMtgError } = await (supabase
             .from('meetings') as any)
             .update({
                 status: 'completed',
@@ -105,7 +139,13 @@ export async function confirmMeeting(
             })
             .eq('id', meetingId)
 
-        // 4. Record confirmation
+        if (updateMtgError) {
+            console.error('❌ Error updating meeting status:', updateMtgError)
+            throw new Error(`Error al actualizar la junta: ${updateMtgError.message}`)
+        }
+
+        // 4. Record confirmation log (Manual check for idempotency)
+        console.log('📄 Recording confirmation log')
         const confirmationData: MeetingConfirmation = {
             meeting_id: meetingId,
             confirmed_by: userId,
@@ -115,9 +155,37 @@ export async function confirmMeeting(
             snapshot_id: snapshotId
         }
 
-        await (supabase
+        const { data: existingLog } = await (supabase
             .from('meeting_confirmations') as any)
-            .insert(confirmationData)
+            .select('id')
+            .eq('meeting_id', meetingId)
+            .maybeSingle()
+
+        if (existingLog) {
+            console.log('📝 Updating existing confirmation log')
+            const { error: updateLogError } = await (supabase
+                .from('meeting_confirmations') as any)
+                .update(confirmationData)
+                .eq('id', existingLog.id)
+
+            if (updateLogError) {
+                console.error('❌ Error updating confirmation log:', updateLogError.message || updateLogError)
+            }
+        } else {
+            console.log('📝 Creating new confirmation log')
+            const { error: insertLogError } = await (supabase
+                .from('meeting_confirmations') as any)
+                .insert(confirmationData)
+
+            if (insertLogError) {
+                // If it's a duplicate key error (race condition), we can ignore it
+                if (insertLogError.code === '23505') {
+                    console.log('✅ Confirmation log already inserted by another process.')
+                } else {
+                    console.error('❌ Error inserting confirmation log:', insertLogError.message || insertLogError)
+                }
+            }
+        }
 
         // 5. Update lead's next_meeting_id and UNLOCK probability
         const nowStr = new Date().toISOString()
@@ -131,25 +199,30 @@ export async function confirmMeeting(
             .limit(1)
             .maybeSingle()
 
-        if (nextError) console.error('Error finding next meeting after confirmation:', nextError)
+        if (nextError) console.error('⚠️ Error finding next meeting:', nextError)
 
-        console.log('🔓 Unlocking lead and setting next meeting:', nextMeeting?.id || 'None')
-
-        await (supabase
+        console.log('🔓 Unlocking lead probability')
+        const { error: leadUpdateError } = await (supabase
             .from('clientes') as any)
             .update({
-                probability_locked: false, // Always unlock after confirmation so they can prepare for the next one
+                probability_locked: false,
                 next_meeting_id: nextMeeting?.id || null
             })
             .eq('id', meeting.lead_id)
 
+        if (leadUpdateError) {
+            console.error('❌ Error updating lead status:', leadUpdateError)
+            throw new Error(`Error al desbloquear el lead: ${leadUpdateError.message}`)
+        }
+
+        console.log('✨ confirmMeeting finished successfully')
         return {
             success: true,
             snapshotCreated,
             snapshotId: snapshotId || undefined
         }
     } catch (error) {
-        console.error('Error in confirmMeeting service:', error)
+        console.error('💥 Severe Error in confirmMeeting:', error)
         throw error
     }
 }

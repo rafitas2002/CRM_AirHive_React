@@ -111,16 +111,33 @@ export default function ClientModal({
     }
 
     const checkProbabilityEditability = async () => {
-        if (!initialData || !initialData.id) {
+        // For new leads, it's always editable
+        if (mode === 'create') {
             setIsProbEditable(true)
             return
         }
+
+        if (!initialData?.id) return
 
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const result = await isProbabilityEditable(initialData as any, user.id)
+            // Fetch profile to get role
+            const { data: profile } = await (supabase
+                .from('profiles') as any)
+                .select('role')
+                .eq('id', user.id)
+                .maybeSingle()
+
+            // CRITICAL: We use formData.etapa instead of initialData.etapa to allow real-time reactivity
+            // but we still need the original owner and lock status from initialData
+            const currentLeadState = {
+                ...initialData,
+                etapa: formData.etapa
+            }
+
+            const result = await isProbabilityEditable(currentLeadState as any, user.id, profile?.role)
             setIsProbEditable(result.editable)
             setEditabilityReason(result.reason || '')
             setNextMeeting(result.nextMeeting || null)
@@ -134,6 +151,13 @@ export default function ClientModal({
             setIsProbEditable(true)
         }
     }
+
+    // Trigger check whenever the stage changes
+    useEffect(() => {
+        if (mode === 'edit' && isOpen) {
+            checkProbabilityEditability()
+        }
+    }, [formData.etapa])
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {

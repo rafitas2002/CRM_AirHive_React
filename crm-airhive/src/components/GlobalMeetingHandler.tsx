@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
 import {
     getPendingConfirmations,
@@ -23,13 +23,11 @@ export default function GlobalMeetingHandler() {
     const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
     const [supabase] = useState(() => createClient())
 
+    // Ref to track meetings currently being processed to avoid duplicate modals/saves
+    const processingMeetings = useRef<Set<string>>(new Set())
+
     const checkUpdates = useCallback(async () => {
         if (!auth.user || auth.loading) return
-
-        // ADM REQ: Don't show global popups/alerts to admins unless they are the seller
-        // The underlying services (getPendingConfirmations, etc) already filter by seller_id
-        // which naturally allows an admin-seller to see their own alerts.
-        // We'll proceed without the global admin block.
 
         try {
             // 0. Freeze meetings starting NOW
@@ -53,21 +51,35 @@ export default function GlobalMeetingHandler() {
             const pending = await getPendingConfirmations(auth.user.id)
             setPendingConfirmations(pending)
 
+            // Cross-tab synchronization logic:
+            if (showConfirmationModal && selectedMeeting) {
+                const stillPending = pending.some(m => m.id === selectedMeeting.id)
+                if (!stillPending) {
+                    console.log('🔄 Meeting confirmed elsewhere, closing modal.')
+                    setShowConfirmationModal(false)
+                    setSelectedMeeting(null)
+                    return // No need to open another one immediately
+                }
+            }
+
             if (pending.length > 0 && !showConfirmationModal) {
-                setSelectedMeeting(pending[0])
-                setShowConfirmationModal(true)
+                // Find first meeting that isn't already being processed
+                const nextToConfirm = pending.find(m => !processingMeetings.current.has(m.id))
+
+                if (nextToConfirm) {
+                    setSelectedMeeting(nextToConfirm)
+                    setShowConfirmationModal(true)
+                }
             }
 
             // 2. Check for due alerts
             const alerts = await getPendingAlerts(auth.user.id)
             if (alerts.length > 0) {
-                // Filter out alerts already in activeAlerts state to avoid duplicates
                 setActiveAlerts((prev: any[]) => {
                     const newAlerts = alerts.filter((a: any) => !prev.some((p: any) => p.id === a.id))
 
-                    // Trigger browser notification for each new alert
                     newAlerts.forEach((alert: any) => {
-                        if (Notification.permission === 'granted') {
+                        if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'granted') {
                             const title = alert.meetings?.title || 'Junta Próxima'
                             const timeText = alert.alert_type === '5min' ? '5 minutos' :
                                 alert.alert_type === '15min' ? '15 minutos' :
@@ -86,24 +98,18 @@ export default function GlobalMeetingHandler() {
         } catch (error) {
             console.error('Error checking global meeting updates:', error)
         }
-    }, [auth.user, auth.loading, showConfirmationModal])
+    }, [auth.user, auth.loading, showConfirmationModal, selectedMeeting])
 
     useEffect(() => {
         if (!auth.user) return
 
-        // 1. Initial Check
         checkUpdates()
-        // Immediate sync-back on load
         syncGoogleEventsAction(auth.user.id).then(res => {
             if (res.success && res.updatedCount && res.updatedCount > 0) {
                 console.log(`✅ Auto-synced ${res.updatedCount} events from Google`)
-                // If meetings changed, we might want to refresh UI data, 
-                // but since this is a global handler, usually pages have their own loaders.
-                // However, checkUpdates already handles frozen probabilities etc.
             }
         })
 
-        // 2. Real-time Subscription
         const channel = supabase
             .channel('global-notifications')
             .on(
@@ -114,10 +120,7 @@ export default function GlobalMeetingHandler() {
                     table: 'meeting_alerts',
                     filter: `user_id=eq.${auth.user.id}`
                 },
-                () => {
-                    console.log('Real-time alert change detected')
-                    checkUpdates()
-                }
+                () => checkUpdates()
             )
             .on(
                 'postgres_changes',
@@ -128,28 +131,20 @@ export default function GlobalMeetingHandler() {
                     filter: `seller_id=eq.${auth.user.id}`
                 },
                 (payload) => {
-                    const newStatus = payload.new.meeting_status
-                    console.log('Real-time meeting status update:', newStatus)
-                    if (newStatus === 'pending_confirmation') {
-                        checkUpdates()
-                    }
+                    // Trigger update on any change to meetings to ensure UI sync
+                    console.log('Real-time meeting change detected')
+                    checkUpdates()
                 }
             )
             .subscribe()
 
-        // Request notification permission
-        if (Notification.permission === 'default') {
+        if (typeof window !== 'undefined' && Notification.permission === 'default') {
             Notification.requestPermission()
         }
 
-        // Hyper-reactive check: Every 15 seconds to catch meetings ending in real-time
         const interval = setInterval(checkUpdates, 15 * 1000)
-
-        // Sync-back check: Every 5 minutes (to avoid Google API rate limits/unnecessary load)
         const syncInterval = setInterval(() => {
-            if (auth.user) {
-                syncGoogleEventsAction(auth.user.id)
-            }
+            if (auth.user) syncGoogleEventsAction(auth.user.id)
         }, 5 * 60 * 1000)
 
         return () => {
@@ -162,21 +157,36 @@ export default function GlobalMeetingHandler() {
     const handleConfirmMeeting = async (wasHeld: boolean, notes: string) => {
         if (!selectedMeeting || !auth.user) return
 
+        const meetingId = selectedMeeting.id
+        if (processingMeetings.current.has(meetingId)) {
+            console.warn('⚠️ Meeting already being processed:', meetingId)
+            return
+        }
+
         try {
-            await confirmMeeting(selectedMeeting.id, wasHeld, notes, auth.user.id)
+            processingMeetings.current.add(meetingId)
+            console.log('🏁 Starting confirmation for:', meetingId)
 
-            // Remove from local list
-            const remaining = pendingConfirmations.filter(p => p.id !== selectedMeeting.id)
-            setPendingConfirmations(remaining)
+            const result = await confirmMeeting(
+                meetingId,
+                wasHeld,
+                notes,
+                auth.user.id
+            )
 
-            if (remaining.length > 0) {
-                setSelectedMeeting(remaining[0])
-            } else {
+            if (result.success) {
                 setShowConfirmationModal(false)
                 setSelectedMeeting(null)
+                // Remove from local list to avoid re-triggering before next checkUpdates
+                setPendingConfirmations(prev => prev.filter(p => p.id !== meetingId))
+                console.log('✅ Confirmation successful')
             }
-        } catch (error) {
-            console.error('Error confirming meeting globally:', error)
+        } catch (error: any) {
+            console.error('❌ Confirmation failed:', error)
+            alert('Error al confirmar la reunión: ' + (error.message || 'Error desconocido'))
+            // Keep modal open so notes aren't lost
+        } finally {
+            processingMeetings.current.delete(meetingId)
         }
     }
 
@@ -193,7 +203,6 @@ export default function GlobalMeetingHandler() {
 
     return (
         <>
-            {/* Confirmation Modal */}
             {showConfirmationModal && selectedMeeting && (
                 <MeetingConfirmationModal
                     meeting={selectedMeeting}
@@ -206,7 +215,6 @@ export default function GlobalMeetingHandler() {
                 />
             )}
 
-            {/* Global Alerts (Toasts) */}
             <div className='fixed bottom-6 right-6 z-[60] flex flex-col gap-3 max-w-sm w-full'>
                 {activeAlerts.map(alert => (
                     <div
@@ -219,9 +227,7 @@ export default function GlobalMeetingHandler() {
 
                         <div className='flex-1 min-w-0'>
                             <div className='flex items-center justify-between mb-1'>
-                                <span className='text-[10px] font-black text-[#2048FF] uppercase tracking-widest'>
-                                    Recordatorio Junta
-                                </span>
+                                <span className='text-[10px] font-black text-[#2048FF] uppercase tracking-widest'>Recordatorio Junta</span>
                                 <button
                                     onClick={() => handleDismissAlert(alert.id)}
                                     className='text-gray-400 hover:text-gray-600'
@@ -229,9 +235,7 @@ export default function GlobalMeetingHandler() {
                                     <X className='w-4 h-4' />
                                 </button>
                             </div>
-                            <p className='text-sm font-bold text-[#0F2A44] truncate'>
-                                {alert.meetings?.title || 'Junta Próxima'}
-                            </p>
+                            <p className='text-sm font-bold text-[#0F2A44] truncate'>{alert.meetings?.title || 'Junta Próxima'}</p>
                             <div className='flex items-center gap-3 mt-2 text-[10px] text-gray-500 font-medium'>
                                 <span className='flex items-center gap-1'>
                                     <Calendar className='w-3 h-3' />
