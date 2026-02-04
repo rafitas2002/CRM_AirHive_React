@@ -186,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setBusy(false)
-        router.push('/')
+        window.location.href = '/home'
     }
 
     const logout = async () => {
