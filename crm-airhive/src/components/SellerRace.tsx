@@ -98,7 +98,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                                     }}
                                     className='absolute -top-1 -ml-4 text-2xl select-none pointer-events-none drop-shadow-md z-10'
                                 >
-                                    🏃‍♂️
+                                    {progress < 33 ? '🐢' : progress < 66 ? '🏃‍♂️' : '🏎️'}
                                 </motion.div>
                             </div>
 
