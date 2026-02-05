@@ -3,7 +3,7 @@
 Este documento sirve como la fuente de verdad técnica y contextual para cualquier desarrollador de IA que trabaje en el proyecto **CRM AirHive**. Aquí encontrarás la arquitectura, lógica de negocio crítica y trampas comunes del sistema.
 
 ---
-
+## Hola
 ## 🏗️ Arquitectura General
 - **Framework:** Next.js (App Router).
 - **Base de Datos & Auth:** Supabase.
