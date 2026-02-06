@@ -5,6 +5,7 @@ import { Database } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase'
 import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
 import ConfirmModal from './ConfirmModal'
+import UserSelect from './UserSelect'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -36,7 +37,6 @@ export default function MeetingModal({
         attendees: [] as string[],
         calendar_provider: null as 'google' | 'outlook' | null
     })
-    const [attendeeInput, setAttendeeInput] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isGoogleConnected, setIsGoogleConnected] = useState(false)
 
@@ -94,22 +94,7 @@ export default function MeetingModal({
         init()
     }, [isOpen, sellerId, initialData, mode])
 
-    const handleAddAttendee = () => {
-        if (attendeeInput.trim() && !formData.attendees.includes(attendeeInput.trim())) {
-            setFormData({
-                ...formData,
-                attendees: [...formData.attendees, attendeeInput.trim()]
-            })
-            setAttendeeInput('')
-        }
-    }
 
-    const handleRemoveAttendee = (attendee: string) => {
-        setFormData({
-            ...formData,
-            attendees: formData.attendees.filter((a: string) => a !== attendee)
-        })
-    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -272,45 +257,12 @@ export default function MeetingModal({
 
                         {/* Asistentes */}
                         <div className='space-y-1.5'>
-                            <label className='block text-sm font-bold text-[#0F2A44]'>
-                                Asistentes (opcional)
-                            </label>
-                            <div className='flex gap-2'>
-                                <input
-                                    type='text'
-                                    value={attendeeInput}
-                                    onChange={(e) => setAttendeeInput(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAttendee())}
-                                    className='flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-gray-900 placeholder:text-gray-500'
-                                    placeholder='Email o nombre'
-                                />
-                                <button
-                                    type='button'
-                                    onClick={handleAddAttendee}
-                                    className='px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200 transition-colors'
-                                >
-                                    + Agregar
-                                </button>
-                            </div>
-                            {formData.attendees.length > 0 && (
-                                <div className='flex flex-wrap gap-2 mt-2'>
-                                    {formData.attendees.map((attendee) => (
-                                        <span
-                                            key={attendee}
-                                            className='inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium'
-                                        >
-                                            {attendee}
-                                            <button
-                                                type='button'
-                                                onClick={() => handleRemoveAttendee(attendee)}
-                                                className='text-blue-500 hover:text-blue-700'
-                                            >
-                                                ✕
-                                            </button>
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
+                            <UserSelect
+                                label='Asistentes (Usuarios Internos)'
+                                value={formData.attendees}
+                                onChange={(newAttendees) => setFormData({ ...formData, attendees: newAttendees })}
+                                placeholder='Seleccionar compañeros...'
+                            />
                         </div>
 
                         {/* Notas */}
