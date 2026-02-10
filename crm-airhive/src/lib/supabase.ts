@@ -465,6 +465,35 @@ export type Database = {
                     updated_at?: string
                 }
             }
+            race_results: {
+                Row: {
+                    id: string
+                    period: string
+                    user_id: string
+                    total_sales: number
+                    rank: number
+                    medal: 'gold' | 'silver' | 'bronze' | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    period: string
+                    user_id: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    period?: string
+                    user_id?: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+            }
         }
     }
 }
