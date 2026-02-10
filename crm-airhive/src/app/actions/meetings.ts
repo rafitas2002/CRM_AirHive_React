@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { createClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
 import { Database } from '@/lib/supabase'
+import { trackEvent } from './events'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -57,7 +58,7 @@ export async function deleteMeetingAction(meetingId: string) {
         .eq('id', user.id)
         .single() as { data: Profile | null }
 
-    const isAdmin = profile?.role === 'admin'
+    const isAdminOrRH = profile?.role === 'admin' || profile?.role === 'rh'
     const adminClient = createAdminClient()
 
     try {
@@ -72,8 +73,8 @@ export async function deleteMeetingAction(meetingId: string) {
             return { success: false, error: 'Reunión no encontrada' }
         }
 
-        // 3. Security check: Only owner or admin can delete
-        if (!isAdmin && meeting.seller_id !== user.id) {
+        // 3. Security check: Only owner, admin or RH can delete
+        if (!isAdminOrRH && meeting.seller_id !== user.id) {
             return { success: false, error: 'No tienes permisos para eliminar esta reunión' }
         }
 
@@ -90,6 +91,19 @@ export async function deleteMeetingAction(meetingId: string) {
 
         // 5. Update lead's next_meeting_id using system-level function
         await updateLeadNextMeetingSystem(meeting.lead_id)
+
+        // 6. Track Event
+        await trackEvent({
+            eventType: 'meeting_rescheduled', // Using rescheduled as a proxy for removed from timeline
+            entityType: 'meeting',
+            entityId: meetingId,
+            userId: user.id,
+            metadata: {
+                action: 'delete',
+                lead_id: meeting.lead_id,
+                title: meeting.title
+            }
+        })
 
         return { success: true }
     } catch (error: any) {

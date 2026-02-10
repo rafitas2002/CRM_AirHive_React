@@ -2,6 +2,7 @@
 
 import TopBar from '@/components/TopBar'
 import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
+import EventTracker from '@/components/EventTracker'
 import { useAuth } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/ThemeContext'
 import { useEffect } from 'react'
@@ -30,6 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider>
             <GlobalMeetingHandler />
+            <EventTracker />
             <div className='h-screen flex flex-col overflow-hidden' style={{ background: 'var(--background)' }}>
                 <TopBar />
                 <main className='flex-1 overflow-hidden' style={{ background: 'var(--background)' }}>

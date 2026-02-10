@@ -14,7 +14,8 @@ const CATALOG_TABLES = [
     'contract_types',
     'work_modalities',
     'cities',
-    'countries'
+    'countries',
+    'industrias'
 ]
 
 export async function getCatalogs() {
@@ -23,6 +24,7 @@ export async function getCatalogs() {
         const supabase = createClient(cookieStore)
 
         const results: Record<string, any[]> = {}
+        const errors: string[] = []
 
         // Parallel fetch for speed
         await Promise.all(CATALOG_TABLES.map(async (table) => {
@@ -36,9 +38,14 @@ export async function getCatalogs() {
                 results[table] = data || []
             } else {
                 console.error(`Error fetching catalog ${table}:`, error)
+                errors.push(`${table}: ${error.message}`)
                 results[table] = []
             }
         }))
+
+        if (errors.length > 0) {
+            return { success: false, error: errors.join(', '), data: results }
+        }
 
         return { success: true, data: results }
     } catch (error: any) {
@@ -56,11 +63,25 @@ export async function createCatalogItem(table: string, name: string) {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
 
+        // Verify permissions (Admin or RH only)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('No autenticado')
+
+        const { data: profile } = await (supabase
+            .from('profiles') as any)
+            .select('role')
+            .eq('id', user.id)
+            .single()
+
+        if (profile?.role !== 'admin' && profile?.role !== 'rh') {
+            throw new Error('No tienes permisos para modificar catálogos')
+        }
+
         // trim and capitalize?
         const formattedName = name.trim()
 
-        const { data, error } = await supabase
-            .from(table)
+        const { data, error } = await (supabase
+            .from(table) as any)
             .insert({ name: formattedName, is_active: true })
             .select('id, name')
             .single()

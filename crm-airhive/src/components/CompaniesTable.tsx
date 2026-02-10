@@ -167,7 +167,7 @@ export default function CompaniesTable({
 
 function checkPermission(company: CompanyData, profile: any) {
     if (!profile) return false
-    if (profile.role === 'admin') return true
+    if (profile.role === 'admin' || profile.role === 'rh') return true
 
     // Check if the current profile (id) matches the company owner_id
     // Note: Database uses owner_id for companies

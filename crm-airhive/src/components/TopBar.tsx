@@ -16,10 +16,8 @@ export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
 
-    const isAdmin = auth.profile?.role === 'admin'
-    const logoDimensions = isAdmin
-        ? { width: 350, height: 114 }
-        : { width: 350, height: 114 }
+    const isAdminOrRH = auth.profile?.role === 'admin' || auth.profile?.role === 'rh'
+    const logoDimensions = { width: 350, height: 114 }
 
     return (
         <header className='h-[70px] bg-black border-b-2 border-black'>
@@ -202,6 +200,24 @@ export default function TopBar() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Menú CORRELACIONES (Admin or RH) */}
+                    {isAdminOrRH && (
+                        <Link
+                            href='/admin/correlaciones'
+                            className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
+                        >
+                            Correlaciones
+                            <span
+                                className={[
+                                    'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                    'transition-all duration-300 ease-out',
+                                    pathname === '/admin/correlaciones' ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    'group-hover:w-full group-hover:opacity-100'
+                                ].join(' ')}
+                            />
+                        </Link>
+                    )}
                 </nav>
 
                 <div className='flex-1' />

@@ -42,7 +42,7 @@ export default function CalendarioPage() {
         if (!auth.loading && auth.user) {
             fetchData()
             fetchCalendarStatus()
-            if (auth.profile?.role === 'admin') {
+            if (auth.profile?.role === 'admin' || auth.profile?.role === 'rh') {
                 fetchSellers()
             }
         }
@@ -80,9 +80,9 @@ export default function CalendarioPage() {
     const fetchData = async () => {
         try {
             if (!auth.user) return
-            const isAdmin = auth.profile?.role === 'admin'
-            const targetId = (isAdmin && selectedSellerId !== 'all') ? selectedSellerId : auth.user.id
-            const showAll = isAdmin && selectedSellerId === 'all'
+            const isAdminOrRH = auth.profile?.role === 'admin' || auth.profile?.role === 'rh'
+            const targetId = (isAdminOrRH && selectedSellerId !== 'all') ? selectedSellerId : auth.user.id
+            const showAll = isAdminOrRH && selectedSellerId === 'all'
 
             const allMeetings = await getUpcomingMeetings(targetId, 50, showAll, auth.user?.email || undefined)
             setMeetings(allMeetings)
@@ -192,7 +192,7 @@ export default function CalendarioPage() {
 
                     <div className='flex items-center gap-4'>
                         {/* Selector de Vendedores con MEJOR CONTRASTE */}
-                        {auth.profile?.role === 'admin' && (
+                        {(auth.profile?.role === 'admin' || auth.profile?.role === 'rh') && (
                             <div className='flex items-center gap-2'>
                                 <label className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Filtro:</label>
                                 <select
