@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/lib/auth'
 
 const settingsLinks = [
     { href: '/settings/personalizacion', label: 'Personalización', icon: '🎨' },
@@ -11,6 +12,15 @@ const settingsLinks = [
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
+    const { profile } = useAuth()
+
+    // Check if user is Admin or RH
+    const isAdminOrRH = profile?.role === 'admin' || profile?.role === 'rh'
+
+    const displayedLinks = [
+        ...settingsLinks,
+        ...(isAdminOrRH ? [{ href: '/settings/equipo', label: 'Equipo', icon: '👥' }] : [])
+    ]
 
     return (
         <div className='h-full flex' style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
@@ -22,7 +32,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 </div>
 
                 <nav className='flex-1 p-4 space-y-2'>
-                    {settingsLinks.map((link) => {
+                    {displayedLinks.map((link) => {
                         const isActive = pathname === link.href
                         return (
                             <Link

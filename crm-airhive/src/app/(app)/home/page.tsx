@@ -400,12 +400,12 @@ function SellerHomeView({ username }: { username: string }) {
 
 export default function HomePage() {
     const auth = useAuth()
-    const isAdmin = auth.profile?.role === 'admin'
+    const isAdminOrRH = auth.profile?.role === 'admin' || auth.profile?.role === 'rh'
 
     // Only block if we are loading AND don't have a session
     if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
-    if (isAdmin) {
+    if (isAdminOrRH) {
         return <AdminDashboardView username={auth.username} />
     }
 
