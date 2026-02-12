@@ -25,6 +25,7 @@ export default function CorrelacionesPage() {
     const [data, setData] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (!auth.loading && !auth.loggedIn) {
@@ -41,9 +42,12 @@ export default function CorrelacionesPage() {
 
     const fetchData = async () => {
         setLoading(true)
+        setError(null)
         const res = await getAdminCorrelationData()
         if (res.success && res.data) {
             setData(res.data)
+        } else {
+            setError(res.error || 'Error desconocido al cargar datos')
         }
         setLoading(false)
     }
@@ -126,6 +130,26 @@ export default function CorrelacionesPage() {
                             </button>
                         </div>
                     </div>
+
+                    {/* Error Alert */}
+                    <AnimatePresence>
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className='p-6 bg-red-50 border-2 border-red-100 rounded-[32px] flex items-center gap-4 text-red-700'
+                            >
+                                <div className='w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-red-500 shadow-sm'>
+                                    ⚠️
+                                </div>
+                                <div>
+                                    <p className='font-black text-sm uppercase tracking-widest'>Error de Carga</p>
+                                    <p className='font-bold text-xs opacity-80'>{error}</p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Insights Grid */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>

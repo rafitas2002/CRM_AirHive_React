@@ -1,38 +1,47 @@
 'use server'
 
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { cookies } from 'next/headers'
 
 export async function getAdminCorrelationData() {
     try {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
+        const supabaseAdmin = createAdminClient()
 
-        // 0. Verify Auth & Role (Admin or RH)
+        // 0. Verify Auth
         const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error('No autenticado')
+        if (!user) return { success: false, error: 'No autenticado' }
 
-        const { data: profile } = await (supabase
+        // 1. Verify Role using Admin Client (to bypass RLS for checking others if needed, though here it is self)
+        const { data: profile, error: roleError } = await (supabaseAdmin
             .from('profiles') as any)
             .select('role')
             .eq('id', user.id)
             .single()
 
-        if (profile?.role !== 'admin' && profile?.role !== 'rh') {
-            throw new Error('No tienes permisos para acceder a estos datos')
+        if (roleError || !profile) {
+            console.error('[AdminCorrelation] Role check error:', roleError)
+            return { success: false, error: 'No se pudo verificar el rol' }
         }
 
-        // 1. Fetch tables individually for robustness
+        if (profile.role !== 'admin' && profile.role !== 'rh') {
+            return { success: false, error: 'No tienes permisos para acceder a estos datos' }
+        }
+
+        // 2. Fetch tables with ADMIN client
+        console.log('[AdminCorrelation] Fetching data tables...')
         const [
             { data: profiles, error: profError },
             { data: employeeProfiles, error: empError },
             { data: genders, error: genderError },
             { data: raceResults, error: raceError }
         ] = await Promise.all([
-            supabase.from('profiles').select('id, full_name') as any,
-            supabase.from('employee_profiles').select('*') as any,
-            supabase.from('genders').select('id, name') as any,
-            supabase.from('race_results').select('*').order('period', { ascending: true }) as any
+            supabaseAdmin.from('profiles').select('id, full_name') as any,
+            supabaseAdmin.from('employee_profiles').select('*') as any,
+            supabaseAdmin.from('genders').select('id, name') as any,
+            supabaseAdmin.from('race_results').select('*').order('period', { ascending: true }) as any
         ])
 
         if (profError) throw profError
@@ -40,7 +49,9 @@ export async function getAdminCorrelationData() {
         if (genderError) throw genderError
         if (raceError) throw raceError
 
-        // 2. Aggregate Performance by User
+        console.log(`[AdminCorrelation] Success. Profiles: ${profiles?.length}, EmpProfiles: ${employeeProfiles?.length}`)
+
+        // 3. Aggregate Performance by User
         const performanceMap: Record<string, {
             totalSales: number,
             medals: { gold: number, silver: number, bronze: number },
@@ -60,11 +71,11 @@ export async function getAdminCorrelationData() {
             if (res.medal === 'bronze') p.medals.bronze++
         })
 
-        // 3. Combine Data
-        const masterData = (employeeProfiles || []).map((emp: any) => {
-            const profile = (profiles || []).find((p: any) => p.id === emp.user_id)
+        // 4. Combine Data - Iteramos sobre PROFILES para asegurar que todos aparezcan
+        const masterData = (profiles || []).map((p: any) => {
+            const emp = (employeeProfiles || []).find((e: any) => e.user_id === p.id) || {}
             const gender = (genders || []).find((g: any) => g.id === emp.gender_id)
-            const perf = performanceMap[emp.user_id] || { totalSales: 0, medals: { gold: 0, silver: 0, bronze: 0 }, salesHistory: [] }
+            const perf = performanceMap[p.id] || { totalSales: 0, medals: { gold: 0, silver: 0, bronze: 0 }, salesHistory: [] }
 
             // Age Calculation
             let age = null
@@ -93,8 +104,8 @@ export async function getAdminCorrelationData() {
             }
 
             return {
-                userId: emp.user_id,
-                name: profile?.full_name || 'Desconocido',
+                userId: p.id,
+                name: p.full_name || 'Desconocido',
                 gender: gender?.name || 'N/A',
                 age,
                 tenureMonths,
@@ -107,7 +118,7 @@ export async function getAdminCorrelationData() {
 
         return { success: true, data: masterData }
     } catch (error: any) {
-        console.error('Error fetching correlation data:', error)
+        console.error('[AdminCorrelation] General Exception:', error)
         return { success: false, error: error.message }
     }
 }
