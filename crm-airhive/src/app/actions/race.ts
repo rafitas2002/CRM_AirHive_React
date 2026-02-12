@@ -51,6 +51,7 @@ export async function getPastRaces() {
             .from('race_results')
             .select(`
                 period,
+                title,
                 user_id,
                 total_sales,
                 rank,
@@ -80,6 +81,14 @@ export async function getPastRaces() {
     }
 }
 
+function getMonthlyTitle(date: Date) {
+    const months = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ]
+    return `Carrera de ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+}
+
 export async function syncRaceResults() {
     try {
         const supabaseAdmin = createAdminClient()
@@ -102,8 +111,9 @@ export async function syncRaceResults() {
         deals.forEach((deal: any) => {
             if (!deal.updated_at || !deal.owner_id) return
             const date = new Date(deal.updated_at)
-            // Set to first day of month
-            const period = new Date(Date.UTC(date.getFullYear(), date.getMonth(), 1)).toISOString().split('T')[0]
+            // Set to first day of month in UTC
+            const periodDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
+            const period = periodDate.toISOString().split('T')[0]
 
             if (!monthlyStats[period]) monthlyStats[period] = {}
             if (!monthlyStats[period][deal.owner_id]) monthlyStats[period][deal.owner_id] = 0
@@ -115,6 +125,9 @@ export async function syncRaceResults() {
         const upsertData: any[] = []
 
         Object.keys(monthlyStats).forEach(period => {
+            const date = new Date(period)
+            const title = getMonthlyTitle(date)
+
             const sellers = Object.entries(monthlyStats[period])
                 .map(([uid, total]) => ({ uid, total }))
                 .sort((a, b) => b.total - a.total)
@@ -128,11 +141,12 @@ export async function syncRaceResults() {
 
                 upsertData.push({
                     period,
+                    title,
                     user_id: seller.uid,
                     total_sales: seller.total,
                     rank,
                     medal,
-                    created_at: new Date().toISOString() // Just for reference, DB default handles it
+                    created_at: new Date().toISOString()
                 })
             })
         })
