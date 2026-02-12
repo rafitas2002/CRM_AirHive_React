@@ -47,7 +47,7 @@ export default function AdminCompanyDetailView({
 
         // 🛡️ SECURITY FILTER
         // If not admin, only see leads owned by current user
-        if (currentUserProfile && currentUserProfile.role !== 'admin') {
+        if (currentUserProfile && currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'rh') {
             query = (query as any).eq('owner_id', currentUserProfile.id)
         }
 

@@ -252,20 +252,33 @@ export default function LeadsPage() {
                 console.error('Error creating lead:', error)
                 alert('Error al crear el lead: ' + error.message)
             } else if (data && data[0]) {
+                const newId = data[0].id
+                // Track Event: lead_created
+                const { trackEvent } = await import('@/app/actions/events')
+                trackEvent({
+                    eventType: 'lead_created',
+                    entityType: 'lead',
+                    entityId: newId,
+                    metadata: { etapa: leadData.etapa, valor: leadData.valor_estimado }
+                })
+
                 // Initial history entry
                 await (supabase.from('lead_history') as any).insert([
-                    { lead_id: data[0].id, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
-                    { lead_id: data[0].id, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
+                    { lead_id: newId, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
+                    { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
                 ])
             }
         } else if (modalMode === 'edit' && currentLead) {
             // Check for changes to log
             const historyEntries: any[] = []
-            if (leadData.etapa !== currentLead.etapa) {
+            const stageChanged = leadData.etapa !== currentLead.etapa
+            const probChanged = leadData.probabilidad !== (currentLead as any).probabilidad
+
+            if (stageChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'etapa', old_value: currentLead.etapa, new_value: leadData.etapa, changed_by: currentUser.id })
             }
-            if (leadData.probabilidad !== currentLead.probabilidad) {
-                historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String(currentLead.probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
+            if (probChanged) {
+                historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
 
             const payload: any = {
@@ -288,11 +301,11 @@ export default function LeadsPage() {
 
             if (isClosedNow) {
                 const y = leadData.etapa === 'Cerrado Ganado' ? 1 : 0
-                const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : (currentLead.probabilidad || 50)
+                const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : ((currentLead as any).probabilidad || 50)
                 const p = pValue / 100
 
                 // Recalculate if it's new closure OR if data changed on an old closure
-                const dataChanged = leadData.probabilidad !== currentLead.probabilidad || leadData.etapa !== currentLead.etapa
+                const dataChanged = leadData.probabilidad !== (currentLead as any).probabilidad || leadData.etapa !== currentLead.etapa
 
                 if (!wasClosedBefore || dataChanged) {
                     payload.forecast_evaluated_probability = pValue
@@ -310,14 +323,43 @@ export default function LeadsPage() {
 
             if (error) {
                 alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
-            } else if (historyEntries.length > 0) {
-                await (supabase.from('lead_history') as any).insert(historyEntries)
+            } else {
+                const { trackEvent } = await import('@/app/actions/events')
+                // Track Event: lead_stage_change
+                if (stageChanged) {
+                    trackEvent({
+                        eventType: 'lead_stage_change',
+                        entityType: 'lead',
+                        entityId: currentLead.id,
+                        metadata: { oldStage: currentLead.etapa, newStage: leadData.etapa }
+                    })
+                    if (isClosedNow) {
+                        trackEvent({
+                            eventType: 'lead_closed',
+                            entityType: 'lead',
+                            entityId: currentLead.id,
+                            metadata: { outcome: leadData.etapa, value: leadData.valor_estimado }
+                        })
+                    }
+                } else if (probChanged) {
+                    trackEvent({
+                        eventType: 'forecast_registered',
+                        entityType: 'lead',
+                        entityId: currentLead.id,
+                        metadata: { probability: leadData.probabilidad, etapa: leadData.etapa }
+                    })
+                }
+
+                if (historyEntries.length > 0) {
+                    await (supabase.from('lead_history') as any).insert(historyEntries)
+                }
             }
         }
 
         setIsModalOpen(false)
         await fetchLeads()
     }
+
 
     const handleRowClick = (lead: Lead) => {
         setSelectedLead(lead)

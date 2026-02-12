@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useRouter } from 'next/navigation'
 import { createClient } from './supabase'
 import { Session, User } from '@supabase/supabase-js'
+import { trackEvent } from '@/app/actions/events'
 
 type Profile = {
     id: string
@@ -148,6 +149,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error('Unexpected error fetching profile:', err)
         } finally {
             setLoading(false)
+            // Track session start
+            trackEvent({
+                eventType: 'session_start',
+                userId: authUser.id,
+                metadata: { method: 'automatic' }
+            })
         }
     }
 
@@ -186,11 +193,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setBusy(false)
+        // Track login
+        trackEvent({
+            eventType: 'login',
+            metadata: { username: usernameInput }
+        })
         window.location.href = '/home'
     }
 
     const logout = async () => {
-        setBusy(true) // Explicitly busy for action
+        setBusy(true)
+        const currentUserId = user?.id
         try {
             await Promise.race([
                 supabase.auth.signOut(),
@@ -198,6 +211,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ])
         } catch (err) {
             console.error('Unexpected error signing out:', err)
+        }
+
+        // Track logout
+        if (currentUserId) {
+            trackEvent({
+                eventType: 'logout',
+                userId: currentUserId
+            })
         }
 
         // Clear cache

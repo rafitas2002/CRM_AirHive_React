@@ -1,5 +1,6 @@
 import { createClient } from './supabase'
 import { Database } from './supabase'
+import { trackEvent } from '@/app/actions/events'
 // Google Calendar Service logic moved to Server Actions
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
@@ -61,11 +62,17 @@ export async function createMeeting(meetingData: MeetingInsert) {
 
     const createdMeeting = data[0]
 
-    // Google Calendar Sync - Handled via Server Actions separately
-
-    // Update lead's next_meeting_id if this is the next scheduled meeting
     try {
         await updateLeadNextMeeting(meetingData.lead_id)
+
+        // Track Event: meeting_scheduled
+        trackEvent({
+            eventType: 'meeting_scheduled',
+            entityType: 'meeting',
+            entityId: (createdMeeting as any).id,
+            userId: meetingData.seller_id,
+            metadata: { lead_id: meetingData.lead_id, title: meetingData.title }
+        })
     } catch (updateError) {
         console.error('⚠️ Error updating lead next meeting (non-critical):', updateError)
     }
@@ -130,7 +137,24 @@ export async function cancelMeeting(meetingId: string) {
 }
 
 export async function completeMeeting(meetingId: string) {
-    return await updateMeeting(meetingId, { status: 'completed' })
+    const meeting = await getMeeting(meetingId)
+    const result = await updateMeeting(meetingId, { status: 'completed' })
+
+    // Track Event: meeting_finished
+    if (meeting) {
+        trackEvent({
+            eventType: 'meeting_finished',
+            entityType: 'meeting',
+            entityId: meetingId,
+            userId: meeting.seller_id,
+            metadata: { lead_id: meeting.lead_id }
+        })
+
+        // Also track forecast_registered (re-enabling forecast) if appropriate
+        // Actually the trackEvent for meeting_finished is enough to know it's re-enabled
+    }
+
+    return result
 }
 
 // ============================================
@@ -258,9 +282,18 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         })
         .eq('id', leadId)
 
-    // Check for future meetings and update next_meeting_id if exists
-    // (This will also potentially unlock if updateLeadNextMeeting is called)
-    await updateLeadNextMeeting(leadId)
+    // Track Event: forecast_frozen
+    trackEvent({
+        eventType: 'forecast_frozen',
+        entityType: 'forecast',
+        entityId: meetingId,
+        userId: meeting.seller_id,
+        metadata: {
+            lead_id: leadId,
+            probability: lead.probabilidad,
+            snapshot_number: snapshotNumber
+        }
+    })
 
     return snapshot
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, Info } from 'lucide-react'
+import { Trophy, TrendingUp, User, Info } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
 
 interface SellerRaceData {

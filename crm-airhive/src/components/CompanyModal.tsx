@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
+import CatalogSelect from './CatalogSelect'
+import { getCatalogs } from '@/app/actions/catalogs'
 
 export type CompanyData = {
     id?: string
@@ -11,6 +13,7 @@ export type CompanyData = {
     ubicacion: string
     logo_url: string
     industria: string
+    industria_id?: string
     website: string
     descripcion: string
 }
@@ -38,12 +41,14 @@ export default function CompanyModal({
         ubicacion: '',
         logo_url: '',
         industria: '',
+        industria_id: '',
         website: '',
         descripcion: ''
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
     const [supabase] = useState(() => createClient())
+    const [catalogs, setCatalogs] = useState<Record<string, any[]>>({})
 
     // Cropping state
     const [tempImage, setTempImage] = useState<string | null>(null)
@@ -64,11 +69,29 @@ export default function CompanyModal({
                 ubicacion: '',
                 logo_url: '',
                 industria: '',
+                industria_id: '',
                 website: '',
                 descripcion: ''
             })
         }
+
+        if (isOpen) {
+            fetchCatalogs()
+        }
     }, [isOpen, initialData])
+
+    const fetchCatalogs = async () => {
+        const res = await getCatalogs()
+        if (res.success && res.data) {
+            setCatalogs(res.data)
+        } else if (res.error) {
+            console.error('Error fetching catalogs:', res.error)
+            // Only alert if it's specifically about industrias failing
+            if (res.error.includes('industrias')) {
+                alert('Aviso: No se pudieron cargar las industrias. Verifica que la tabla exista en Supabase.')
+            }
+        }
+    }
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -244,18 +267,22 @@ export default function CompanyModal({
                             </div>
 
                             {/* Industria */}
-                            <div className='space-y-1.5'>
-                                <label className='block text-sm font-medium text-[#0F2A44]'>
-                                    Industria
-                                </label>
-                                <input
-                                    type='text'
-                                    placeholder='ej. Tecnología / Automotriz'
-                                    value={formData.industria}
-                                    onChange={(e) => setFormData({ ...formData, industria: e.target.value })}
-                                    className='w-full px-3 py-2 border border-[#BDBBC7] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[#000000] placeholder-[#BDBBC7] transition-all'
-                                />
-                            </div>
+                            <CatalogSelect
+                                label="Industria"
+                                value={formData.industria_id || ''}
+                                onChange={(val) => {
+                                    const name = catalogs.industrias?.find(i => i.id === val)?.name || ''
+                                    setFormData({ ...formData, industria_id: val, industria: name })
+                                }}
+                                options={catalogs.industrias || []}
+                                tableName="industrias"
+                                onNewOption={(opt) => {
+                                    setCatalogs(prev => ({
+                                        ...prev,
+                                        industrias: [...(prev.industrias || []), opt].sort((a, b) => a.name.localeCompare(b.name))
+                                    }))
+                                }}
+                            />
 
                             {/* Ubicación */}
                             <div className='space-y-1.5'>

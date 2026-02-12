@@ -404,6 +404,7 @@ export type Database = {
                     sitio_web: string | null
                     tamano: number | null
                     owner_id: string | null
+                    industria_id: string | null
                     created_at: string
                     updated_at: string
                 }
@@ -415,6 +416,7 @@ export type Database = {
                     sitio_web?: string | null
                     tamano?: number | null
                     owner_id?: string | null
+                    industria_id?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -426,6 +428,7 @@ export type Database = {
                     sitio_web?: string | null
                     tamano?: number | null
                     owner_id?: string | null
+                    industria_id?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -463,6 +466,55 @@ export type Database = {
                     scope?: string
                     created_at?: string
                     updated_at?: string
+                }
+            }
+            race_results: {
+                Row: {
+                    id: string
+                    period: string
+                    user_id: string
+                    total_sales: number
+                    rank: number
+                    medal: 'gold' | 'silver' | 'bronze' | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    period: string
+                    user_id: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    period?: string
+                    user_id?: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+            }
+            industrias: {
+                Row: {
+                    id: string
+                    name: string
+                    is_active: boolean
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    name: string
+                    is_active?: boolean
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    name?: string
+                    is_active?: boolean
+                    created_at?: string
                 }
             }
         }

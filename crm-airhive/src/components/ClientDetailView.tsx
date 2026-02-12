@@ -205,29 +205,55 @@ export default function ClientDetailView({
                                     <p className='text-[#0A1635] font-black text-xl tracking-tight'>{client.empresa}</p>
                                 </div>
 
-                                <div className='grid grid-cols-1 gap-6'>
-                                    <div>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
-                                        <div className='flex flex-wrap gap-2'>
-                                            {client.email && (
-                                                <button
-                                                    onClick={() => onEmailClick(client.email!, client.nombre || client.empresa)}
-                                                    className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
-                                                >
-                                                    📧 {client.email}
-                                                </button>
-                                            )}
-                                            {client.telefono && (
-                                                <a
-                                                    href={`https://wa.me/${client.telefono.replace(/\D/g, '')}`}
-                                                    target='_blank'
-                                                    rel='noopener noreferrer'
-                                                    className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
-                                                >
-                                                    💬 {client.telefono}
-                                                </a>
-                                            )}
-                                        </div>
+                                <div>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
+                                    <div className='flex flex-wrap gap-2'>
+                                        {client.email && (
+                                            <button
+                                                onClick={() => {
+                                                    onEmailClick(client.email!, client.nombre || client.empresa)
+                                                    import('@/app/actions/events').then(({ trackEvent }) => {
+                                                        trackEvent({
+                                                            eventType: 'call_finished', // Email is a form of contact
+                                                            entityType: 'call',
+                                                            entityId: client.id.toString(),
+                                                            metadata: { type: 'email', to: client.email }
+                                                        })
+                                                    })
+                                                }}
+                                                className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
+                                            >
+                                                📧 {client.email}
+                                            </button>
+                                        )}
+                                        {client.telefono && (
+                                            <button
+                                                onClick={() => {
+                                                    const url = `https://wa.me/${client.telefono!.replace(/\D/g, '')}`
+                                                    window.open(url, '_blank')
+                                                    import('@/app/actions/events').then(({ trackEvent }) => {
+                                                        trackEvent({
+                                                            eventType: 'call_started',
+                                                            entityType: 'call',
+                                                            entityId: client.id.toString(),
+                                                            metadata: { type: 'whatsapp', to: client.telefono }
+                                                        })
+                                                        // For WhatsApp we simulate immediate finish or just log the start
+                                                        setTimeout(() => {
+                                                            trackEvent({
+                                                                eventType: 'call_finished',
+                                                                entityType: 'call',
+                                                                entityId: client.id.toString(),
+                                                                metadata: { type: 'whatsapp', outcome: 'connected' }
+                                                            })
+                                                        }, 2000)
+                                                    })
+                                                }}
+                                                className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
+                                            >
+                                                💬 {client.telefono}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
@@ -16,6 +17,7 @@ type History = {
 
 export default function ForecastDashboard() {
     const auth = useAuth()
+    const router = useRouter()
     const [leads, setLeads] = useState<Lead[]>([])
     const [history, setHistory] = useState<History[]>([])
     const [loading, setLoading] = useState(true)
@@ -26,8 +28,16 @@ export default function ForecastDashboard() {
     const [filterSeller, setFilterSeller] = useState('All')
 
     useEffect(() => {
+        if (!auth.loading && !auth.loggedIn) {
+            router.push('/home')
+            return
+        }
+        if (auth.profile && auth.profile.role !== 'admin' && auth.profile.role !== 'rh') {
+            router.push('/home')
+            return
+        }
         fetchLeads()
-    }, [])
+    }, [auth.loading, auth.loggedIn, auth.profile])
 
     const fetchLeads = async () => {
         setLoading(true)
