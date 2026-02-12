@@ -56,22 +56,22 @@ export default function CatalogSelect({
 
     return (
         <div className='relative'>
-            <label className='block text-xs font-bold text-gray-500 uppercase mb-1'>{label}</label>
+            <label className='block text-xs font-bold text-[var(--text-secondary)] uppercase mb-1'>{label}</label>
 
             {/* Trigger */}
             <button
                 type='button'
                 disabled={disabled}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
-                className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg bg-white text-sm transition-all
-                    ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:ring-2 focus:ring-[#2048FF]'}
-                    ${isOpen ? 'ring-2 ring-[#2048FF] border-transparent' : 'border-gray-200'}
+                className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg bg-[var(--input-bg)] text-sm transition-all
+                    ${disabled ? 'opacity-50 cursor-not-allowed bg-[var(--background)]' : 'hover:border-[var(--text-secondary)] focus:ring-2 focus:ring-[#2048FF]'}
+                    ${isOpen ? 'ring-2 ring-[#2048FF] border-transparent' : 'border-[var(--input-border)]'}
                 `}
             >
-                <span className={selectedOption ? 'text-gray-900' : 'text-gray-400'}>
+                <span className={selectedOption ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}>
                     {selectedOption ? selectedOption.name : 'Seleccionar...'}
                 </span>
-                <ChevronsUpDown className='w-4 h-4 text-gray-400 shrink-0 opacity-50' />
+                <ChevronsUpDown className='w-4 h-4 text-[var(--text-secondary)] shrink-0 opacity-50' />
             </button>
 
             {/* Dropdown */}
@@ -81,21 +81,21 @@ export default function CatalogSelect({
                         className='fixed inset-0 z-10'
                         onClick={() => { setIsOpen(false); setIsCreating(false); }}
                     />
-                    <div className='absolute z-20 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col'>
+                    <div className='absolute z-20 w-full mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col'>
                         {/* List */}
                         {!isCreating ? (
                             <>
                                 <div className='overflow-y-auto p-1 flex-1'>
                                     {options.length === 0 && (
-                                        <p className='text-xs text-gray-400 px-3 py-2 text-center'>No hay opciones</p>
+                                        <p className='text-xs text-[var(--text-secondary)] px-3 py-2 text-center'>No hay opciones</p>
                                     )}
                                     {options.map(option => (
                                         <button
                                             key={option.id}
                                             type='button'
                                             onClick={() => { onChange(option.id); setIsOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors
-                                                ${option.id === value ? 'bg-blue-50 text-[#2048FF] font-semibold' : 'text-gray-700'}
+                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-[var(--hover-bg)] transition-colors
+                                                ${option.id === value ? 'bg-[#2048FF]/10 text-[#2048FF] font-semibold' : 'text-[var(--text-primary)]'}
                                             `}
                                         >
                                             {option.name}
@@ -103,11 +103,11 @@ export default function CatalogSelect({
                                         </button>
                                     ))}
                                 </div>
-                                <div className='p-1 border-t border-gray-50'>
+                                <div className='p-1 border-t border-[var(--card-border)]'>
                                     <button
                                         type='button'
                                         onClick={() => setIsCreating(true)}
-                                        className='w-full flex items-center gap-2 px-3 py-2 text-sm text-[#2048FF] font-semibold hover:bg-blue-50 rounded-lg transition-colors'
+                                        className='w-full flex items-center gap-2 px-3 py-2 text-sm text-[#2048FF] font-semibold hover:bg-[#2048FF]/10 rounded-lg transition-colors'
                                     >
                                         <Plus size={14} />
                                         Agregar nueva opción
@@ -116,12 +116,12 @@ export default function CatalogSelect({
                             </>
                         ) : (
                             // Create New View
-                            <div className='p-3 space-y-3 bg-gray-50'>
-                                <p className='text-xs font-bold text-gray-500 uppercase'>Nueva opción para {label}</p>
+                            <div className='p-3 space-y-3 bg-[var(--hover-bg)]'>
+                                <p className='text-xs font-bold text-[var(--text-secondary)] uppercase'>Nueva opción para {label}</p>
                                 <input
                                     autoFocus
                                     type='text'
-                                    className='w-full px-2 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-[#2048FF] outline-none'
+                                    className='w-full px-2 py-1.5 text-sm border border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--text-primary)] rounded-lg focus:ring-2 focus:ring-[#2048FF] outline-none'
                                     placeholder='Nombre...'
                                     value={newItemName}
                                     onChange={e => setNewItemName(e.target.value)}
@@ -136,7 +136,7 @@ export default function CatalogSelect({
                                     <button
                                         type='button'
                                         onClick={() => setIsCreating(false)}
-                                        className='px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-200 rounded-lg'
+                                        className='px-3 py-1.5 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--card-border)] rounded-lg'
                                     >
                                         Cancelar
                                     </button>

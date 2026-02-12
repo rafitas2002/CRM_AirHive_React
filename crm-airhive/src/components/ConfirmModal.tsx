@@ -21,9 +21,9 @@ export default function ConfirmModal({
 
     return (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity'>
-            <div className='w-full max-w-sm bg-white rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col'>
+            <div className='w-full max-w-sm bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col'>
                 {/* Header */}
-                <div className='bg-[#0F2A44] px-6 py-4 flex items-center justify-between shrink-0'>
+                <div className='bg-[#0A1635] px-6 py-4 flex items-center justify-between shrink-0 border-b border-[var(--card-border)]'>
                     <h2 className='text-lg font-bold text-white'>
                         {title}
                     </h2>
@@ -48,16 +48,16 @@ export default function ConfirmModal({
                             </svg>
                         )}
                     </div>
-                    <p className='text-gray-600 text-sm leading-relaxed'>
+                    <p className='text-[var(--text-secondary)] text-sm leading-relaxed'>
                         {message}
                     </p>
                 </div>
 
                 {/* Footer */}
-                <div className='bg-[#F5F6F8] px-6 py-4 flex items-center justify-center gap-3 shrink-0 border-t border-[#E0E0E0]'>
+                <div className='bg-[var(--hover-bg)] px-6 py-4 flex items-center justify-center gap-3 shrink-0 border-t border-[var(--card-border)]'>
                     <button
                         onClick={onClose}
-                        className='w-full px-4 py-2 text-[#667085] font-medium hover:text-[#0F2A44] transition-colors bg-white border border-[#BDBBC7] rounded-lg shadow-sm hover:shadow hover:border-[#667085]'
+                        className='w-full px-4 py-2 text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] transition-colors bg-[var(--card-bg)] border border-[var(--input-border)] rounded-lg shadow-sm hover:shadow hover:border-[var(--text-secondary)]'
                     >
                         Cancelar
                     </button>
@@ -67,8 +67,8 @@ export default function ConfirmModal({
                             onClose()
                         }}
                         className={`w-full px-4 py-2 text-white font-medium rounded-lg shadow-md transition-all transform active:scale-95 ${isDestructive
-                                ? 'bg-red-600 hover:bg-red-700'
-                                : 'bg-[#2048FF] hover:bg-[#1700AC]'
+                            ? 'bg-red-600 hover:bg-red-700'
+                            : 'bg-[#2048FF] hover:bg-[#1700AC]'
                             }`}
                     >
                         {isDestructive ? 'Eliminar' : 'Aceptar'}
