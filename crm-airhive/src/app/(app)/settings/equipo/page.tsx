@@ -21,7 +21,9 @@ export default async function EmployeesPage() {
         .eq('id', user.id)
         .single()
 
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'rh')) {
+    const userProfile = profile as any
+
+    if (!userProfile || (userProfile.role !== 'admin' && userProfile.role !== 'rh')) {
         redirect('/home')
     }
 
@@ -44,10 +46,10 @@ export default async function EmployeesPage() {
     }
 
     // Merge details into profiles
-    const employees = (profiles || []).map(profile => {
-        const detail = (details || []).find((d: any) => d.user_id === profile.id)
+    const employees = ((profiles as any[]) || []).map(p => {
+        const detail = (details || []).find((d: any) => d.user_id === p.id)
         return {
-            ...profile,
+            ...p,
             details: detail || {} // Attach details or empty object
         }
     })
@@ -63,7 +65,7 @@ export default async function EmployeesPage() {
 
             <EmployeesClient
                 initialEmployees={employees || []}
-                currentUserRole={profile.role}
+                currentUserRole={userProfile?.role}
             />
         </div>
     )

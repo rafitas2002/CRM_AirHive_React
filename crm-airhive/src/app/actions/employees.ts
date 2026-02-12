@@ -21,7 +21,7 @@ export async function createEmployee(data: any) {
             .eq('id', user.id)
             .single()
 
-        if (adminProfile?.role !== 'admin' && adminProfile?.role !== 'rh') {
+        if ((adminProfile as any)?.role !== 'admin' && (adminProfile as any)?.role !== 'rh') {
             throw new Error('No tienes permisos suficientes')
         }
 
@@ -36,8 +36,8 @@ export async function createEmployee(data: any) {
         if (!newUser.user) throw new Error('Error al crear usuario')
 
         // 2. Insert into Profiles
-        const { error: profileError } = await supabaseAdmin
-            .from('profiles')
+        const { error: profileError } = await (supabaseAdmin
+            .from('profiles') as any)
             .upsert({
                 id: newUser.user.id,
                 full_name: data.fullName,
@@ -93,13 +93,13 @@ export async function updateEmployee(id: string, data: any) {
             .eq('id', user.id)
             .single()
 
-        if (adminProfile?.role !== 'admin' && adminProfile?.role !== 'rh') {
+        if ((adminProfile as any)?.role !== 'admin' && (adminProfile as any)?.role !== 'rh') {
             throw new Error('No tienes permisos suficientes')
         }
 
         // Update Profile
-        const { error: profileError } = await supabaseAdmin
-            .from('profiles')
+        const { error: profileError } = await (supabaseAdmin
+            .from('profiles') as any)
             .update({
                 full_name: data.fullName,
                 role: data.role,
@@ -172,7 +172,7 @@ export async function toggleEmployeeStatus(id: string, banned: boolean) {
             .eq('id', user.id)
             .single()
 
-        if (adminProfile?.role !== 'admin' && adminProfile?.role !== 'rh') {
+        if ((adminProfile as any)?.role !== 'admin' && (adminProfile as any)?.role !== 'rh') {
             throw new Error('No tienes permisos suficientes')
         }
 
