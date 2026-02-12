@@ -59,8 +59,8 @@ export async function createCatalogItem(table: string, name: string) {
         // trim and capitalize?
         const formattedName = name.trim()
 
-        const { data, error } = await supabase
-            .from(table)
+        const { data, error } = await (supabase
+            .from(table) as any)
             .insert({ name: formattedName, is_active: true })
             .select('id, name')
             .single()
