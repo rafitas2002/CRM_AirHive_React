@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { getAdminCorrelationData } from '@/app/actions/admin'
+import { getPastRaces, syncRaceResults } from '@/app/actions/race'
+import { RaceHistoryTable } from '@/components/RaceHistoryTable'
 import {
     Users,
     TrendingUp,
@@ -15,7 +17,14 @@ import {
     ArrowDownRight,
     Search,
     Filter,
-    Table as TableIcon
+    Table as TableIcon,
+    RefreshCcw,
+    Zap,
+    BarChart3,
+    Building2,
+    Timer,
+    CheckCircle,
+    MapPin
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -23,8 +32,13 @@ export default function CorrelacionesPage() {
     const auth = useAuth()
     const router = useRouter()
     const [data, setData] = useState<any[]>([])
+    const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})
     const [loading, setLoading] = useState(true)
+    const [syncing, setSyncing] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
+    const [sortBy, setSortBy] = useState('totalSales')
+    const [genderFilter, setGenderFilter] = useState('all')
+    const [ageRange, setAgeRange] = useState('all')
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
@@ -43,21 +57,80 @@ export default function CorrelacionesPage() {
     const fetchData = async () => {
         setLoading(true)
         setError(null)
-        const res = await getAdminCorrelationData()
-        if (res.success && res.data) {
-            setData(res.data)
-        } else {
-            setError(res.error || 'Error desconocido al cargar datos')
+        try {
+            const [corrRes, raceRes] = await Promise.all([
+                getAdminCorrelationData(),
+                getPastRaces()
+            ])
+
+            if (corrRes.success && corrRes.data) {
+                setData(corrRes.data)
+            } else {
+                setError(corrRes.error || 'Error al cargar correlaciones')
+            }
+
+            if (raceRes.success && raceRes.data) {
+                setPastRaces(raceRes.data)
+            }
+        } catch (err: any) {
+            setError(err.message || 'Error inesperado')
         }
         setLoading(false)
     }
 
+    const handleSync = async () => {
+        setSyncing(true)
+        const res = await syncRaceResults()
+        if (res.success) {
+            await fetchData()
+            alert('¡Sincronización mensual completada!')
+        } else {
+            alert('Error al sincronizar: ' + res.error)
+        }
+        setSyncing(false)
+    }
+
     const filteredData = useMemo(() => {
-        return data.filter(item =>
-            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.gender.toLowerCase().includes(searchTerm.toLowerCase())
+        let result = data.filter(item =>
+            item.name.toLowerCase().includes(searchTerm.toLowerCase())
         )
-    }, [data, searchTerm])
+
+        if (genderFilter !== 'all') {
+            result = result.filter(item => item.gender === genderFilter)
+        }
+
+        if (ageRange !== 'all') {
+            if (ageRange === '30-') result = result.filter(item => item.age && item.age < 30)
+            if (ageRange === '30-45') result = result.filter(item => item.age && item.age >= 30 && item.age <= 45)
+            if (ageRange === '45+') result = result.filter(item => item.age && item.age > 45)
+        }
+
+        result.sort((a, b) => {
+            if (sortBy === 'totalSales') return b.totalSales - a.totalSales
+            if (sortBy === 'totalMedals') return b.totalMedals - a.totalMedals
+            if (sortBy === 'gold') return b.medals.gold - a.medals.gold
+            if (sortBy === 'silver') return b.medals.silver - a.medals.silver
+            if (sortBy === 'bronze') return b.medals.bronze - a.medals.bronze
+            if (sortBy === 'tenure') return b.tenureMonths - a.tenureMonths
+            if (sortBy === 'age') return (b.age || 0) - (a.age || 0)
+            if (sortBy === 'growth') return b.growth - a.growth
+            if (sortBy === 'efficiency') return b.medalRatio - a.medalRatio
+            if (sortBy === 'meetings') return a.meetingsPerClose - b.meetingsPerClose // Lower is better
+            if (sortBy === 'accuracy') return b.forecastAccuracy - a.forecastAccuracy
+            if (sortBy === 'speed') return a.avgResponseTimeHours - b.avgResponseTimeHours // Lower is better
+            return 0
+        })
+
+        return result
+    }, [data, searchTerm, sortBy, genderFilter, ageRange])
+
+    const risingStars = useMemo(() => {
+        // Sellers with < 6 months tenure but high medal ratio
+        return data
+            .filter(d => d.tenureMonths <= 6 && d.medalRatio > 0)
+            .sort((a, b) => b.medalRatio - a.medalRatio)
+            .slice(0, 3)
+    }, [data])
 
     // Analysis Logic
     const insights = useMemo(() => {
@@ -78,18 +151,57 @@ export default function CorrelacionesPage() {
         const avgGrowthYoung = youngSellers.length ? youngSellers.reduce((acc, d) => acc + d.growth, 0) / youngSellers.length : 0
         const avgGrowthSenior = seniorSellers.length ? seniorSellers.reduce((acc, d) => acc + d.growth, 0) / seniorSellers.length : 0
 
+        const topSellers = [...data].sort((a, b) => b.medalScore - a.medalScore)
+        const dominantSeller = topSellers[0]
+        const totalMedals = data.reduce((acc, d) => acc + d.totalMedals, 0)
+
+        const avgMeetingsPerClose = data.reduce((acc, d) => acc + d.meetingsPerClose, 0) / (data.length || 1)
+        const avgForecastAccuracy = data.reduce((acc, d) => acc + d.forecastAccuracy, 0) / (data.length || 1)
+        const avgResponseTime = data.reduce((acc, d) => acc + d.avgResponseTimeHours, 0) / (data.length || 1)
+
+        // Industry aggregate
+        const indMap: Record<string, number> = {}
+        data.forEach(d => { if (d.topIndustry !== 'N/A') indMap[d.topIndustry] = (indMap[d.topIndustry] || 0) + 1 })
+        const topOverallIndustry = Object.entries(indMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
+
         return [
             {
-                title: 'Correlación Género vs Antigüedad',
-                desc: `Los vendedores hombres promedian ${avgTenureMale.toFixed(1)} meses, mientras que las mujeres promedian ${avgTenureFemale.toFixed(1)} meses.`,
-                icon: Users,
-                color: 'blue'
+                title: 'Esfuerzo vs Éxito',
+                desc: `El promedio del equipo es de ${avgMeetingsPerClose.toFixed(1)} reuniones por cada cierre ganado.`,
+                icon: Zap,
+                color: 'amber'
             },
             {
-                title: 'Aprendizaje: Vendedores Jóvenes',
-                desc: `Sellers <30 años crecen a un ritmo del ${avgGrowthYoung.toFixed(1)}% mensual vs ${avgGrowthSenior.toFixed(1)}% en mayores de 30.`,
-                icon: TrendingUp,
+                title: 'Alineación de Expectativa',
+                desc: `Precisión promedio del forecast: ${avgForecastAccuracy.toFixed(1)}%. Los cierres coinciden con el optimismo inicial.`,
+                icon: BarChart3,
+                color: 'indigo'
+            },
+            {
+                title: 'Dominancia por Industria',
+                desc: `La industria "${topOverallIndustry}" es donde más sellers están encontrando éxito de cierre.`,
+                icon: Building2,
+                color: 'rose'
+            },
+            {
+                title: 'Velocidad de Respuesta',
+                desc: `Tiempo promedio al primer contacto: ${avgResponseTime.toFixed(1)} horas desde el registro del lead.`,
+                icon: Timer,
                 color: 'emerald'
+            },
+            {
+                title: 'Dominancia y Consistencia',
+                desc: dominantSeller && totalMedals > 0
+                    ? `${dominantSeller.name} lidera con ${dominantSeller.medals.gold} oros y una eficiencia de ${dominantSeller.medalRatio.toFixed(2)}.`
+                    : 'Aún no hay suficientes datos para determinar dominancia.',
+                icon: Trophy,
+                color: 'yellow'
+            },
+            {
+                title: 'Impacto Modalidad',
+                desc: `Casi el ${(data.reduce((acc, d) => acc + d.physicalCloseRate, 0) / (data.length || 1)).toFixed(1)}% de cierres exitosos tuvieron presencia física.`,
+                icon: MapPin,
+                color: 'blue'
             }
         ]
     }, [data])
@@ -121,10 +233,18 @@ export default function CorrelacionesPage() {
                                 Modo Admin
                             </div>
                             <button
+                                onClick={handleSync}
+                                disabled={syncing}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-bold text-xs uppercase tracking-wider ${syncing ? 'opacity-50 cursor-not-allowed bg-slate-800' : 'bg-[#2048FF] text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20'}`}
+                            >
+                                <RefreshCcw size={14} className={syncing ? 'animate-spin' : ''} />
+                                {syncing ? 'Sincronizando...' : 'Cerrar Mes / Sincronizar'}
+                            </button>
+                            <button
                                 onClick={fetchData}
-                                className='p-2 rounded-xl transition-colors'
+                                className='p-2 rounded-xl transition-colors hover:bg-slate-800'
                                 style={{ color: 'var(--text-secondary)' }}
-                                title='Actualizar Datos'
+                                title='Actualizar Todo'
                             >
                                 🔄
                             </button>
@@ -152,7 +272,7 @@ export default function CorrelacionesPage() {
                     </AnimatePresence>
 
                     {/* Insights Grid */}
-                    <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
                         {insights.map((insight, idx) => (
                             <motion.div
                                 key={idx}
@@ -162,19 +282,60 @@ export default function CorrelacionesPage() {
                                 className='p-8 rounded-[32px] border shadow-sm relative overflow-hidden group'
                                 style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
                             >
-                                <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: insight.color === 'blue' ? '#2048FF' : '#10b981' }} />
+                                <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: `var(--${insight.color}-500, #2048FF)` }} />
                                 <div className='relative z-10 flex items-start gap-6'>
-                                    <div className='w-14 h-14 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: insight.color === 'blue' ? '#2048FF' : '#10b981' }}>
+                                    <div className='w-14 h-14 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: `var(--${insight.color}-500, #2048FF)` }}>
                                         <insight.icon size={28} />
                                     </div>
                                     <div className='space-y-2'>
                                         <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
-                                        <p className='font-medium leading-relaxed' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
+                                        <p className='font-medium leading-relaxed text-sm opacity-80' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
                                     </div>
                                 </div>
                             </motion.div>
                         ))}
                     </div>
+
+                    {/* Rising Stars Section */}
+                    {risingStars.length > 0 && (
+                        <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-[32px] p-8 border border-blue-500/20">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="p-3 bg-blue-500 rounded-2xl text-white shadow-lg shadow-blue-500/30">
+                                    <ArrowUpRight size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black text-white">Rising Stars</h2>
+                                    <p className="text-sm text-blue-200 font-bold uppercase tracking-wider">Nuevos talentos con mayor eficiencia de medallas</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {risingStars.map((star, idx) => (
+                                    <div key={star.userId} className="bg-slate-900/40 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white">
+                                                {star.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-white">{star.name}</p>
+                                                <p className="text-xs text-slate-400">{star.tenureMonths} meses en AirHive</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <p className="text-[10px] font-black text-blue-400 uppercase">Eficiencia</p>
+                                                <p className="text-xl font-black text-white">{star.medalRatio.toFixed(2)}</p>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                {Array.from({ length: Math.min(3, Math.ceil(star.medalRatio)) }).map((_, i) => (
+                                                    <Trophy key={i} size={14} className="text-yellow-500" />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Master Table Section */}
                     <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
@@ -188,16 +349,56 @@ export default function CorrelacionesPage() {
                                     <p className='text-[10px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Filtra y correlaciona manualmente</p>
                                 </div>
                             </div>
-                            <div className='relative min-w-[300px]'>
-                                <Search className='absolute left-4 top-1/2 -translate-y-1/2' style={{ color: 'var(--text-secondary)' }} size={18} />
-                                <input
-                                    type='text'
-                                    placeholder='Buscar por nombre o género...'
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className='w-full pl-12 pr-4 py-3 border-none rounded-2xl focus:ring-2 focus:ring-[#2048FF] text-sm font-bold placeholder:text-gray-400 transition-all shadow-inner'
-                                    style={{ background: 'var(--background)', color: 'var(--text-primary)' }}
-                                />
+
+                            <div className='flex flex-wrap items-center gap-4 flex-1 justify-end'>
+                                <div className='relative min-w-[200px]'>
+                                    <Search className='absolute left-4 top-1/2 -translate-y-1/2' style={{ color: 'var(--text-secondary)' }} size={16} />
+                                    <input
+                                        type='text'
+                                        placeholder='Search...'
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className='w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-xl text-sm font-bold placeholder:text-gray-500 transition-all focus:ring-2 focus:ring-blue-500'
+                                        style={{ color: 'var(--text-primary)' }}
+                                    />
+                                </div>
+
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                >
+                                    <option value="totalSales">Ordenar por: Ventas</option>
+                                    <option value="totalMedals">Ordenar por: Total Medallas</option>
+                                    <option value="gold">Ordenar por: Oro</option>
+                                    <option value="efficiency">Ordenar por: Eficiencia (Pts/Mes)</option>
+                                    <option value="meetings">Ordenar por: Effort (Mtg/Close)</option>
+                                    <option value="accuracy">Ordenar por: Forecast Accuracy</option>
+                                    <option value="speed">Ordenar por: Response Speed</option>
+                                    <option value="tenure">Ordenar por: Antigüedad</option>
+                                    <option value="growth">Ordenar por: Crecimiento</option>
+                                </select>
+
+                                <select
+                                    value={genderFilter}
+                                    onChange={(e) => setGenderFilter(e.target.value)}
+                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                >
+                                    <option value="all">Filtro: Todo Género</option>
+                                    <option value="Masculino">Masculino</option>
+                                    <option value="Femenino">Femenino</option>
+                                </select>
+
+                                <select
+                                    value={ageRange}
+                                    onChange={(e) => setAgeRange(e.target.value)}
+                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                >
+                                    <option value="all">Filtro: Toda Edad</option>
+                                    <option value="30-">Menores de 30</option>
+                                    <option value="30-45">30 a 45 años</option>
+                                    <option value="45+">Mayores de 45</option>
+                                </select>
                             </div>
                         </div>
 
@@ -212,6 +413,9 @@ export default function CorrelacionesPage() {
                                         <th className='px-8 py-5'>Ventas Totales</th>
                                         <th className='px-8 py-5'>Crecimiento</th>
                                         <th className='px-8 py-5 text-center'>Medallas</th>
+                                        <th className='px-8 py-5 text-center'>Effort (Mtg/C)</th>
+                                        <th className='px-8 py-5 text-center'>Accuracy</th>
+                                        <th className='px-8 py-5 text-center'>Top Ind.</th>
                                     </tr>
                                 </thead>
                                 <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
@@ -265,6 +469,21 @@ export default function CorrelacionesPage() {
                                                     <span title='Bronce' className='flex items-center gap-1'><Trophy size={14} className='text-amber-700' /> <span className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{item.medals.bronze}</span></span>
                                                 </div>
                                             </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm' style={{ color: item.meetingsPerClose < 3 ? '#10b981' : 'var(--text-primary)' }}>
+                                                    {item.meetingsPerClose.toFixed(1)}
+                                                </span>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm' style={{ color: item.forecastAccuracy > 80 ? '#10b981' : 'var(--text-primary)' }}>
+                                                    {item.forecastAccuracy.toFixed(0)}%
+                                                </span>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-bold text-[10px] uppercase truncate max-w-[80px] block' title={item.topIndustry} style={{ color: 'var(--text-secondary)' }}>
+                                                    {item.topIndustry}
+                                                </span>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -276,6 +495,19 @@ export default function CorrelacionesPage() {
                                 <p className='font-bold' style={{ color: 'var(--text-secondary)' }}>No se encontraron datos para los filtros seleccionados.</p>
                             </div>
                         )}
+                    </div>
+                    {/* Past Races History */}
+                    <div className='space-y-6'>
+                        <div className='flex items-center gap-4'>
+                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-yellow-500/10 text-yellow-500'>
+                                <Trophy size={24} />
+                            </div>
+                            <div>
+                                <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Historial de Carreras</h2>
+                                <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Resultados finales por mes</p>
+                            </div>
+                        </div>
+                        <RaceHistoryTable races={pastRaces} />
                     </div>
                 </div>
             </div>
