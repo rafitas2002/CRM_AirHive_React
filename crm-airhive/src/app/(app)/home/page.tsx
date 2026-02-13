@@ -114,31 +114,43 @@ function AdminDashboardView({ username }: { username: string }) {
         }
     }, [leads, history])
 
-    if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-10'>
-                {/* Dynamic Welcome Header */}
-                <div className='relative overflow-hidden bg-gradient-to-br from-[#0F2A44] via-[#1700AC] to-[#2048FF] p-10 rounded-[40px] shadow-2xl shadow-blue-900/20 text-white group'>
+                {/* Dynamic Welcome Header - Hive Wave Aesthetic */}
+                <div className='relative overflow-hidden bg-gradient-to-br from-[#0A1635] via-[#2048FF] to-[#1700AC] p-10 rounded-[40px] shadow-2xl shadow-blue-900/40 text-white group'>
                     <div className='absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48 blur-3xl transition-all duration-700 group-hover:scale-110'></div>
                     <div className='absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full -ml-32 -mb-32 blur-2xl'></div>
 
+                    {/* Decorative SVG Wave - Twisted Tube feel */}
+                    <svg viewBox="0 0 1000 1000" className="absolute right-[-10%] top-[-20%] w-[60%] h-auto opacity-20 transition-transform duration-1000 group-hover:rotate-12 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1000 500C1000 800 600 1000 400 800C200 600 -100 400 100 200C300 0 1000 200 1000 500Z" fill="white" fillOpacity="0.1" />
+                    </svg>
+
                     <div className='relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                        <div className='space-y-2'>
-                            <h1 className='text-5xl font-black tracking-tight flex items-center gap-4'>
-                                ¡Bienvenido, {username}! 🚀
+                        <div className='space-y-4'>
+                            <div className='inline-flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20'>
+                                <span className='relative flex h-3 w-3'>
+                                    <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75'></span>
+                                    <span className='relative inline-flex rounded-full h-3 w-3 bg-blue-500'></span>
+                                </span>
+                                <span className='text-[10px] font-black uppercase tracking-[0.2em] text-blue-100'>Sistema Operativo AirHive</span>
+                            </div>
+                            <h1 className='text-6xl font-black tracking-tighter flex items-center gap-4'>
+                                ¡Hola, {username}! 🚀
                             </h1>
-                            <p className='text-blue-100/80 text-lg font-medium max-w-lg leading-relaxed'>
-                                El pulso de AirHive está bajo tu control. Aquí tienes la visión estratégica del rendimiento actual.
+                            <p className='text-blue-100/90 text-xl font-medium max-w-xl leading-relaxed'>
+                                Tu centro de comando inteligente está listo. Gestiona el pulso de tus relaciones corporativas hoy.
                             </p>
                         </div>
                         <div className='flex gap-3'>
-                            <div className='bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10'>
-                                <p className='text-[10px] font-black uppercase tracking-widest text-blue-200 mb-1'>Pipeline Total</p>
-                                <p className='text-2xl font-black'>${stats.totalPipeline.toLocaleString()}</p>
+                            <div className='bg-black/20 backdrop-blur-xl px-8 py-6 rounded-3xl border border-white/10 shadow-inner'>
+                                <p className='text-[10px] font-black uppercase tracking-[0.2em] text-blue-300 mb-2'>Pipeline Estratégico</p>
+                                <p className='text-4xl font-black tracking-tighter'>${stats.totalPipeline.toLocaleString()}</p>
                             </div>
                         </div>
                     </div>
@@ -295,14 +307,14 @@ function SellerHomeView({ username }: { username: string }) {
 
     if (loading) {
         return (
-            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
+            <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}>
                 <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div>
             </div>
         )
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Welcome Header */}
                 <div className='bg-gradient-to-r from-[#1700AC] to-[#2048FF] p-8 rounded-3xl shadow-xl text-white'>
@@ -400,12 +412,12 @@ function SellerHomeView({ username }: { username: string }) {
 
 export default function HomePage() {
     const auth = useAuth()
-    const isAdmin = auth.profile?.role === 'admin'
+    const isAdminOrRH = auth.profile?.role === 'admin' || auth.profile?.role === 'rh'
 
     // Only block if we are loading AND don't have a session
-    if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
-    if (isAdmin) {
+    if (isAdminOrRH) {
         return <AdminDashboardView username={auth.username} />
     }
 

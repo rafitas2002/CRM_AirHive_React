@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, User } from 'lucide-react'
+import { Trophy, TrendingUp, User, Info } from 'lucide-react'
+import RaceInfoModal from './RaceInfoModal'
 
 interface SellerRaceData {
     name: string
@@ -16,17 +18,27 @@ interface SellerRaceProps {
 }
 
 export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
+    const [isINFOOpen, setIsINFOOpen] = useState(false)
     // Sort by value for the "race" look
     const sortedSellers = [...sellers].sort((a, b) => b.value - a.value)
 
     return (
-        <div className='bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8'>
+        <div className='bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8 relative'>
             <div className='flex justify-between items-end'>
                 <div>
-                    <h3 className='text-xl font-black text-[#0A1635] tracking-tight flex items-center gap-2'>
-                        <Trophy className='w-5 h-5 text-amber-500' />
-                        Carrera de Cierre
-                    </h3>
+                    <div className='flex items-center gap-3'>
+                        <h3 className='text-xl font-black text-[#0A1635] tracking-tight flex items-center gap-2'>
+                            <Trophy className='w-5 h-5 text-amber-500' />
+                            Carrera de Cierre
+                        </h3>
+                        <button
+                            onClick={() => setIsINFOOpen(true)}
+                            className='w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors'
+                            title="Ver Detalles y Medallero"
+                        >
+                            <Info size={14} />
+                        </button>
+                    </div>
                     <p className='text-xs text-gray-400 font-medium mt-1 uppercase tracking-widest'>Valor en Negociación vs Meta de Equipo</p>
                 </div>
                 <div className='text-right'>
@@ -98,7 +110,13 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                                     }}
                                     className='absolute -top-1 -ml-4 text-2xl select-none pointer-events-none drop-shadow-md z-10'
                                 >
-                                    {progress < 33 ? '🐢' : progress < 66 ? '🏃‍♂️' : '🏎️'}
+                                    {progress < 12.5 ? '🐌' :
+                                        progress < 25.0 ? '🐢' :
+                                            progress < 37.5 ? '🚶' :
+                                                progress < 50.0 ? '🏃' :
+                                                    progress < 62.5 ? '🚴' :
+                                                        progress < 75.0 ? '🚗' :
+                                                            progress < 87.5 ? '🏍️' : '🏎️'}
                                 </motion.div>
                             </div>
 
@@ -118,6 +136,8 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                 <span>75%</span>
                 <span>Meta</span>
             </div>
+
+            <RaceInfoModal isOpen={isINFOOpen} onClose={() => setIsINFOOpen(false)} />
         </div>
     )
 }

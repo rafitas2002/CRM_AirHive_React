@@ -64,6 +64,10 @@ export type Database = {
                     last_snapshot_at: string | null
                     email: string | null
                     telefono: string | null
+                    original_pre_lead_id: number | null
+                    original_vendedor_id: string | null
+                    converted_at: string | null
+                    converted_by: string | null
                 }
                 Insert: {
                     id?: number
@@ -128,6 +132,7 @@ export type Database = {
                     notas: string | null
                     created_at: string
                     updated_at: string
+                    is_converted: boolean
                 }
                 Insert: {
                     id?: number
@@ -140,8 +145,7 @@ export type Database = {
                     vendedor_id?: string | null
                     vendedor_name?: string | null
                     notas?: string | null
-                    created_at?: string
-                    updated_at?: string
+                    is_converted?: boolean
                 }
                 Update: {
                     id?: number
@@ -404,6 +408,7 @@ export type Database = {
                     sitio_web: string | null
                     tamano: number | null
                     owner_id: string | null
+                    industria_id: string | null
                     created_at: string
                     updated_at: string
                 }
@@ -415,6 +420,7 @@ export type Database = {
                     sitio_web?: string | null
                     tamano?: number | null
                     owner_id?: string | null
+                    industria_id?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -426,6 +432,7 @@ export type Database = {
                     sitio_web?: string | null
                     tamano?: number | null
                     owner_id?: string | null
+                    industria_id?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -463,6 +470,55 @@ export type Database = {
                     scope?: string
                     created_at?: string
                     updated_at?: string
+                }
+            }
+            race_results: {
+                Row: {
+                    id: string
+                    period: string
+                    user_id: string
+                    total_sales: number
+                    rank: number
+                    medal: 'gold' | 'silver' | 'bronze' | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    period: string
+                    user_id: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    period?: string
+                    user_id?: string
+                    total_sales?: number
+                    rank?: number
+                    medal?: 'gold' | 'silver' | 'bronze' | null
+                    created_at?: string
+                }
+            }
+            industrias: {
+                Row: {
+                    id: string
+                    name: string
+                    is_active: boolean
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    name: string
+                    is_active?: boolean
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    name?: string
+                    is_active?: boolean
+                    created_at?: string
                 }
             }
         }

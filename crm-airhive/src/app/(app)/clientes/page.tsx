@@ -7,6 +7,8 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
+import { Search, Users, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
@@ -252,20 +254,33 @@ export default function LeadsPage() {
                 console.error('Error creating lead:', error)
                 alert('Error al crear el lead: ' + error.message)
             } else if (data && data[0]) {
+                const newId = data[0].id
+                // Track Event: lead_created
+                const { trackEvent } = await import('@/app/actions/events')
+                trackEvent({
+                    eventType: 'lead_created',
+                    entityType: 'lead',
+                    entityId: newId,
+                    metadata: { etapa: leadData.etapa, valor: leadData.valor_estimado }
+                })
+
                 // Initial history entry
                 await (supabase.from('lead_history') as any).insert([
-                    { lead_id: data[0].id, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
-                    { lead_id: data[0].id, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
+                    { lead_id: newId, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
+                    { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
                 ])
             }
         } else if (modalMode === 'edit' && currentLead) {
             // Check for changes to log
             const historyEntries: any[] = []
-            if (leadData.etapa !== currentLead.etapa) {
+            const stageChanged = leadData.etapa !== currentLead.etapa
+            const probChanged = leadData.probabilidad !== (currentLead as any).probabilidad
+
+            if (stageChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'etapa', old_value: currentLead.etapa, new_value: leadData.etapa, changed_by: currentUser.id })
             }
-            if (leadData.probabilidad !== currentLead.probabilidad) {
-                historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String(currentLead.probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
+            if (probChanged) {
+                historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
 
             const payload: any = {
@@ -288,11 +303,11 @@ export default function LeadsPage() {
 
             if (isClosedNow) {
                 const y = leadData.etapa === 'Cerrado Ganado' ? 1 : 0
-                const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : (currentLead.probabilidad || 50)
+                const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : ((currentLead as any).probabilidad || 50)
                 const p = pValue / 100
 
                 // Recalculate if it's new closure OR if data changed on an old closure
-                const dataChanged = leadData.probabilidad !== currentLead.probabilidad || leadData.etapa !== currentLead.etapa
+                const dataChanged = leadData.probabilidad !== (currentLead as any).probabilidad || leadData.etapa !== currentLead.etapa
 
                 if (!wasClosedBefore || dataChanged) {
                     payload.forecast_evaluated_probability = pValue
@@ -310,14 +325,43 @@ export default function LeadsPage() {
 
             if (error) {
                 alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
-            } else if (historyEntries.length > 0) {
-                await (supabase.from('lead_history') as any).insert(historyEntries)
+            } else {
+                const { trackEvent } = await import('@/app/actions/events')
+                // Track Event: lead_stage_change
+                if (stageChanged) {
+                    trackEvent({
+                        eventType: 'lead_stage_change',
+                        entityType: 'lead',
+                        entityId: currentLead.id,
+                        metadata: { oldStage: currentLead.etapa, newStage: leadData.etapa }
+                    })
+                    if (isClosedNow) {
+                        trackEvent({
+                            eventType: 'lead_closed',
+                            entityType: 'lead',
+                            entityId: currentLead.id,
+                            metadata: { outcome: leadData.etapa, value: leadData.valor_estimado }
+                        })
+                    }
+                } else if (probChanged) {
+                    trackEvent({
+                        eventType: 'forecast_registered',
+                        entityType: 'lead',
+                        entityId: currentLead.id,
+                        metadata: { probability: leadData.probabilidad, etapa: leadData.etapa }
+                    })
+                }
+
+                if (historyEntries.length > 0) {
+                    await (supabase.from('lead_history') as any).insert(historyEntries)
+                }
             }
         }
 
         setIsModalOpen(false)
         await fetchLeads()
     }
+
 
     const handleRowClick = (lead: Lead) => {
         setSelectedLead(lead)
@@ -377,162 +421,194 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
-            <div className='w-full mx-auto flex flex-col h-full gap-8'>
-                {/* Header - Fixed */}
-                <div className='shrink-0 space-y-4'>
-                    <div className='flex items-center justify-between'>
-                        <h1 className='text-3xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                            Leads
-                        </h1>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
+            <div className='max-w-7xl mx-auto space-y-10 w-full'>
+                {/* External Header - Page Level */}
+                {/* Header Pattern consistent with Empresas */}
+                <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex items-center gap-8'>
+                        <div className='flex items-center gap-6'>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <Users size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
+                            <div>
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                    Leads & Prospección
+                                </h1>
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Gestión y seguimiento de oportunidades comerciales.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
 
+                    <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 ${isEditingMode
-                                    ? 'bg-[#1700AC] text-white hover:bg-[#0F2A44]'
-                                    : 'border'
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                    ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
+                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
-                                    background: 'var(--card-bg)',
                                     borderColor: 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 } : {}}
                             >
-                                <span>{isEditingMode ? '✅' : '✏️'}</span> {isEditingMode ? 'Terminar Edición' : 'Editar'}
-                            </button>
-                            <button
-                                onClick={openCreateModal}
-                                className='px-6 py-2.5 bg-[#8B5CF6] text-white rounded-xl font-bold hover:bg-violet-700 transition-all shadow-md flex items-center gap-2 transform active:scale-95 uppercase text-xs tracking-widest'
-                            >
-                                <span>➕</span> Nuevo Lead
+                                <div className='flex items-center gap-2'>
+                                    {isEditingMode ? (
+                                        <span>Bloquear Edición</span>
+                                    ) : (
+                                        <>
+                                            <span>Editar Vista</span>
+                                            <Pencil size={12} strokeWidth={2.5} className="opacity-80" />
+                                        </>
+                                    )}
+                                </div>
                             </button>
                             <button
                                 onClick={fetchLeads}
-                                className='px-5 py-2.5 bg-[#2048FF] text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md flex items-center gap-2 transform active:scale-95 uppercase text-xs tracking-widest'
+                                className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
+                                style={{
+                                    background: 'var(--card-bg)',
+                                    borderColor: 'var(--card-border)',
+                                    color: 'var(--text-primary)'
+                                }}
                             >
-                                <span>🔄</span> Refrescar
+                                <div className='flex items-center gap-2'>
+                                    <span>Actualizar</span>
+                                    <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
+                                </div>
                             </button>
                         </div>
+                        <button
+                            onClick={openCreateModal}
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                        >
+                            + Nuevo Lead
+                        </button>
                     </div>
+                </div>
 
-                    {/* Filter Bar */}
-                    <div className='p-3 rounded-2xl border shadow-sm flex items-center gap-4' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='flex-1 relative font-medium min-w-[200px]'>
-                            <span className='absolute left-3.5 top-1/2 -translate-y-1/2 text-sm' style={{ color: 'var(--text-secondary)' }}>🔍</span>
-                            <input
-                                type="text"
-                                placeholder="Buscar leads..."
-                                value={filterSearch}
-                                onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-9 pr-3 py-1.5 border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2048FF] focus:border-[#2048FF] text-xs font-semibold transition-all placeholder:text-gray-400'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            />
+                {/* Main Table Container */}
+                <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col mb-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                            <div className='flex items-center gap-4'>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                    <ListFilter size={24} />
+                                </div>
+                                <div>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Bandeja de leads</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Pipeline de Ventas y Seguimiento</p>
+                                </div>
+                            </div>
+
+                            <div className='flex items-center gap-3'>
+                                <div className='px-5 py-2 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
+                                    <span className='text-2xl font-black tracking-tighter text-[#2048FF]'>{sortedAndFilteredLeads.length}</span>
+                                    <div className='flex flex-col'>
+                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Prospectos</span>
+                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Filtrados</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
-                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Etapa</label>
-                            <select
-                                value={filterStage}
-                                onChange={(e) => setFilterStage(e.target.value)}
-                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All">Todas</option>
-                                <option value="Prospección">Prospección</option>
-                                <option value="Negociación">Negociación</option>
-                                <option value="Cerrado Ganado">Cerrado Ganado</option>
-                                <option value="Cerrado Perdido">Cerrado Perdido</option>
-                            </select>
-                        </div>
+                        <div className='flex flex-col lg:flex-row items-center gap-4'>
+                            <div className='relative flex-1 w-full'>
+                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
+                                <input
+                                    type='text'
+                                    placeholder='Buscar por nombre, empresa, correo...'
+                                    value={filterSearch}
+                                    onChange={(e) => setFilterSearch(e.target.value)}
+                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                            </div>
 
-                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
-                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Vendedor</label>
-                            <select
-                                value={filterOwner}
-                                onChange={(e) => setFilterOwner(e.target.value)}
-                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All">Cualquiera</option>
-                                {uniqueOwners.map(owner => (
-                                    <option key={owner} value={owner!}>{owner}</option>
-                                ))}
-                            </select>
-                        </div>
+                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={filterStage}
+                                        onChange={(e) => setFilterStage(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Etapa: Todas</option>
+                                        <option value="Prospección">Prospección</option>
+                                        <option value="Negociación">Negociación</option>
+                                        <option value="Cerrado Ganado">Cerrado Ganado</option>
+                                        <option value="Cerrado Perdido">Cerrado Perdido</option>
+                                    </select>
 
-                        <div className='flex items-center gap-2 border-l pl-4' style={{ borderColor: 'var(--card-border)' }}>
-                            <label className='text-[9px] font-black uppercase tracking-widest whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>Orden</label>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
-                                className='border border-transparent rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none transition-all cursor-pointer'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="fecha_registro-desc">Reciente</option>
-                                <option value="fecha_registro-asc">Antiguo</option>
-                                <option value="valor_estimado-desc">$$$ → $</option>
-                                <option value="calificacion-desc">Calif. ★</option>
-                                <option value="etapa-asc">Fase</option>
-                                <option value="probabilidad-desc">Prob. %</option>
-                                <option value="empresa-asc">Empresa</option>
-                            </select>
-                        </div>
+                                    <select
+                                        value={filterOwner}
+                                        onChange={(e) => setFilterOwner(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Vendedor: Todos</option>
+                                        {uniqueOwners.map(owner => (
+                                            <option key={owner} value={owner!}>{owner}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        <div className='flex items-center gap-4 ml-auto'>
-                            {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
-                                <button
-                                    onClick={() => {
-                                        setFilterSearch('')
-                                        setFilterStage('All')
-                                        setFilterOwner('All')
-                                        setSortBy('fecha_registro-desc')
-                                    }}
-                                    className='text-[9px] font-black text-red-500 uppercase tracking-tighter hover:text-red-700 transition-colors bg-red-50 px-2 py-1 rounded-md'
-                                >
-                                    Limpiar
-                                </button>
-                            )}
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value)}
+                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="fecha_registro-desc">Orden: Reciente</option>
+                                        <option value="fecha_registro-asc">Orden: Antiguo</option>
+                                        <option value="valor_estimado-desc">Orden: $$$</option>
+                                        <option value="calificacion-desc">Orden: Estrellas</option>
+                                        <option value="probabilidad-desc">Orden: Prob.</option>
+                                    </select>
+                                </div>
 
-                            <div className='text-[9px] font-black text-gray-300 uppercase tracking-widest whitespace-nowrap'>
-                                {sortedAndFilteredLeads.length} leads
+                                {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
+                                    <button
+                                        onClick={() => {
+                                            setFilterSearch('')
+                                            setFilterStage('All')
+                                            setFilterOwner('All')
+                                            setSortBy('fecha_registro-desc')
+                                        }}
+                                        className='p-2.5 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors shadow-sm'
+                                        title='Limpiar Filtros'
+                                    >
+                                        <RotateCw size={18} />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Table Area - Scrollable */}
-                <div className='flex-1 overflow-y-auto custom-scrollbar rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                    {loading && leads.length === 0 ? (
-                        <div className='w-full h-full flex items-center justify-center'>
-                            <span className='text-gray-400 animate-pulse'>Cargando leads...</span>
-                        </div>
-                    ) : (
-                        <ClientsTable
-                            clientes={sortedAndFilteredLeads}
-                            isEditingMode={isEditingMode}
-                            onEdit={openEditModal}
-                            onDelete={handleDeleteClick}
-                            onRowClick={handleRowClick}
-                            onEmailClick={handleEmailClick}
-                            userEmail={currentUser?.email || undefined}
-                        />
-                    )}
+                    <div className='flex-1 overflow-x-auto custom-scrollbar min-h-[400px]'>
+                        {loading && leads.length === 0 ? (
+                            <div className='w-full h-96 flex flex-col items-center justify-center gap-4'>
+                                <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
+                                <p className='text-sm font-bold text-gray-500 animate-pulse uppercase tracking-widest'>Sincronizando Leads...</p>
+                            </div>
+                        ) : (
+                            <ClientsTable
+                                clientes={sortedAndFilteredLeads}
+                                isEditingMode={isEditingMode}
+                                onEdit={openEditModal}
+                                onDelete={handleDeleteClick}
+                                onRowClick={handleRowClick}
+                                onEmailClick={handleEmailClick}
+                                userEmail={currentUser?.email || undefined}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
+
+            <RichardDawkinsFooter />
+
 
             {/* Modal */}
             <ClientModal

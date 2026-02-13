@@ -153,7 +153,7 @@ export default function ClientDetailView({
     if (!isOpen || !client) return null
 
     return (
-        <div className='fixed inset-0 z-40 bg-white flex flex-col animate-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-0 z-40 bg-[var(--background)] flex flex-col animate-in slide-in-from-bottom duration-300'>
             {/* Header */}
             <div className='bg-[#0A1635] px-8 py-5 flex items-center justify-between shadow-xl shrink-0 border-b border-white/5'>
                 <div className='flex items-center gap-6'>
@@ -189,45 +189,71 @@ export default function ClientDetailView({
             </div>
 
             {/* Content Area */}
-            <div className='flex-1 overflow-y-auto custom-scrollbar p-8 bg-[#F8FAFC]'>
+            <div className='flex-1 overflow-y-auto custom-scrollbar p-8 bg-[var(--background)]'>
                 <div className='max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8'>
 
                     {/* Column 1: Lead Information */}
                     <div className='space-y-8'>
-                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
-                            <h2 className='text-xs font-black text-gray-400 mb-8 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
                                 👤 Información del Lead
                             </h2>
 
                             <div className='space-y-8'>
                                 <div className='group'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 group-hover:text-blue-500 transition-colors'>Empresa (Lead)</label>
-                                    <p className='text-[#0A1635] font-black text-xl tracking-tight'>{client.empresa}</p>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2 group-hover:text-blue-500 transition-colors'>Empresa (Lead)</label>
+                                    <p className='text-[var(--text-primary)] font-black text-xl tracking-tight'>{client.empresa}</p>
                                 </div>
 
-                                <div className='grid grid-cols-1 gap-6'>
-                                    <div>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
-                                        <div className='flex flex-wrap gap-2'>
-                                            {client.email && (
-                                                <button
-                                                    onClick={() => onEmailClick(client.email!, client.nombre || client.empresa)}
-                                                    className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
-                                                >
-                                                    📧 {client.email}
-                                                </button>
-                                            )}
-                                            {client.telefono && (
-                                                <a
-                                                    href={`https://wa.me/${client.telefono.replace(/\D/g, '')}`}
-                                                    target='_blank'
-                                                    rel='noopener noreferrer'
-                                                    className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
-                                                >
-                                                    💬 {client.telefono}
-                                                </a>
-                                            )}
-                                        </div>
+                                <div>
+                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
+                                    <div className='flex flex-wrap gap-2'>
+                                        {client.email && (
+                                            <button
+                                                onClick={() => {
+                                                    onEmailClick(client.email!, client.nombre || client.empresa)
+                                                    import('@/app/actions/events').then(({ trackEvent }) => {
+                                                        trackEvent({
+                                                            eventType: 'call_finished', // Email is a form of contact
+                                                            entityType: 'call',
+                                                            entityId: client.id.toString(),
+                                                            metadata: { type: 'email', to: client.email }
+                                                        })
+                                                    })
+                                                }}
+                                                className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
+                                            >
+                                                📧 {client.email}
+                                            </button>
+                                        )}
+                                        {client.telefono && (
+                                            <button
+                                                onClick={() => {
+                                                    const url = `https://wa.me/${client.telefono!.replace(/\D/g, '')}`
+                                                    window.open(url, '_blank')
+                                                    import('@/app/actions/events').then(({ trackEvent }) => {
+                                                        trackEvent({
+                                                            eventType: 'call_started',
+                                                            entityType: 'call',
+                                                            entityId: client.id.toString(),
+                                                            metadata: { type: 'whatsapp', to: client.telefono }
+                                                        })
+                                                        // For WhatsApp we simulate immediate finish or just log the start
+                                                        setTimeout(() => {
+                                                            trackEvent({
+                                                                eventType: 'call_finished',
+                                                                entityType: 'call',
+                                                                entityId: client.id.toString(),
+                                                                metadata: { type: 'whatsapp', outcome: 'connected' }
+                                                            })
+                                                        }, 2000)
+                                                    })
+                                                }}
+                                                className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
+                                            >
+                                                💬 {client.telefono}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -271,9 +297,9 @@ export default function ClientDetailView({
                                     </div>
                                 </div>
 
-                                <div className='pt-6 border-t border-gray-50'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1'>Valor del Negocio</label>
-                                    <p className='text-3xl font-black text-[#0A1635] tracking-tight'>
+                                <div className='pt-6 border-t border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-1'>Valor del Negocio</label>
+                                    <p className='text-3xl font-black text-[var(--text-primary)] tracking-tight'>
                                         <span className='text-blue-600 mr-1'>$</span>
                                         {client?.valor_estimado?.toLocaleString() || '0'}
                                     </p>
@@ -281,14 +307,14 @@ export default function ClientDetailView({
                             </div>
                         </div>
 
-                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
-                            <h2 className='text-xs font-black text-gray-400 mb-6 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
                                 🗒️ Notas y Estrategia
                             </h2>
                             <div className='space-y-6'>
                                 <div>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Oportunidad Detectada</label>
-                                    <p className='text-xs font-bold text-gray-700 leading-relaxed bg-gray-50/50 p-4 rounded-3xl border border-gray-50'>{client.oportunidad || 'Sin descripción de oportunidad.'}</p>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Oportunidad Detectada</label>
+                                    <p className='text-xs font-bold text-[var(--text-primary)] leading-relaxed bg-[var(--hover-bg)] p-4 rounded-3xl border border-[var(--card-border)]'>{client.oportunidad || 'Sin descripción de oportunidad.'}</p>
                                 </div>
                                 <div className='relative'>
                                     <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Notas Internas</label>
@@ -305,9 +331,9 @@ export default function ClientDetailView({
 
                     {/* Column 2: Activities Hub */}
                     <div className='space-y-8'>
-                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white flex flex-col'>
-                            <div className='flex justify-between items-center mb-8 border-b border-gray-50 pb-4'>
-                                <h2 className='text-xs font-black text-gray-400 uppercase tracking-[0.3em]'>
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] flex flex-col'>
+                            <div className='flex justify-between items-center mb-8 border-b border-[var(--card-border)] pb-4'>
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em]'>
                                     📅 Juntas Agendadas
                                 </h2>
                                 <button
@@ -326,9 +352,9 @@ export default function ClientDetailView({
                             </div>
                         </div>
 
-                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white flex flex-col'>
-                            <div className='flex justify-between items-center mb-8 border-b border-gray-50 pb-4'>
-                                <h2 className='text-xs font-black text-gray-400 uppercase tracking-[0.3em]'>
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] flex flex-col'>
+                            <div className='flex justify-between items-center mb-8 border-b border-[var(--card-border)] pb-4'>
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em]'>
                                     ✅ Tareas Pendientes
                                 </h2>
                                 <button
@@ -351,8 +377,8 @@ export default function ClientDetailView({
                     {/* Column 3: Company & Intelligence */}
                     <div className='space-y-8'>
                         {/* Company Card */}
-                        <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white overflow-hidden'>
-                            <h2 className='text-xs font-black text-gray-400 mb-8 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] overflow-hidden'>
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
                                 🏢 Perfil Corporativo
                             </h2>
 
@@ -364,7 +390,7 @@ export default function ClientDetailView({
                             ) : company ? (
                                 <div className='space-y-8'>
                                     <div className='flex items-center gap-6'>
-                                        <div className='w-24 h-24 rounded-3xl border-2 border-gray-50 shadow-xl overflow-hidden flex items-center justify-center bg-gray-50 shrink-0 transform -rotate-3'>
+                                        <div className='w-24 h-24 rounded-3xl border-2 border-[var(--card-border)] shadow-xl overflow-hidden flex items-center justify-center bg-[var(--hover-bg)] shrink-0 transform -rotate-3'>
                                             {company.logo_url ? (
                                                 <img src={company.logo_url} alt={company.nombre} className='w-full h-full object-cover' />
                                             ) : (
@@ -372,7 +398,7 @@ export default function ClientDetailView({
                                             )}
                                         </div>
                                         <div className='space-y-1'>
-                                            <h3 className='text-xl font-black text-[#0A1635] leading-tight tracking-tight'>{company.nombre}</h3>
+                                            <h3 className='text-xl font-black text-[var(--text-primary)] leading-tight tracking-tight'>{company.nombre}</h3>
                                             <p className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>{company.industria}</p>
                                             {company.website && (
                                                 <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target='_blank' className='text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-colors block'>🔗 {company.website}</a>
@@ -381,26 +407,26 @@ export default function ClientDetailView({
                                     </div>
 
                                     <div className='grid grid-cols-2 gap-4'>
-                                        <div className='bg-[#F8FAFC] p-4 rounded-3xl border border-gray-100 flex flex-col justify-between'>
-                                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Score de Tamaño</label>
+                                        <div className='bg-[var(--hover-bg)] p-4 rounded-3xl border border-[var(--card-border)] flex flex-col justify-between'>
+                                            <label className='text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mb-3 block'>Score de Tamaño</label>
                                             <div className='flex items-center gap-2'>
-                                                <span className='text-3xl font-black text-[#1700AC] leading-none'>{company.tamano}</span>
+                                                <span className='text-3xl font-black text-[#2048FF] leading-none'>{company.tamano}</span>
                                                 <div className='flex-1 flex gap-1 h-2'>
                                                     {[1, 2, 3, 4, 5].map(i => (
-                                                        <div key={i} className={`flex-1 rounded-full ${i <= company.tamano ? 'bg-[#1700AC]' : 'bg-gray-200'}`} />
+                                                        <div key={i} className={`flex-1 rounded-full ${i <= company.tamano ? 'bg-[#2048FF]' : 'bg-[var(--background)]'}`} />
                                                     ))}
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className='bg-[#F8FAFC] p-4 rounded-3xl border border-gray-100'>
-                                            <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Ubicación Central</label>
-                                            <p className='text-[10px] font-black text-[#0F2A44] leading-relaxed break-words'>{company.ubicacion || 'Global / Multinacional'}</p>
+                                        <div className='bg-[var(--hover-bg)] p-4 rounded-3xl border border-[var(--card-border)]'>
+                                            <label className='text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mb-3 block'>Ubicación Central</label>
+                                            <p className='text-[10px] font-black text-[var(--text-primary)] leading-relaxed break-words'>{company.ubicacion || 'Global / Multinacional'}</p>
                                         </div>
                                     </div>
 
-                                    <div className='bg-gray-50 p-6 rounded-3xl border border-gray-100 relative group'>
-                                        <label className='text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block'>Historia de Empresa</label>
-                                        <p className='text-[11px] font-bold text-gray-600 leading-loose max-h-[120px] overflow-y-auto custom-scrollbar pr-2'>
+                                    <div className='bg-[var(--hover-bg)] p-6 rounded-3xl border border-[var(--card-border)] relative group'>
+                                        <label className='text-[9px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mb-3 block'>Historia de Empresa</label>
+                                        <p className='text-[11px] font-bold text-[var(--text-secondary)] leading-loose max-h-[120px] overflow-y-auto custom-scrollbar pr-2'>
                                             {company.descripcion || 'No hay una biografía corporativa disponible en este momento.'}
                                         </p>
                                     </div>
@@ -459,21 +485,21 @@ export default function ClientDetailView({
 
                         {/* Snapshots Columnar */}
                         {snapshots.length > 0 && (
-                            <div className='bg-white p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-white'>
-                                <h2 className='text-xs font-black text-gray-400 mb-6 uppercase tracking-[0.3em] border-b border-gray-50 pb-4'>
+                            <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
                                     📸 Snapshots
                                 </h2>
                                 <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
                                     {snapshots.map((snapshot) => (
-                                        <div key={snapshot.id} className='flex justify-between items-center p-4 bg-[#F8FAFC] rounded-3xl border border-gray-50 group hover:border-blue-100 hover:bg-white transition-all'>
+                                        <div key={snapshot.id} className='flex justify-between items-center p-4 bg-[var(--hover-bg)] rounded-3xl border border-[var(--card-border)] group hover:border-blue-100 hover:bg-[var(--card-bg)] transition-all'>
                                             <div className='space-y-1'>
-                                                <p className='text-[10px] font-black text-[#0A1635] uppercase tracking-widest group-hover:text-blue-600 transition-colors'>Corte #{snapshot.snapshot_number}</p>
-                                                <p className='text-[9px] font-bold text-gray-400 uppercase'>
+                                                <p className='text-[10px] font-black text-[var(--text-primary)] uppercase tracking-widest group-hover:text-blue-600 transition-colors'>Corte #{snapshot.snapshot_number}</p>
+                                                <p className='text-[9px] font-bold text-[var(--text-secondary)] uppercase'>
                                                     {new Date(snapshot.snapshot_timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                                                 </p>
                                             </div>
-                                            <div className='h-10 w-10 bg-white rounded-2xl flex items-center justify-center border border-gray-100 shadow-sm'>
-                                                <span className='text-xs font-black text-[#0A1635]'>
+                                            <div className='h-10 w-10 bg-[var(--card-bg)] rounded-2xl flex items-center justify-center border border-[var(--card-border)] shadow-sm'>
+                                                <span className='text-xs font-black text-[var(--text-primary)]'>
                                                     {snapshot.probability}%
                                                 </span>
                                             </div>

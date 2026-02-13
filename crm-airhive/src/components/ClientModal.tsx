@@ -30,7 +30,7 @@ interface ClientModalProps {
     onClose: () => void
     onSave: (data: ClientData) => Promise<void>
     initialData?: ClientData | null
-    mode: 'create' | 'edit'
+    mode: 'create' | 'edit' | 'convert'
     onNavigateToCompanies?: () => void
     companies?: { id: string, nombre: string }[]
 }
@@ -111,8 +111,8 @@ export default function ClientModal({
     }
 
     const checkProbabilityEditability = async () => {
-        // For new leads, it's always editable
-        if (mode === 'create') {
+        // For new leads or conversions, it's always editable
+        if (mode === 'create' || mode === 'convert') {
             setIsProbEditable(true)
             return
         }
@@ -229,19 +229,25 @@ export default function ClientModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm'>
-            <div className='bg-white rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200'>
+        <div className='fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300'>
+            <div
+                className='rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300 border'
+                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+            >
                 {/* Header Style match with Pre-Lead */}
-                <div className='bg-[#0A1635] p-8 shrink-0 flex items-center justify-between'>
+                <div className='p-8 shrink-0 flex items-center justify-between border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
                     <div>
-                        <h2 className='text-2xl font-black text-white tracking-tight'>
-                            {mode === 'create' ? 'Nuevo Lead' : 'Editar Lead'}
+                        <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                            {mode === 'create' ? 'Nuevo Lead' : mode === 'convert' ? '🚀 Ascender a Lead' : 'Editar Lead'}
                         </h2>
-                        <p className='text-blue-300 text-xs font-bold uppercase tracking-widest mt-1'>Información del Prospecto</p>
+                        <p className='text-blue-500 text-xs font-bold uppercase tracking-widest mt-1'>
+                            {mode === 'convert' ? 'Finalizando conversión de prospecto' : 'Información del Prospecto'}
+                        </p>
                     </div>
                     <button
                         onClick={onClose}
-                        className='w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all font-bold'
+                        className='w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/5 transition-all font-bold'
+                        style={{ color: 'var(--text-secondary)' }}
                     >
                         ✕
                     </button>
@@ -252,7 +258,7 @@ export default function ClientModal({
                     {/* Sección Empresa */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                         <div className='space-y-2' ref={wrapperRef}>
-                            <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Empresa *</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Empresa *</label>
                             <div className='relative'>
                                 <input
                                     required
@@ -260,29 +266,38 @@ export default function ClientModal({
                                     value={formData.empresa}
                                     onChange={handleEmpresaChange}
                                     readOnly={!!formData.empresa_id}
-                                    className={`w-full px-4 py-3 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-bold text-[#0A1635] transition-all ${formData.empresa_id ? 'bg-blue-50/50 cursor-not-allowed' : 'bg-gray-50'}`}
+                                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all ${formData.empresa_id ? 'bg-blue-50/10 cursor-not-allowed' : ''}`}
+                                    style={{
+                                        background: formData.empresa_id ? 'var(--background)' : 'var(--background)',
+                                        borderColor: 'var(--card-border)',
+                                        color: 'var(--text-primary)'
+                                    }}
                                     placeholder="Busca una empresa..."
                                     autoComplete="off"
                                 />
-                                {formData.empresa_id && (
+                                {formData.empresa_id && mode !== 'convert' && ( // No dejar cambiar si es conversion para asegurar consistencia
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, empresa_id: undefined, empresa: '' })}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-red-500 font-black uppercase"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-red-500 font-black uppercase hover:scale-110 transition-transform"
                                     >
                                         ✕ Cambiar
                                     </button>
                                 )}
                                 {!formData.empresa_id && showSuggestions && filteredCompanies.length > 0 && (
-                                    <div className='absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar p-2'>
+                                    <div
+                                        className='absolute z-10 w-full mt-1 border rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar p-2'
+                                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                                    >
                                         {filteredCompanies.map((company) => (
                                             <div
                                                 key={company.id}
                                                 onClick={() => selectCompany(company)}
-                                                className='px-4 py-2 hover:bg-blue-50 cursor-pointer text-xs text-[#0A1635] font-bold rounded-lg transition-colors flex items-center justify-between group'
+                                                className='px-4 py-2 hover:bg-blue-500/10 cursor-pointer text-xs font-bold rounded-lg transition-colors flex items-center justify-between group'
+                                                style={{ color: 'var(--text-primary)' }}
                                             >
                                                 <span>{company.nombre}</span>
-                                                <span className='text-[9px] text-gray-400 group-hover:text-blue-600 uppercase tracking-tighter'>Seleccionar</span>
+                                                <span className='text-[9px] text-blue-500 opacity-0 group-hover:opacity-100 uppercase tracking-tighter transition-all'>Seleccionar</span>
                                             </div>
                                         ))}
                                     </div>
@@ -291,42 +306,41 @@ export default function ClientModal({
                         </div>
 
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Nombre del Prospecto *</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Nombre del Prospecto *</label>
                             <input
                                 required
                                 type="text"
                                 value={formData.nombre}
                                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                                className='w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-[#0A1635] transition-all'
+                                className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                 placeholder="Nombre completo"
                             />
                         </div>
                     </div>
 
-                    {/* SECCIÓN CONTACTO SEPARADA (Como en Pre-Leads) */}
-                    <div className='space-y-6 pt-4 border-t border-gray-100'>
+                    {/* SECCIÓN CONTACTO SEPARADA */}
+                    <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-2'>
                             <div className='w-1 h-4 bg-blue-500 rounded-full'></div>
-                            <h3 className='text-xs font-black text-[#0A1635] uppercase tracking-widest'>Canales de Comunicación</h3>
+                            <h3 className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Canales de Comunicación</h3>
                         </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Correo Electrónico</label>
-                                <div className='relative'>
-                                    <input
-                                        type='email'
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className='w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs text-[#0A1635] transition-all'
-                                        placeholder='ejemplo@empresa.com'
-                                    />
-                                    <div className='absolute left-1/2 -bottom-2 w-0 h-0.5 bg-blue-500 transition-all group-focus-within:w-full group-focus-within:left-0'></div>
-                                </div>
+                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Correo Electrónico</label>
+                                <input
+                                    type='email'
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='ejemplo@empresa.com'
+                                />
                             </div>
 
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-blue-600 uppercase tracking-widest'>Teléfono WhatsApp *</label>
+                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono WhatsApp *</label>
                                 <div className='relative'>
                                     <input
                                         type='text'
@@ -337,11 +351,12 @@ export default function ClientModal({
                                             setFormData({ ...formData, telefono: val })
                                             if (val.length === 10) setPhoneError('')
                                         }}
-                                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all font-bold text-xs text-[#0A1635] ${phoneError ? 'bg-red-50 border-red-200 focus:ring-red-500/10' : 'bg-gray-50 border-gray-100 focus:ring-blue-500/20'}`}
+                                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 transition-all font-bold text-xs ${phoneError ? 'bg-red-50/10 border-red-500 focus:ring-red-500/10' : 'focus:ring-blue-500/10 focus:border-blue-500'}`}
+                                        style={{ background: 'var(--background)', borderColor: phoneError ? '#ef4444' : 'var(--card-border)', color: 'var(--text-primary)' }}
                                         placeholder='10 dígitos necesarios'
                                     />
                                     {formData.telefono && formData.telefono.length === 10 && (
-                                        <span className='absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500 font-bold'>✓</span>
+                                        <span className='absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500 font-bold animate-in zoom-in'>✓</span>
                                     )}
                                 </div>
                                 {phoneError && <p className='text-[9px] text-red-500 font-black uppercase mt-1'>{phoneError}</p>}
@@ -350,13 +365,14 @@ export default function ClientModal({
                     </div>
 
                     {/* SECCIÓN PROCESO */}
-                    <div className='grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100'>
+                    <div className='grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Etapa Comercial</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Etapa Comercial</label>
                             <select
                                 value={formData.etapa}
                                 onChange={(e) => setFormData({ ...formData, etapa: e.target.value })}
-                                className='w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs text-[#0A1635] transition-all cursor-pointer appearance-none'
+                                className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all cursor-pointer appearance-none'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                             >
                                 <option value='Prospección'>Prospección</option>
                                 <option value='Negociación'>Negociación</option>
@@ -366,15 +382,16 @@ export default function ClientModal({
                         </div>
 
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Valor Estimado</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Valor Estimado</label>
                             <div className='relative'>
-                                <span className='absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-black'>$</span>
+                                <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                 <input
                                     type='number'
                                     min='0'
                                     value={formData.valor_estimado}
                                     onChange={(e) => setFormData({ ...formData, valor_estimado: Number(e.target.value) })}
-                                    className='w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs text-[#0A1635]'
+                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                 />
                             </div>
                         </div>
@@ -384,8 +401,8 @@ export default function ClientModal({
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
                         <div className='space-y-4'>
                             <div className='flex justify-between items-center'>
-                                <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Probabilidad</label>
-                                <span className='text-xs font-black text-blue-600'>{formData.probabilidad || 0}%</span>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Probabilidad</label>
+                                <span className='text-xs font-black text-blue-500'>{formData.probabilidad || 0}%</span>
                             </div>
                             <input
                                 type='range'
@@ -395,17 +412,19 @@ export default function ClientModal({
                                 value={formData.probabilidad || 50}
                                 onChange={(e) => setFormData({ ...formData, probabilidad: Number(e.target.value) })}
                                 disabled={!isProbEditable}
-                                className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-600 ${!isProbEditable ? 'opacity-30 grayscale cursor-not-allowed' : 'bg-gray-100'}`}
+                                className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-600 ${!isProbEditable ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
+                                style={{ background: 'var(--card-border)' }}
                             />
                             {!isProbEditable && editabilityReason && (
-                                <div className='p-3 bg-amber-50 rounded-xl border border-amber-100'>
-                                    <p className='text-[9px] font-bold text-amber-700 leading-tight'>
+                                <div className='p-3 rounded-xl border' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
+                                    <p className='text-[9px] font-bold text-amber-600 leading-tight'>
                                         ⚠️ {editabilityReason}
                                     </p>
                                     <button
                                         type='button'
                                         onClick={() => setIsProbEditable(true)}
-                                        className='text-[8px] font-black text-amber-900 border-b border-amber-900 mt-2 hover:text-amber-600 transition-colors uppercase'
+                                        className='text-[8px] font-black border-b mt-2 hover:text-blue-500 transition-colors uppercase'
+                                        style={{ borderColor: 'currentColor', color: 'var(--text-secondary)' }}
                                     >
                                         Forzar Desbloqueo Manual
                                     </button>
@@ -415,8 +434,8 @@ export default function ClientModal({
 
                         <div className='space-y-4'>
                             <div className='flex justify-between items-center'>
-                                <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Calificación</label>
-                                <span className='text-xs font-black text-blue-600'>{formData.calificacion}/5</span>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Calificación</label>
+                                <span className='text-xs font-black text-blue-500'>{formData.calificacion}/5</span>
                             </div>
                             <input
                                 type='range'
@@ -425,41 +444,44 @@ export default function ClientModal({
                                 step='1'
                                 value={formData.calificacion}
                                 onChange={(e) => setFormData({ ...formData, calificacion: Number(e.target.value) })}
-                                className='w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-600'
+                                className='w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-600'
+                                style={{ background: 'var(--card-border)' }}
                             />
                         </div>
                     </div>
 
                     {/* NOTAS */}
                     <div className='space-y-2'>
-                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Notas Internas</label>
+                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Notas Internas</label>
                         <textarea
                             rows={3}
                             value={formData.notas}
                             onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                            className='w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-xs text-[#0A1635] transition-all resize-none italic'
+                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all resize-none italic'
+                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                             placeholder="Detalles sobre el seguimiento..."
                         />
                     </div>
                 </form>
 
                 {/* Footer */}
-                <div className='p-8 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0'>
-                    <p className='text-[9px] font-black text-gray-400 uppercase'>* Campos obligatorios</p>
+                <div className='p-8 border-t flex items-center justify-between shrink-0' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                    <p className='text-[9px] font-black uppercase' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>* Campos obligatorios</p>
                     <div className='flex gap-4'>
                         <button
                             type='button'
                             onClick={onClose}
-                            className='px-6 py-2.5 rounded-xl font-black text-gray-500 hover:bg-gray-100 transition-all uppercase text-[10px] tracking-widest'
+                            className='px-6 py-2.5 rounded-xl font-black hover:bg-black/5 transition-all uppercase text-[10px] tracking-widest'
+                            style={{ color: 'var(--text-secondary)' }}
                         >
                             Cancelar
                         </button>
                         <button
                             onClick={handleSubmit}
                             disabled={isSubmitting || !formData.empresa_id}
-                            className='px-8 py-2.5 bg-[#2048FF] text-white rounded-xl font-black shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95 uppercase text-[10px] tracking-widest disabled:opacity-30'
+                            className={`px-8 py-2.5 text-white rounded-xl font-black shadow-xl transition-all transform active:scale-95 uppercase text-[10px] tracking-widest disabled:opacity-30 ${mode === 'convert' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20' : 'bg-[#2048FF] shadow-blue-500/20 hover:bg-[#1700AC]'}`}
                         >
-                            {isSubmitting ? 'Guardando...' : mode === 'create' ? 'Crear Lead' : 'Actualizar Lead'}
+                            {isSubmitting ? 'Guardando...' : mode === 'convert' ? '🚀 Confirmar Ascenso' : mode === 'create' ? 'Crear Lead' : 'Actualizar Lead'}
                         </button>
                     </div>
                 </div>

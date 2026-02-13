@@ -8,21 +8,46 @@
 
 /* Tema Claro (Light) */
 .theme-claro {
-  --background: #f8f9fa;
-  --foreground: #1a1a1a;
+  --background: #DDE2E5;
+  /* Slightly darker background to help white cards pop */
+  --foreground: #0A1635;
   --card-bg: #ffffff;
-  --card-border: #e5e7eb;
+  --card-border: #e2e8f0;
   --input-bg: #ffffff;
-  --input-border: #d1d5db;
+  --input-border: #cbd5e1;
   --input-focus: #2048FF;
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b7280;
-  --hover-bg: #f3f4f6;
+  --text-primary: #0A1635;
+  --text-secondary: #475569;
+  /* Darker secondary text */
+  --hover-bg: #f8fafc;
+  --table-header-bg: #cbd5e1;
+
+  /* Contrast adjustments for Light Mode */
+  --project-count-empty: #94a3b8;
+  --website-badge-bg: rgba(32, 72, 255, 0.1);
+  --website-badge-text: #1700AC;
+  /* Stronger blue */
+  --accent-primary: #1700AC;
+  /* Bolder blue */
+  --accent-secondary: #2048FF;
+
+  /* Tier colors for size badges (Light) */
+  --tier-1-bg: rgba(16, 185, 129, 0.15);
+  --tier-1-text: #065f46;
+  --tier-2-bg: rgba(59, 130, 246, 0.15);
+  --tier-2-text: #1e40af;
+  --tier-3-bg: rgba(99, 102, 241, 0.15);
+  --tier-3-text: #3730a3;
+  --tier-4-bg: rgba(245, 158, 11, 0.2);
+  --tier-4-text: #92400e;
+  --tier-5-bg: rgba(139, 92, 246, 0.15);
+  --tier-5-text: #5b21b6;
 }
 
 /* Tema Gris (Gray) */
 .theme-gris {
   --background: #374151;
+  /* Darker gray for better depth */
   --foreground: #f9fafb;
   --card-bg: #4b5563;
   --card-border: #6b7280;
@@ -32,6 +57,26 @@
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
   --hover-bg: #6b7280;
+  --table-header-bg: #1f2937;
+
+  /* Contrast adjustments for Gray Mode */
+  --project-count-empty: rgba(255, 255, 255, 0.2);
+  --website-badge-bg: rgba(32, 72, 255, 0.25);
+  --website-badge-text: #60A5FA;
+  --accent-primary: #60A5FA;
+  --accent-secondary: #3B82F6;
+
+  /* Tier colors for size badges (Gray/Dark) */
+  --tier-1-bg: rgba(16, 185, 129, 0.25);
+  --tier-1-text: #a7f3d0;
+  --tier-2-bg: rgba(59, 130, 246, 0.25);
+  --tier-2-text: #bfdbfe;
+  --tier-3-bg: rgba(99, 102, 241, 0.25);
+  --tier-3-text: #c7d2fe;
+  --tier-4-bg: rgba(245, 158, 11, 0.25);
+  --tier-4-text: #fde68a;
+  --tier-5-bg: rgba(139, 92, 246, 0.25);
+  --tier-5-text: #ddd6fe;
 }
 
 /* Tema Oscuro (Dark) */
@@ -46,6 +91,24 @@
   --text-primary: #ededed;
   --text-secondary: #a3a3a3;
   --hover-bg: #2a2a2a;
+  --table-header-bg: #000000;
+
+  /* Contrast adjustments for Dark Mode */
+  --project-count-empty: rgba(255, 255, 255, 0.2);
+  --website-badge-bg: rgba(32, 72, 255, 0.25);
+  --website-badge-text: #a3b8ff;
+
+  /* Tier colors for size badges (Gray/Dark) */
+  --tier-1-bg: rgba(16, 185, 129, 0.25);
+  --tier-1-text: #a7f3d0;
+  --tier-2-bg: rgba(59, 130, 246, 0.25);
+  --tier-2-text: #bfdbfe;
+  --tier-3-bg: rgba(99, 102, 241, 0.25);
+  --tier-3-text: #c7d2fe;
+  --tier-4-bg: rgba(245, 158, 11, 0.25);
+  --tier-4-text: #fde68a;
+  --tier-5-bg: rgba(139, 92, 246, 0.25);
+  --tier-5-text: #ddd6fe;
 }
 
 @theme inline {

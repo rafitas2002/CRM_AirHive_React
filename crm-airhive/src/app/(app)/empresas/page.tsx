@@ -9,26 +9,41 @@ import CompanyModal, { CompanyData } from '@/components/CompanyModal'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
+import Image from 'next/image'
+import { Search, Table as TableIcon, Pencil, RotateCw, Building2 } from 'lucide-react'
+
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+
+export type CompanyWithProjects = CompanyData & {
+    activeProjects: number
+    processProjects: number
+    lostProjects: number
+    antiquityDate: string
+    projectAntiquityDate: string | null
+}
 
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
-    const [companies, setCompanies] = useState<CompanyData[]>([])
+    const [companies, setCompanies] = useState<CompanyWithProjects[]>([])
     const [loading, setLoading] = useState(true)
-    const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null)
+    const [selectedCompany, setSelectedCompany] = useState<CompanyWithProjects | null>(null)
     const [isDetailOpen, setIsDetailOpen] = useState(false)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [companyToDelete, setCompanyToDelete] = useState<string | null>(null)
 
     // Modal state for creating/editing from this page
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
-    const [modalCompanyData, setModalCompanyData] = useState<CompanyData | null>(null)
+    const [modalCompanyData, setModalCompanyData] = useState<CompanyWithProjects | null>(null)
     const [isEditingMode, setIsEditingMode] = useState(false)
 
+    // Filtering State
     // Filtering State
     const [filterSearch, setFilterSearch] = useState('')
     const [filterIndustry, setFilterIndustry] = useState('All')
     const [filterSize, setFilterSize] = useState('All')
+    const [filterLocation, setFilterLocation] = useState('All')
+    const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
 
     const supabase = createClient()
 
@@ -44,47 +59,114 @@ export default function EmpresasPage() {
         }
     }, [auth.loading, auth.loggedIn, router])
 
-    // Filter Logic
+    // Filter and Sort Logic
     const filteredCompanies = useMemo(() => {
-        return companies.filter(company => {
+        let result = companies.filter(company => {
             const matchesSearch = !filterSearch ||
                 company.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
                 company.ubicacion?.toLowerCase().includes(filterSearch.toLowerCase())
 
             const matchesIndustry = filterIndustry === 'All' || company.industria === filterIndustry
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
+            const matchesLocation = filterLocation === 'All' || company.ubicacion?.toLowerCase().includes(filterLocation.toLowerCase())
 
-            return matchesSearch && matchesIndustry && matchesSize
+            return matchesSearch && matchesIndustry && matchesSize && matchesLocation
         })
-    }, [companies, filterSearch, filterIndustry, filterSize])
 
-    // Get unique industries for filter dropdown
+        // Sorting
+        result.sort((a, b) => {
+            if (sortBy === 'alphabetical') {
+                return a.nombre.localeCompare(b.nombre)
+            } else if (sortBy === 'antiquity') {
+                return new Date(b.antiquityDate).getTime() - new Date(a.antiquityDate).getTime()
+            } else if (sortBy === 'projectAntiquity') {
+                const dateA = a.projectAntiquityDate ? new Date(a.projectAntiquityDate).getTime() : 0
+                const dateB = b.projectAntiquityDate ? new Date(b.projectAntiquityDate).getTime() : 0
+                return dateB - dateA
+            }
+            return 0
+        })
+
+        return result
+    }, [companies, filterSearch, filterIndustry, filterSize, filterLocation, sortBy])
+
+    // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
         const industries = new Set(companies.map(c => c.industria).filter((i): i is string => !!i))
         return Array.from(industries).sort()
     }, [companies])
 
+    const uniqueLocations = useMemo(() => {
+        const locations = new Set(companies.map(c => {
+            const city = c.ubicacion?.split(',')[0]?.trim()
+            return city
+        }).filter((l): l is string => !!l))
+        return Array.from(locations).sort()
+    }, [companies])
+
     const fetchCompanies = async () => {
         setLoading(true)
-        const { data, error } = await supabase
+
+        // Fetch companies
+        const { data: companiesData, error: companiesError } = await supabase
             .from('empresas')
             .select('*')
             .order('nombre', { ascending: true })
 
-        if (error) {
-            console.error('Error fetching companies:', error)
-        } else {
-            setCompanies(data || [])
+        if (companiesError) {
+            console.error('Error fetching companies:', companiesError)
+            setLoading(false)
+            return
         }
+
+        // Fetch all leads to associate
+        const { data: leadsData, error: leadsError } = await supabase
+            .from('clientes')
+            .select('empresa_id, etapa, created_at')
+
+        const leads = (leadsData || []) as { empresa_id: string, etapa: string, created_at: string }[] // Fixed leads data typing
+
+        if (leadsError) {
+            console.error('Error fetching leads:', leadsError)
+        }
+
+        const companies = (companiesData || []) as any[]
+        const companiesWithProjects = companies.map(company => {
+            const companyLeads = leads.filter(l => l.empresa_id === company.id)
+
+            const activeProjects = companyLeads.filter(l => l.etapa === 'Cerrado Ganado').length
+            const processProjects = companyLeads.filter(l =>
+                l.etapa !== 'Cerrado Ganado' && l.etapa !== 'Cerrado Perdido'
+            ).length
+            const lostProjects = companyLeads.filter(l => l.etapa === 'Cerrado Perdido').length
+
+            // Antiquity of first active project
+            const activeLeads = companyLeads
+                .filter(l => l.etapa === 'Cerrado Ganado')
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+            const projectAntiquityDate = activeLeads.length > 0 ? activeLeads[0].created_at : null
+
+            return {
+                ...company,
+                activeProjects,
+                processProjects,
+                lostProjects,
+                antiquityDate: company.created_at,
+                projectAntiquityDate
+            }
+        })
+
+        setCompanies(companiesWithProjects as CompanyWithProjects[])
         setLoading(false)
     }
 
-    const handleRowClick = (company: CompanyData) => {
+    const handleRowClick = (company: CompanyWithProjects) => {
         setSelectedCompany(company)
         setIsDetailOpen(true)
     }
 
-    const handleEditClick = (company: CompanyData) => {
+    const handleEditClick = (company: CompanyWithProjects) => {
         setModalCompanyData(company)
         setIsCompanyModalOpen(true)
     }
@@ -169,156 +251,194 @@ export default function EmpresasPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
-            <div className='w-full mx-auto flex flex-col h-full gap-8'>
-                {/* Header - Fixed */}
-                <div className='shrink-0 flex flex-col gap-6'>
-                    <div className='flex items-center justify-between'>
-                        <div className='flex items-center gap-4'>
-                            <Link
-                                href='/clientes'
-                                className='w-12 h-12 flex items-center justify-center border rounded-xl transition-all shadow-sm'
-                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                                title='Volver a Leads'
-                            >
-                                <span className='text-xl font-bold' style={{ color: 'var(--text-primary)' }}>←</span>
-                            </Link>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
+            <div className='max-w-7xl mx-auto space-y-10 w-full'>
+                {/* External Header - Page Level */}
+                <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex items-center gap-8'>
+                        <Link
+                            href='/clientes'
+                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            title='Volver a Leads'
+                        >
+                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
+                        </Link>
+                        <div className='flex items-center gap-6'>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <Building2 size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
                                     Catálogo de Empresas
                                 </h1>
-                                <p className='mt-1 font-medium text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                    Administra las empresas existentes o crea nuevas para vincularlas a tus leads.
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Gestión centralizada de cuentas y relaciones corporativas.
                                 </p>
                             </div>
                         </div>
+                    </div>
 
-                        <div className='flex gap-4'>
+                    <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 ${isEditingMode
-                                    ? 'bg-[#1700AC] text-white hover:bg-[#0F2A44]'
-                                    : 'border'
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                    ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
+                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
-                                    background: 'var(--card-bg)',
                                     borderColor: 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 } : {}}
                             >
-                                <span>{isEditingMode ? '✅' : '✏️'}</span> {isEditingMode ? 'Terminar Edición' : 'Editar'}
+                                <div className='flex items-center gap-2'>
+                                    {isEditingMode ? (
+                                        <span>Terminar Edición</span>
+                                    ) : (
+                                        <>
+                                            <span>Editar Catálogo</span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </div>
                             </button>
                             <button
                                 onClick={fetchCompanies}
-                                className='px-5 py-2.5 border rounded-xl font-bold transition-all shadow-sm flex items-center gap-2'
+                                className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
                                 style={{
                                     background: 'var(--card-bg)',
                                     borderColor: 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 }}
                             >
-                                <span>🔄</span> Actualizar
-                            </button>
-                            <button
-                                onClick={openCreateModal}
-                                className='px-6 py-2.5 bg-[#2048FF] text-white rounded-xl font-bold hover:bg-[#1700AC] transition-all shadow-md flex items-center gap-2 transform active:scale-95 uppercase text-xs tracking-widest'
-                            >
-                                <span>🏢+</span> Nueva Empresa
+                                <div className='flex items-center gap-2'>
+                                    <span>Actualizar</span>
+                                    <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
+                                </div>
                             </button>
                         </div>
-                    </div>
-
-                    {/* Filter Bar - Row */}
-                    <div className='p-4 rounded-2xl border shadow-sm flex flex-wrap items-center gap-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='flex-1 min-w-[300px] relative font-medium'>
-                            <span className='absolute left-4 top-1/2 -translate-y-1/2' style={{ color: 'var(--text-secondary)' }}>🔍</span>
-                            <input
-                                type="text"
-                                placeholder="Buscar por nombre o ubicación..."
-                                value={filterSearch}
-                                onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-12 pr-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] text-sm font-semibold transition-all placeholder:text-gray-400'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            />
-                        </div>
-
-                        <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Industria:</label>
-                            <select
-                                value={filterIndustry}
-                                onChange={(e) => setFilterIndustry(e.target.value)}
-                                className='border rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All">Todas</option>
-                                {uniqueIndustries.map(ind => (
-                                    <option key={ind} value={ind!}>{ind}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className='flex items-center gap-3'>
-                            <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Tamaño:</label>
-                            <select
-                                value={filterSize}
-                                onChange={(e) => setFilterSize(e.target.value)}
-                                className='border rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-all cursor-pointer'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All">Cualquiera</option>
-                                <option value="1">Nivel 1 (Startup)</option>
-                                <option value="2">Nivel 2 (Pequeña)</option>
-                                <option value="3">Nivel 3 (Mediana)</option>
-                                <option value="4">Nivel 4 (Grande)</option>
-                                <option value="5">Nivel 5 (Corporativo)</option>
-                            </select>
-                        </div>
-
-                        {(filterSearch || filterIndustry !== 'All' || filterSize !== 'All') && (
-                            <button
-                                onClick={() => {
-                                    setFilterSearch('')
-                                    setFilterIndustry('All')
-                                    setFilterSize('All')
-                                }}
-                                className='text-[10px] font-black text-red-500 uppercase tracking-widest hover:text-red-700 transition-colors bg-red-50 px-4 py-2.5 rounded-xl'
-                            >
-                                Limpiar Filtros
-                            </button>
-                        )}
-
-                        <div className='ml-auto text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]'>
-                            {filteredCompanies.length} Empresas
-                        </div>
+                        <button
+                            onClick={() => {
+                                setModalCompanyData(null)
+                                setIsCompanyModalOpen(true)
+                            }}
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                        >
+                            + Nueva Empresa
+                        </button>
                     </div>
                 </div>
 
-                {/* Table Section - Scrollable */}
-                <div className='flex-1 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-700 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                    <CompaniesTable
-                        companies={filteredCompanies}
-                        isEditingMode={isEditingMode}
-                        currentUserProfile={auth.profile}
-                        onRowClick={handleRowClick}
-                        onEdit={handleEditClick}
-                        onDelete={handleDeleteClick}
-                    />
+                {/* Main Table Container */}
+                <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col mb-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                            <div className='flex items-center gap-4'>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                    <TableIcon size={24} />
+                                </div>
+                                <div>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Empresas</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Gestión de Inteligencia Corporativa</p>
+                                </div>
+                            </div>
+
+                            <div className='flex items-center gap-3'>
+                                <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
+                                    <span className='text-2xl font-black tracking-tighter text-blue-600 dark:text-blue-400'>{filteredCompanies.length}</span>
+                                    <div className='flex flex-col'>
+                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
+                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Encontrados</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='flex flex-col lg:flex-row items-center gap-4'>
+                            <div className='relative flex-1 w-full'>
+                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
+                                <input
+                                    type='text'
+                                    placeholder='Buscar por nombre, ubicación, etiquetas...'
+                                    value={filterSearch}
+                                    onChange={(e) => setFilterSearch(e.target.value)}
+                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                            </div>
+
+                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={filterIndustry}
+                                        onChange={(e) => setFilterIndustry(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Industria: Todas</option>
+                                        {uniqueIndustries.map(ind => (
+                                            <option key={ind} value={ind!}>{ind}</option>
+                                        ))}
+                                    </select>
+
+                                    <select
+                                        value={filterLocation}
+                                        onChange={(e) => setFilterLocation(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Ubicación: Todas</option>
+                                        {uniqueLocations.map(loc => (
+                                            <option key={loc} value={loc}>{loc}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={filterSize}
+                                        onChange={(e) => setFilterSize(e.target.value)}
+                                        className='flex-1 lg:min-w-[140px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Tamaño: Todo</option>
+                                        <option value="1">Micro</option>
+                                        <option value="2">Pequeña</option>
+                                        <option value="3">Mediana</option>
+                                        <option value="4">Grande</option>
+                                        <option value="5">Corporativo</option>
+                                    </select>
+
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value)}
+                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="alphabetical">Orden: Nombre</option>
+                                        <option value="antiquity">Orden: Antigüedad</option>
+                                        <option value="projectAntiquity">Orden: Proyectos</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className='flex-1 overflow-x-auto custom-scrollbar'>
+                        <CompaniesTable
+                            companies={filteredCompanies}
+                            isEditingMode={isEditingMode}
+                            currentUserProfile={auth.profile}
+                            onRowClick={handleRowClick}
+                            onEdit={handleEditClick}
+                            onDelete={handleDeleteClick}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Company Modal (for creation) */}
+            <RichardDawkinsFooter />
+
             <CompanyModal
                 isOpen={isCompanyModalOpen}
                 onClose={() => setIsCompanyModalOpen(false)}

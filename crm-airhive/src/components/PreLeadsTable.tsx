@@ -35,114 +35,140 @@ export default function PreLeadsTable({
 }: PreLeadsTableProps) {
     if (preLeads.length === 0) {
         return (
-            <div className='w-full p-12 text-center bg-gray-50 rounded-[32px] border-2 border-dashed border-gray-200'>
-                <p className='text-gray-400 font-bold uppercase text-[10px] tracking-widest'>No hay pre-leads registrados</p>
+            <div className='w-full p-12 text-center rounded-[40px] border-2 border-dashed' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
+                <p className='font-bold uppercase text-[10px] tracking-widest' style={{ color: 'var(--text-secondary)' }}>No hay pre-leads registrados</p>
             </div>
         )
     }
 
     return (
-        <table className='w-full text-left'>
-            <thead>
-                <tr className='border-b border-gray-100'>
-                    <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest'>Empresa</th>
-                    <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest'>Contacto</th>
-                    <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest'>Correos</th>
-                    <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest'>Teléfonos</th>
-                    <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest'>Vendedor</th>
-                    {isEditingMode && <th className='px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right'>Acciones</th>}
-                </tr>
-            </thead>
-            <tbody className='divide-y divide-gray-50'>
-                {preLeads.map((pl) => (
-                    <tr
-                        key={pl.id}
-                        onClick={() => onRowClick(pl)}
-                        className='group hover:bg-gray-50/80 transition-all cursor-pointer'
-                    >
-                        <td className='px-6 py-5'>
-                            <div className='flex flex-col'>
-                                <span className='text-sm font-black text-[#0A1635] group-hover:text-[#2048FF] transition-colors'>{pl.nombre_empresa}</span>
-                                <span className='text-[10px] font-bold text-gray-400 uppercase tracking-tighter'>{pl.giro_empresa || 'Sin giro'}</span>
-                            </div>
-                        </td>
-                        <td className='px-6 py-5'>
-                            <span className='text-xs font-bold text-gray-600'>{pl.nombre_contacto || '---'}</span>
-                        </td>
-                        <td className='px-6 py-5'>
-                            <div className='flex flex-col gap-1'>
-                                {pl.correos.length > 0 ? (
-                                    pl.correos.map((c, i) => (
-                                        <div key={i} className='flex items-center gap-1.5 bg-gray-100 px-2 py-0.5 rounded-md'>
-                                            <span className='text-[10px] font-bold text-gray-500 truncate max-w-[120px]'>{c}</span>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onEmailClick(c, pl.nombre_contacto || pl.nombre_empresa);
-                                                }}
-                                                className='text-blue-500 hover:text-blue-600 transition-colors flex-shrink-0'
-                                                title='Redactar en CRM'
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                                    <polyline points="22,6 12,13 2,6" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <span className='text-[10px] text-gray-300 italic'>Sin correo</span>
-                                )}
-                            </div>
-                        </td>
-                        <td className='px-6 py-5'>
-                            <div className='flex flex-col gap-1'>
-                                {pl.telefonos.length > 0 ? (
-                                    pl.telefonos.map((t, i) => (
-                                        <div key={i} className='flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md'>
-                                            <span className='text-[10px] font-bold text-gray-500 whitespace-nowrap'>{t}</span>
-                                            <a
-                                                href={`https://wa.me/${t.replace(/\D/g, '')}`}
-                                                target='_blank'
-                                                rel='noopener noreferrer'
-                                                onClick={(e) => e.stopPropagation()}
-                                                className='text-emerald-500 hover:text-emerald-600 transition-colors flex-shrink-0'
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                                </svg>
-                                            </a>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <span className='text-[10px] text-gray-300 italic'>Sin teléfono</span>
-                                )}
-                            </div>
-                        </td>
-                        <td className='px-6 py-5'>
-                            <span className='text-[10px] font-black text-gray-400 uppercase tabular-nums'>{pl.vendedor_name || 'Sin asignar'}</span>
-                        </td>
-                        {isEditingMode && (
-                            <td className='px-6 py-5 text-right'>
-                                <div className='flex items-center justify-end gap-2'>
+        <div className='w-full overflow-x-auto custom-scrollbar'>
+            <table className='w-full text-left border-collapse'>
+                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+                    <tr>
+                        {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
+                        <th className='px-8 py-5 whitespace-nowrap w-[15%]'>Vendedor</th>
+                        <th className='px-8 py-5 whitespace-nowrap w-[20%]'>Empresa</th>
+                        <th className='px-8 py-5 whitespace-nowrap w-[20%]'>Industria</th>
+                        <th className='px-8 py-5 whitespace-nowrap w-[12%]'>Contacto</th>
+                        <th className='px-8 py-5 whitespace-nowrap w-[13%]'>Email</th>
+                        <th className='px-8 py-5 whitespace-nowrap w-[10%]'>Teléfono</th>
+                        {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>}
+                    </tr>
+                </thead>
+                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                    {preLeads.map((pl) => (
+                        <tr
+                            key={pl.id}
+                            onClick={() => onRowClick(pl)}
+                            className='transition-colors group hover:bg-black/5 cursor-pointer'
+                        >
+                            {isEditingMode && (
+                                <td className='px-2 py-5 text-center'>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); onEdit(pl); }}
-                                        className='w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all'
+                                        className='p-2 hover:bg-yellow-500/10 rounded-xl transition-all'
+                                        title='Editar'
                                     >
-                                        ✏️
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                        </svg>
                                     </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onDelete(pl.id); }}
-                                        className='w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-all'
-                                    >
-                                        🗑️
-                                    </button>
+                                </td>
+                            )}
+                            <td className='px-8 py-5'>
+                                <div className='flex items-center gap-3'>
+                                    <div className='w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-[10px] shadow-sm flex-shrink-0' style={{ background: 'var(--accent-primary, #2048FF)' }}>
+                                        {pl.vendedor_name?.charAt(0).toUpperCase() || '?'}
+                                    </div>
+                                    <span className='font-bold text-xs uppercase tracking-tighter whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>
+                                        {pl.vendedor_name || 'Sin asignar'}
+                                    </span>
                                 </div>
                             </td>
-                        )}
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+                            <td className='px-8 py-5 max-w-[250px]'>
+                                <span className='font-black text-sm group-hover:text-[var(--accent-secondary)] transition-colors whitespace-normal break-words line-clamp-2 leading-tight' style={{ color: 'var(--accent-primary)' }}>
+                                    {pl.nombre_empresa}
+                                </span>
+                            </td>
+                            <td className='px-8 py-5 max-w-[250px]'>
+                                <span className='text-[10px] font-bold uppercase tracking-widest opacity-60 whitespace-normal break-words line-clamp-2 leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
+                                    {pl.giro_empresa || '---'}
+                                </span>
+                            </td>
+                            <td className='px-8 py-5'>
+                                <span className='text-xs font-bold whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>{pl.nombre_contacto || '---'}</span>
+                            </td>
+                            <td className='px-8 py-5'>
+                                <div className='flex flex-col gap-2'>
+                                    {pl.correos.length > 0 ? (
+                                        pl.correos.slice(0, 1).map((c, i) => (
+                                            <div key={i} className='flex items-center gap-2 group/email'>
+                                                <span className='text-[10px] font-bold truncate max-w-[120px]' style={{ color: 'var(--text-secondary)' }}>{c}</span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onEmailClick(c, pl.nombre_contacto || pl.nombre_empresa);
+                                                    }}
+                                                    className='text-blue-500 hover:text-blue-600 transition-colors flex-shrink-0'
+                                                    title='Redactar en CRM'
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                                        <polyline points="22,6 12,13 2,6" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <span className='text-[10px] italic opacity-30 shadow-none' style={{ color: 'var(--text-secondary)' }}>Sin datos</span>
+                                    )}
+                                </div>
+                            </td>
+                            <td className='px-8 py-5'>
+                                <div className='flex flex-col gap-2'>
+                                    {pl.telefonos.length > 0 ? (
+                                        pl.telefonos.slice(0, 1).map((t, i) => (
+                                            <div key={i} className='flex items-center gap-2 group/phone whitespace-nowrap'>
+                                                <span className='text-[10px] font-black tabular-nums' style={{ color: 'var(--text-secondary)' }}>{t}</span>
+                                                <a
+                                                    href={`https://wa.me/${t.replace(/\D/g, '')}`}
+                                                    target='_blank'
+                                                    rel='noopener noreferrer'
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className='text-emerald-500 hover:text-emerald-600 transition-colors flex-shrink-0'
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                                    </svg>
+                                                </a>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <span className='text-[10px] italic opacity-30' style={{ color: 'var(--text-secondary)' }}>---</span>
+                                    )}
+                                </div>
+                            </td>
+                            {isEditingMode && (
+                                <td className='px-2 py-5 text-center'>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDelete(pl.id); }}
+                                        className='p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all'
+                                        title='Eliminar'
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M3 6h18" />
+                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                        </svg>
+                                    </button>
+                                </td>
+                            )}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     )
 }

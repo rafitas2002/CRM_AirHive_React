@@ -1,14 +1,15 @@
 'use client'
 
 import { CompanyData } from './CompanyModal'
+import { CompanyWithProjects } from '../app/(app)/empresas/page'
 import Image from 'next/image'
 
 interface CompaniesTableProps {
-    companies: CompanyData[]
+    companies: CompanyWithProjects[]
     isEditingMode?: boolean
     currentUserProfile?: any | null
-    onRowClick?: (company: CompanyData) => void
-    onEdit?: (company: CompanyData) => void
+    onRowClick?: (company: CompanyWithProjects) => void
+    onEdit?: (company: CompanyWithProjects) => void
     onDelete?: (id: string) => void
 }
 
@@ -29,159 +30,257 @@ export default function CompaniesTable({
     }
 
     return (
-        <div className='w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm'>
-            <div className='w-full overflow-x-auto'>
-                <table className='w-full table-auto text-left text-sm text-gray-600'>
-                    <thead className='bg-[#0A1635] text-white'>
-                        <tr>
-                            <th className='w-[80px] px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Logo</th>
-                            <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Nombre</th>
-                            <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Industria</th>
-                            <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Ubicación</th>
-                            <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Tamaño</th>
-                            <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase'>Website</th>
+        <div className='overflow-x-auto'>
+            <table className='w-full text-left border-collapse'>
+                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+                    <tr>
+                        {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
+                        <th className='px-8 py-5'>Logo</th>
+                        <th className='px-8 py-5'>Nombre</th>
+                        <th className='px-8 py-5'>Industria</th>
+                        <th className='px-8 py-5'>Ubicación</th>
+                        <th className='px-8 py-5'>Proyectos Activos</th>
+                        <th className='px-8 py-5'>En Proceso</th>
+                        <th className='px-8 py-5'>Perdidos</th>
+                        <th className='px-8 py-5'>Tamaño</th>
+                        <th className='px-8 py-5'>Website</th>
+                        {isEditingMode && (
+                            <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>
+                        )}
+                    </tr>
+                </thead>
+                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                    {companies.map((company) => (
+                        <tr
+                            key={company.id}
+                            onClick={() => !isEditingMode && onRowClick?.(company)}
+                            className={`transition-colors group ${isEditingMode ? '' : 'hover:bg-black/5 cursor-pointer'}`}
+                        >
                             {isEditingMode && (
-                                <th className='px-6 py-4 font-semibold text-xs tracking-wide uppercase text-center'>Acciones</th>
+                                <td className='px-2 py-5 text-center'>
+                                    {checkPermission(company, currentUserProfile) ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onEdit?.(company)
+                                            }}
+                                            className='p-2 hover:bg-yellow-500/10 rounded-xl transition-all'
+                                            title='Editar empresa'
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
+                                        </button>
+                                    ) : (
+                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
+                                    )}
+                                </td>
                             )}
-                        </tr>
-                    </thead>
-                    <tbody className='divide-y divide-gray-100'>
-                        {companies.map((company) => (
-                            <tr
-                                key={company.id}
-                                onClick={() => !isEditingMode && onRowClick?.(company)}
-                                className={`group transition-all duration-200 ${isEditingMode ? 'bg-white' : 'hover:bg-blue-50/50 cursor-pointer'}`}
-                            >
-                                {/* Logo */}
-                                <td className='px-6 py-4'>
-                                    <div className='w-12 h-12 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center overflow-hidden shadow-sm group-hover:shadow transition-shadow'>
+
+                            {/* Logo */}
+                            <td className='px-8 py-5 text-center'>
+                                <div className='flex items-center gap-4 justify-center'>
+                                    <div className='w-10 h-10 rounded-full flex items-center justify-center overflow-hidden shadow-md' style={{ background: 'var(--accent-primary, #2048FF)' }}>
                                         {company.logo_url ? (
                                             <Image
                                                 src={company.logo_url}
                                                 alt={company.nombre}
-                                                width={48}
-                                                height={48}
-                                                className='object-cover w-full h-full'
+                                                width={40}
+                                                height={40}
+                                                className='object-cover'
                                             />
                                         ) : (
-                                            <span className='text-gray-300 text-2xl font-bold'>
-                                                {company.nombre.charAt(0)}
+                                            <span className='text-white font-black text-sm'>
+                                                {company.nombre.charAt(0).toUpperCase()}
                                             </span>
                                         )}
                                     </div>
-                                </td>
+                                </div>
+                            </td>
 
-                                {/* Nombre */}
-                                <td className='px-6 py-4 font-bold text-gray-900 text-base'>
+                            {/* Nombre */}
+                            <td className='px-8 py-5'>
+                                <p className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
                                     {company.nombre}
-                                </td>
+                                </p>
+                            </td>
 
-                                {/* Industria */}
-                                <td className='px-6 py-4'>
-                                    <span className='px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100'>
-                                        {company.industria || 'N/A'}
-                                    </span>
-                                </td>
+                            {/* Industria */}
+                            <td className='px-8 py-5'>
+                                <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                                    {company.industria || 'N/A'}
+                                </span>
+                            </td>
 
-                                {/* Ubicación */}
-                                <td className='px-6 py-4 text-gray-600 font-medium'>
-                                    <div className='flex items-center gap-1.5'>
-                                        <span className='text-gray-400'>📍</span>
+                            {/* Ubicación */}
+                            <td className='px-8 py-5'>
+                                <div className='flex items-center gap-2'>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 24">
+                                        <defs>
+                                            <mask id="pinMask">
+                                                <rect width="16" height="24" fill="white" />
+                                                <circle cx="8" cy="7" r="2.5" fill="black" />
+                                            </mask>
+                                        </defs>
+                                        <path d="M8 2C5.2 2 3 4.2 3 7c0 4.5 5 13 5 13s5-8.5 5-13c0-2.8-2.2-5-5-5z" fill="#ef4444" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" mask="url(#pinMask)" />
+                                    </svg>
+                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
                                         {company.ubicacion || 'No especificada'}
-                                    </div>
-                                </td>
+                                    </span>
+                                </div>
+                            </td>
 
-                                {/* Tamaño */}
-                                <td className='px-6 py-4'>
-                                    <div className='flex gap-1 text-yellow-400 text-xs'>
-                                        {renderStars(company.tamano || 0)}
-                                    </div>
-                                </td>
+                            {/* Proyectos Activos */}
+                            <td className='px-8 py-5'>
+                                <div className='flex items-center gap-2 whitespace-nowrap'>
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                                        style={{
+                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)',
+                                            color: company.activeProjects > 0 ? 'var(--tier-1-text)' : 'var(--project-count-empty)'
+                                        }}>
+                                        {company.activeProjects}
+                                    </span>
+                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                                        {company.activeProjects === 1 ? 'Activo' : 'Activos'}
+                                    </span>
+                                </div>
+                            </td>
 
-                                {/* Website */}
-                                <td className='px-6 py-4 text-blue-600 font-medium truncate max-w-[200px]'>
-                                    {company.website ? (
-                                        <a
-                                            href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                                            target='_blank'
-                                            rel='noopener noreferrer'
-                                            className='hover:underline flex items-center gap-1'
-                                            onClick={(e) => e.stopPropagation()}
+                            {/* Proyectos en Proceso */}
+                            <td className='px-8 py-5'>
+                                <div className='flex items-center gap-2 whitespace-nowrap'>
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                                        style={{
+                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.4)' : 'var(--card-border)',
+                                            color: company.processProjects > 0 ? 'var(--tier-4-text)' : 'var(--project-count-empty)'
+                                        }}>
+                                        {company.processProjects}
+                                    </span>
+                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                                        En proceso
+                                    </span>
+                                </div>
+                            </td>
+
+                            {/* Proyectos Perdidos */}
+                            <td className='px-8 py-5'>
+                                <div className='flex items-center gap-2 whitespace-nowrap'>
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                                        style={{
+                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.4)' : 'var(--card-border)',
+                                            color: company.lostProjects > 0 ? '#991b1b' : 'var(--project-count-empty)'
+                                        }}>
+                                        {company.lostProjects}
+                                    </span>
+                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                                        {company.lostProjects === 1 ? 'Perdido' : 'Perdidos'}
+                                    </span>
+                                </div>
+                            </td>
+
+                            {/* Tamaño */}
+                            <td className='px-8 py-5'>
+                                {renderSizeBadge(company.tamano || 0)}
+                            </td>
+
+                            {/* Website */}
+                            <td className='px-8 py-5'>
+                                {company.website ? (
+                                    <a
+                                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs transition-all shadow-sm'
+                                        style={{
+                                            backgroundColor: 'var(--website-badge-bg)',
+                                            color: 'var(--website-badge-text)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
+                                            e.currentTarget.style.color = '#ffffff'
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--website-badge-bg)'
+                                            e.currentTarget.style.color = 'var(--website-badge-text)'
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                            <polyline points="15 3 21 3 21 9" />
+                                            <line x1="10" y1="14" x2="21" y2="3" />
+                                        </svg>
+                                    </a>
+                                ) : (
+                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>-</span>
+                                )}
+                            </td>
+
+                            {/* Acciones (Delete) */}
+                            {isEditingMode && (
+                                <td className='px-2 py-5 text-center'>
+                                    {checkPermission(company, currentUserProfile) ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onDelete?.(company.id!)
+                                            }}
+                                            className='p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all'
+                                            title='Eliminar empresa'
                                         >
-                                            {company.website.replace(/^https?:\/\//, '')}
-                                            <span className='text-[10px]'>↗</span>
-                                        </a>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M3 6h18" />
+                                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                            </svg>
+                                        </button>
                                     ) : (
-                                        <span className='text-gray-400 font-normal'>-</span>
+                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
                                     )}
                                 </td>
-
-                                {/* Acciones */}
-                                {isEditingMode && (
-                                    <td className='px-6 py-4 text-center'>
-                                        <div className='flex items-center justify-center gap-2'>
-                                            {checkPermission(company, currentUserProfile) ? (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            onEdit?.(company)
-                                                        }}
-                                                        className='p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors group/btn'
-                                                        title='Editar empresa'
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                        </svg>
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            onDelete?.(company.id!)
-                                                        }}
-                                                        className='p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors group/btn'
-                                                        title='Eliminar empresa'
-                                                    >
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                            <path d="M3 6h18" />
-                                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                                        </svg>
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <span className='text-gray-300' title='Sin permisos para modificar'>🔒</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                            )}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     )
 }
 
-function checkPermission(company: CompanyData, profile: any) {
+function checkPermission(company: CompanyWithProjects, profile: any) {
     if (!profile) return false
-    if (profile.role === 'admin') return true
+    if (profile.role === 'admin' || profile.role === 'rh') return true
 
     // Check if the current profile (id) matches the company owner_id
     // Note: Database uses owner_id for companies
     return profile.id === (company as any).owner_id
 }
 
-function renderStars(rating: number) {
-    const stars = []
-    for (let i = 1; i <= 5; i++) {
-        stars.push(
-            <span key={i} className={i <= rating ? 'opacity-100' : 'opacity-20'}>
-                ★
-            </span>
-        )
-    }
-    return stars
+function renderSizeBadge(level: number) {
+    const tiers = [
+        { name: 'Micro', textColor: 'var(--tier-1-text)', bgColor: 'var(--tier-1-bg)' },
+        { name: 'Pequeña', textColor: 'var(--tier-2-text)', bgColor: 'var(--tier-2-bg)' },
+        { name: 'Mediana', textColor: 'var(--tier-3-text)', bgColor: 'var(--tier-3-bg)' },
+        { name: 'Grande', textColor: 'var(--tier-4-text)', bgColor: 'var(--tier-4-bg)' },
+        { name: 'Corporativo', textColor: 'var(--tier-5-text)', bgColor: 'var(--tier-5-bg)' }
+    ]
+
+    const tier = tiers[level - 1] || tiers[0]
+
+    return (
+        <span
+            className='px-2.5 py-1 rounded-full text-xs font-bold capitalize tracking-normal transition-all duration-300 shadow-sm border border-white/5'
+            style={{
+                backgroundColor: tier.bgColor,
+                color: tier.textColor,
+            }}
+        >
+            {tier.name}
+        </span>
+    )
 }

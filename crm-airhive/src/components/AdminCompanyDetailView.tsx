@@ -47,7 +47,7 @@ export default function AdminCompanyDetailView({
 
         // 🛡️ SECURITY FILTER
         // If not admin, only see leads owned by current user
-        if (currentUserProfile && currentUserProfile.role !== 'admin') {
+        if (currentUserProfile && currentUserProfile.role !== 'admin' && currentUserProfile.role !== 'rh') {
             query = (query as any).eq('owner_id', currentUserProfile.id)
         }
 
@@ -69,9 +69,9 @@ export default function AdminCompanyDetailView({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-50 bg-white flex flex-col animate-in fade-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-0 z-50 bg-[var(--background)] flex flex-col animate-in fade-in slide-in-from-bottom duration-300'>
             {/* Header */}
-            <div className='bg-[#0F2A44] px-8 py-6 flex items-center justify-between shadow-xl shrink-0'>
+            <div className='bg-[#0A1635] px-8 py-6 flex items-center justify-between shadow-xl shrink-0 border-b border-[var(--card-border)]'>
                 <div className='flex items-center gap-6'>
                     <button
                         onClick={onClose}
@@ -99,52 +99,52 @@ export default function AdminCompanyDetailView({
             </div>
 
             {/* Main Content Area */}
-            <div className='flex-1 overflow-y-auto bg-gray-50 custom-scrollbar'>
+            <div className='flex-1 overflow-y-auto bg-[var(--background)] custom-scrollbar'>
                 <div className='max-w-7xl mx-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8'>
 
                     {/* Left Panel: Company Metadata */}
                     <div className='lg:col-span-4 space-y-6'>
-                        <div className='bg-white rounded-3xl p-8 shadow-sm border border-gray-100'>
-                            <h2 className='text-xl font-black text-[#0A1635] mb-6 flex items-center gap-2 tracking-tight'>
+                        <div className='bg-[var(--card-bg)] rounded-3xl p-8 shadow-sm border border-[var(--card-border)]'>
+                            <h2 className='text-xl font-black text-[var(--text-primary)] mb-6 flex items-center gap-2 tracking-tight'>
                                 <span>📄</span> Datos Generales
                             </h2>
 
                             <div className='space-y-6'>
-                                <div className='p-4 bg-gray-50 rounded-2xl border border-gray-100'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-1'>Industria</label>
-                                    <p className='text-[#0A1635] font-bold text-lg'>{company.industria || 'N/A'}</p>
+                                <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Industria</label>
+                                    <p className='text-[var(--text-primary)] font-bold text-lg'>{company.industria || 'N/A'}</p>
                                 </div>
 
-                                <div className='p-4 bg-gray-50 rounded-2xl border border-gray-100'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-1'>Ubicación</label>
+                                <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Ubicación</label>
                                     <div className='flex items-center gap-2'>
                                         <span className='text-xl'>📍</span>
-                                        <p className='text-[#0A1635] font-bold text-lg'>{company.ubicacion || 'No especificada'}</p>
+                                        <p className='text-[var(--text-primary)] font-bold text-lg'>{company.ubicacion || 'No especificada'}</p>
                                     </div>
                                 </div>
 
-                                <div className='p-4 bg-gray-50 rounded-2xl border border-gray-100'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-1'>Website</label>
+                                <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Website</label>
                                     {company.website ? (
                                         <a
                                             href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
                                             target='_blank'
-                                            className='text-blue-600 font-bold hover:underline flex items-center gap-2 truncate text-lg'
+                                            className='text-blue-500 font-bold hover:underline flex items-center gap-2 truncate text-lg'
                                         >
                                             <span className='text-xl'>🌐</span> {company.website}
                                         </a>
                                     ) : (
-                                        <p className='text-gray-400'>No registrado</p>
+                                        <p className='text-[var(--text-secondary)]'>No registrado</p>
                                     )}
                                 </div>
 
-                                <div className='p-4 bg-gray-50 rounded-2xl border border-gray-100'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] block mb-1'>Tamaño de Empresa</label>
+                                <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Tamaño de Empresa</label>
                                     <div className='flex items-center gap-3 mt-2'>
-                                        <span className='text-3xl font-black text-[#0A1635]'>{company.tamano || 0}</span>
+                                        <span className='text-3xl font-black text-[var(--text-primary)]'>{company.tamano || 0}</span>
                                         <div className='flex gap-1 flex-1'>
                                             {[1, 2, 3, 4, 5].map(i => (
-                                                <div key={i} className={`h-2.5 flex-1 rounded-full ${i <= (company.tamano || 0) ? 'bg-[#2048FF]' : 'bg-gray-200'}`} />
+                                                <div key={i} className={`h-2.5 flex-1 rounded-full ${i <= (company.tamano || 0) ? 'bg-[#2048FF]' : 'bg-[var(--background)]'}`} />
                                             ))}
                                         </div>
                                     </div>
@@ -152,11 +152,11 @@ export default function AdminCompanyDetailView({
                             </div>
                         </div>
 
-                        <div className='bg-white rounded-3xl p-8 shadow-sm border border-gray-100'>
-                            <h2 className='text-xl font-black text-[#0A1635] mb-4 flex items-center gap-2 tracking-tight'>
+                        <div className='bg-[var(--card-bg)] rounded-3xl p-8 shadow-sm border border-[var(--card-border)]'>
+                            <h2 className='text-xl font-black text-[var(--text-primary)] mb-4 flex items-center gap-2 tracking-tight'>
                                 <span>📝</span> Descripción
                             </h2>
-                            <p className='text-gray-600 leading-relaxed font-medium bg-gray-50 p-6 rounded-2xl border border-gray-100'>
+                            <p className='text-[var(--text-secondary)] leading-relaxed font-medium bg-[var(--hover-bg)] p-6 rounded-2xl border border-[var(--card-border)]'>
                                 {company.descripcion || 'Sin descripción detallada.'}
                             </p>
                         </div>
@@ -164,11 +164,11 @@ export default function AdminCompanyDetailView({
 
                     {/* Right Panel: Associated Entities */}
                     <div className='lg:col-span-8 space-y-6'>
-                        <div className='bg-white rounded-3xl shadow-sm border border-gray-100 flex flex-col'>
-                            <div className='p-8 border-b border-gray-100 flex items-center justify-between'>
-                                <h2 className='text-2xl font-black text-[#0A1635] flex items-center gap-3 tracking-tight'>
+                        <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] flex flex-col'>
+                            <div className='p-8 border-b border-[var(--card-border)] flex items-center justify-between'>
+                                <h2 className='text-2xl font-black text-[var(--text-primary)] flex items-center gap-3 tracking-tight'>
                                     <span>👥</span> Contactos y Leads Asociados
-                                    <span className='bg-[#F5F6F8] text-[#0A1635] text-xs px-3 py-1 rounded-full font-black border border-gray-200'>
+                                    <span className='bg-[var(--hover-bg)] text-[var(--text-primary)] text-xs px-3 py-1 rounded-full font-black border border-[var(--card-border)]'>
                                         {clients.length}
                                     </span>
                                 </h2>
@@ -177,20 +177,20 @@ export default function AdminCompanyDetailView({
                             <div className='p-0'>
                                 {loadingClients ? (
                                     <div className='py-20 text-center animate-pulse'>
-                                        <p className='text-gray-400 font-bold'>Cargando base de contactos...</p>
+                                        <p className='text-[var(--text-secondary)] font-bold'>Cargando base de contactos...</p>
                                     </div>
                                 ) : clients.length > 0 ? (
                                     <div className='overflow-x-auto'>
                                         <table className='w-full text-left'>
-                                            <thead className='bg-gray-50'>
+                                            <thead className='bg-[var(--hover-bg)]'>
                                                 <tr>
-                                                    <th className='px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Nombre / Usuario</th>
-                                                    <th className='px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Contacto</th>
-                                                    <th className='px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]'>Etapa</th>
-                                                    <th className='px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-right'>Valor</th>
+                                                    <th className='px-8 py-4 text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em]'>Nombre / Usuario</th>
+                                                    <th className='px-8 py-4 text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em]'>Contacto</th>
+                                                    <th className='px-8 py-4 text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em]'>Etapa</th>
+                                                    <th className='px-8 py-4 text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] text-right'>Valor</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className='divide-y divide-gray-100'>
+                                            <tbody className='divide-y divide-[var(--card-border)]'>
                                                 {clients.map((client) => (
                                                     <tr
                                                         key={client.id}
@@ -203,24 +203,24 @@ export default function AdminCompanyDetailView({
                                                                     {client.nombre?.charAt(0) || '?'}
                                                                 </div>
                                                                 <div>
-                                                                    <p className='text-[#0A1635] font-black text-sm'>{client.nombre}</p>
-                                                                    <p className='text-gray-400 text-[10px] uppercase font-bold tracking-widest'>@{client.owner_username}</p>
+                                                                    <p className='text-[var(--text-primary)] font-black text-sm'>{client.nombre}</p>
+                                                                    <p className='text-[var(--text-secondary)] text-[10px] uppercase font-bold tracking-widest opacity-60'>@{client.owner_username}</p>
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className='px-8 py-5 text-gray-500 font-medium text-sm'>
+                                                        <td className='px-8 py-5 text-[var(--text-secondary)] font-medium text-sm'>
                                                             {client.contacto || '-'}
                                                         </td>
                                                         <td className='px-8 py-5'>
-                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-50 text-[#00A38B] border-cyan-100' :
-                                                                client.etapa === 'Cerrado Perdido' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                                    client.etapa === 'Negociación' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                                        'bg-blue-50 text-blue-700 border-blue-100'
+                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' :
+                                                                client.etapa === 'Cerrado Perdido' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
+                                                                    client.etapa === 'Negociación' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                                                                        'bg-blue-500/10 text-blue-500 border-blue-500/20'
                                                                 }`}>
                                                                 {client.etapa}
                                                             </span>
                                                         </td>
-                                                        <td className='px-8 py-5 text-right font-black text-[#0A1635] text-sm'>
+                                                        <td className='px-8 py-5 text-right font-black text-[var(--text-primary)] text-sm'>
                                                             ${client.valor_estimado?.toLocaleString() || '0'}
                                                         </td>
                                                     </tr>
@@ -229,8 +229,8 @@ export default function AdminCompanyDetailView({
                                         </table>
                                     </div>
                                 ) : (
-                                    <div className='py-20 text-center bg-gray-50/50'>
-                                        <p className='text-gray-400 font-bold'>No hay leads asociados a esta empresa.</p>
+                                    <div className='py-20 text-center bg-[var(--hover-bg)] rounded-3xl'>
+                                        <p className='text-[var(--text-secondary)] font-bold'>No hay leads asociados a esta empresa.</p>
                                     </div>
                                 )}
                             </div>
