@@ -9,7 +9,30 @@ export default function RichardDawkinsFooter() {
         "The feeling of awed wonder that science can give us is one of the highest experiences of which the human psyche is capable.",
         "Nature is not cruel, only pitilessly indifferent. This is one of the hardest lessons for humans to learn.",
         "Cumulative selection is the key to understanding the complexity of life.",
-        "The universe we observe has precisely the properties we should expect if there is, at bottom, no design, no purpose, no evil, no good, nothing but pitiless indifference."
+        "The universe we observe has precisely the properties we should expect if there is, at bottom, no design, no purpose, no evil, no good, nothing but pitiless indifference.",
+        "The truth is more magical than any myth or made-up mystery or miracle.",
+        "We are survival machines – robot vehicles blindly programmed to preserve the selfish molecules known as genes.",
+        "The essence of life is statistical improbability on a colossal scale.",
+        "Faith is the great cop-out, the great excuse to evade the need to think and evaluate evidence.",
+        "Evolution is a fact. Beyond reasonable doubt, beyond serious doubt, beyond sane, informed, intelligent doubt, beyond doubt evolution is a fact.",
+        "The meme for blind faith secures its own perpetuation by the simple unconscious expedient of discouraging rational inquiry.",
+        "Natural selection is the blind watchmaker, blind because it does not see ahead, does not plan consequences, has no purpose in view.",
+        "DNA neither cares nor knows. DNA just is. And we dance to its music.",
+        "The total amount of suffering per year in the natural world is beyond all decent contemplation.",
+        "Science replaces private prejudice with publicly verifiable evidence.",
+        "If you don't understand how something works, never mind: just give up and say God did it.",
+        "The God of the Old Testament is arguably the most unpleasant character in all fiction.",
+        "Isn't it enough to see that a garden is beautiful without having to believe that there are fairies at the bottom of it too?",
+        "The theory of evolution by cumulative natural selection is the only theory we know of that is in principle capable of explaining the existence of organized complexity.",
+        "We admit that we are like apes, but we seldom realize that we are apes.",
+        "The human psyche has two great sicknesses: the urge to carry vendetta across generations, and the tendency to fasten group labels on people.",
+        "Let us try to teach generosity and altruism, because we are born selfish.",
+        "The chances of each of us coming into existence are infinitesimally small, and even though we shall all die some day, we should count ourselves fantastically lucky to get our decades in the sun.",
+        "Science is interesting, and if you don't agree, you can fk off.",
+        "The beauty of evolution is that it does explain, in a very simple way, the existence of extraordinary complexity.",
+        "My eyes are constantly wide open to the extraordinary fact of existence.",
+        "The world is divided into things that look as though somebody designed them and things that look as though they didn't.",
+        "However many ways there may be of being alive, it is certain that there are vastly more ways of being dead."
     ], [])
 
     const randomQuote = useMemo(() => {

@@ -81,7 +81,7 @@ export default function CompaniesTable({
                             {/* Logo */}
                             <td className='px-8 py-5 text-center'>
                                 <div className='flex items-center gap-4 justify-center'>
-                                    <div className='w-10 h-10 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] flex items-center justify-center overflow-hidden shadow-md'>
+                                    <div className='w-10 h-10 rounded-full flex items-center justify-center overflow-hidden shadow-md' style={{ background: 'var(--accent-primary, #2048FF)' }}>
                                         {company.logo_url ? (
                                             <Image
                                                 src={company.logo_url}
@@ -136,9 +136,9 @@ export default function CompaniesTable({
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
                                     <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.15)' : 'var(--hover-bg)',
-                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.3)' : 'var(--card-border)',
-                                            color: company.activeProjects > 0 ? '#10b981' : 'var(--project-count-empty)'
+                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)',
+                                            color: company.activeProjects > 0 ? 'var(--tier-1-text)' : 'var(--project-count-empty)'
                                         }}>
                                         {company.activeProjects}
                                     </span>
@@ -153,9 +153,9 @@ export default function CompaniesTable({
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
                                     <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--hover-bg)',
-                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--card-border)',
-                                            color: company.processProjects > 0 ? '#f59e0b' : 'var(--project-count-empty)'
+                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.4)' : 'var(--card-border)',
+                                            color: company.processProjects > 0 ? 'var(--tier-4-text)' : 'var(--project-count-empty)'
                                         }}>
                                         {company.processProjects}
                                     </span>
@@ -170,9 +170,9 @@ export default function CompaniesTable({
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
                                     <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.15)' : 'var(--hover-bg)',
-                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.3)' : 'var(--card-border)',
-                                            color: company.lostProjects > 0 ? '#f43f5e' : 'var(--project-count-empty)'
+                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.25)' : 'var(--hover-bg)',
+                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.4)' : 'var(--card-border)',
+                                            color: company.lostProjects > 0 ? '#991b1b' : 'var(--project-count-empty)'
                                         }}>
                                         {company.lostProjects}
                                     </span>
@@ -200,7 +200,7 @@ export default function CompaniesTable({
                                             color: 'var(--website-badge-text)'
                                         }}
                                         onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#2048FF'
+                                            e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
                                             e.currentTarget.style.color = '#ffffff'
                                         }}
                                         onMouseLeave={(e) => {

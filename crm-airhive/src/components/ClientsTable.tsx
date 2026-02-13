@@ -72,7 +72,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             {/* Vendedor */}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-3'>
-                                    <div className='w-8 h-8 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] flex items-center justify-center text-white font-black text-[10px] shadow-sm flex-shrink-0'>
+                                    <div className='w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-[10px] shadow-sm flex-shrink-0' style={{ background: 'var(--accent-primary, #2048FF)' }}>
                                         {cliente.owner_username?.charAt(0).toUpperCase() || '?'}
                                     </div>
                                     <span className='font-bold text-xs uppercase tracking-tighter whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>
@@ -82,14 +82,14 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             </td>
                             {/* Empresa */}
                             <td className='px-8 py-5'>
-                                <p className='font-black text-sm group-hover:text-[#2048FF] transition-colors whitespace-nowrap' style={{ color: 'var(--text-primary)' }} title={cliente.empresa || ''}>
+                                <p className='font-black text-sm group-hover:text-[var(--accent-secondary)] transition-colors whitespace-nowrap' style={{ color: 'var(--text-primary)' }} title={cliente.empresa || ''}>
                                     {cliente.empresa || '-'}
                                 </p>
                             </td>
 
                             {/* Nombre */}
                             <td className='px-8 py-5'>
-                                <p className='text-[#2048FF] font-black text-sm' title={cliente.nombre || ''}>
+                                <p className='font-black text-sm' style={{ color: 'var(--accent-primary)' }} title={cliente.nombre || ''}>
                                     {cliente.nombre || '-'}
                                 </p>
                             </td>

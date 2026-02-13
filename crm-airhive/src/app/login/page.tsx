@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import Image from 'next/image'
 import Link from 'next/link'
+import VisualIdentityBackground from '@/components/VisualIdentityBackground'
 
 export default function LoginPage() {
     const auth = useAuth()
@@ -42,6 +43,8 @@ export default function LoginPage() {
                     background: 'linear-gradient(180deg, #0F2A44 0%, #1700AC 55%, #6941E2 100%)'
                 }}
             />
+            {/* Visual identity decorative tubes on margins */}
+            <VisualIdentityBackground />
             <div className='absolute inset-0 bg-white/10' />
 
             {/* Card */}

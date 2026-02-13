@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
+import { findOrCreateCompany } from '@/lib/companyHelpers'
 import PreLeadsTable from '@/components/PreLeadsTable'
 import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
@@ -108,19 +109,48 @@ export default function PreLeadsPage() {
 
     const handleSave = async (data: any) => {
         try {
+            // Step 1: Find or create company
+            const companyResult = await findOrCreateCompany(
+                supabase,
+                {
+                    nombre_empresa: data.nombre_empresa,
+                    telefonos: data.telefonos,
+                    correos: data.correos,
+                    ubicacion: data.ubicacion,
+                    notas: data.notas
+                },
+                auth.user?.id || ''
+            )
+
+            if (!companyResult) {
+                throw new Error('No se pudo crear o encontrar la empresa')
+            }
+
+            // Step 2: Save pre-lead with empresa_id
             const table = supabase.from('pre_leads') as any
+            const preLeadData = {
+                ...data,
+                empresa_id: companyResult.id,
+                vendedor_id: auth.user?.id,
+                vendedor_name: auth.profile?.full_name || auth.username
+            }
+
             if (modalMode === 'create') {
-                const { error } = await table.insert({
-                    ...data,
-                    vendedor_id: auth.user?.id,
-                    vendedor_name: auth.profile?.full_name || auth.username
-                })
+                const { error } = await table.insert(preLeadData)
                 if (error) throw error
+
+                // Show success message with company info
+                if (companyResult.isNew) {
+                    alert(`✅ Pre-Lead creado exitosamente.\n🏢 Nueva empresa "${companyResult.nombre}" registrada.`)
+                } else {
+                    alert(`✅ Pre-Lead creado exitosamente.\n🏢 Vinculado a empresa existente "${companyResult.nombre}".`)
+                }
             } else {
                 const { error } = await table
-                    .update(data)
+                    .update(preLeadData)
                     .eq('id', currentPreLead.id)
                 if (error) throw error
+                alert('✅ Pre-Lead actualizado exitosamente.')
             }
 
             setIsModalOpen(false)
@@ -134,9 +164,10 @@ export default function PreLeadsPage() {
         setIsDetailViewOpen(false)
         setSourcePreLead(pl)
 
-        // Mappear Pre-Lead a Lead structure
+        // Mappear Pre-Lead a Lead structure with empresa_id
         const initialLeadData = {
             empresa: pl.nombre_empresa,
+            empresa_id: pl.empresa_id, // Link to the same company
             nombre: pl.nombre_contacto || '',
             email: pl.correos?.[0] || '',
             telefono: pl.telefonos?.[0] || '',
@@ -240,7 +271,7 @@ export default function PreLeadsPage() {
 
     if (auth.loading && !auth.loggedIn) {
         return (
-            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
+            <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}>
                 <div className='flex flex-col items-center gap-4'>
                     <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
                     <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>Cargando prospectos...</p>
@@ -250,9 +281,10 @@ export default function PreLeadsPage() {
     }
 
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto space-y-10 w-full'>
                 {/* External Header - Page Level */}
+                {/* Header Pattern consistent with Empresas */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>

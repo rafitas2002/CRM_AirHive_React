@@ -9,6 +9,7 @@
 /* Tema Claro (Light) */
 .theme-claro {
   --background: #DDE2E5;
+  /* Slightly darker background to help white cards pop */
   --foreground: #0A1635;
   --card-bg: #ffffff;
   --card-border: #e2e8f0;
@@ -17,13 +18,18 @@
   --input-focus: #2048FF;
   --text-primary: #0A1635;
   --text-secondary: #475569;
+  /* Darker secondary text */
   --hover-bg: #f8fafc;
   --table-header-bg: #cbd5e1;
 
   /* Contrast adjustments for Light Mode */
   --project-count-empty: #94a3b8;
   --website-badge-bg: rgba(32, 72, 255, 0.1);
-  --website-badge-text: #2048FF;
+  --website-badge-text: #1700AC;
+  /* Stronger blue */
+  --accent-primary: #1700AC;
+  /* Bolder blue */
+  --accent-secondary: #2048FF;
 
   /* Tier colors for size badges (Light) */
   --tier-1-bg: rgba(16, 185, 129, 0.15);
@@ -41,6 +47,7 @@
 /* Tema Gris (Gray) */
 .theme-gris {
   --background: #374151;
+  /* Darker gray for better depth */
   --foreground: #f9fafb;
   --card-bg: #4b5563;
   --card-border: #6b7280;
@@ -55,7 +62,9 @@
   /* Contrast adjustments for Gray Mode */
   --project-count-empty: rgba(255, 255, 255, 0.2);
   --website-badge-bg: rgba(32, 72, 255, 0.25);
-  --website-badge-text: #a3b8ff;
+  --website-badge-text: #60A5FA;
+  --accent-primary: #60A5FA;
+  --accent-secondary: #3B82F6;
 
   /* Tier colors for size badges (Gray/Dark) */
   --tier-1-bg: rgba(16, 185, 129, 0.25);

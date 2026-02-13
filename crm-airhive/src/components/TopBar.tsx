@@ -20,7 +20,7 @@ export default function TopBar() {
     const logoDimensions = { width: 350, height: 114 }
 
     return (
-        <header className='h-[70px] bg-black border-b-2 border-black'>
+        <header className='h-[70px] bg-black/80 backdrop-blur-md border-b border-white/5 sticky top-0 z-[100]'>
             <div className='h-full px-3 flex items-center gap-10'>
                 <Link href='/home' className='flex items-center hover:opacity-80 transition-opacity'>
                     <Image

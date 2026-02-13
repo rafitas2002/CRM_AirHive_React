@@ -210,7 +210,7 @@ export default function CorrelacionesPage() {
 
     if (loading || auth.loading) {
         return (
-            <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
+            <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}>
                 <div className='flex flex-col items-center gap-4'>
                     <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
                     <p className='font-bold' style={{ color: 'var(--text-secondary)' }}>Analizando correlaciones maestras...</p>
@@ -220,7 +220,7 @@ export default function CorrelacionesPage() {
     }
 
     return (
-        <div className='h-full flex flex-col overflow-hidden' style={{ background: 'var(--background)' }}>
+        <div className='h-full flex flex-col overflow-hidden' style={{ background: 'transparent' }}>
             <div className='flex-1 overflow-y-auto p-8 custom-scrollbar'>
                 <div className='max-w-7xl mx-auto space-y-10'>
 

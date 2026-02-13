@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import Link from 'next/link'
+import { TrendingUp, RotateCw, Filter, LayoutDashboard, AlertCircle, Info } from 'lucide-react'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -244,148 +246,227 @@ export default function ForecastDashboard() {
     }, [filteredLeads, statsPerSeller])
     burial:
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
-            <div className='max-w-7xl mx-auto w-full space-y-8'>
-                <div className='flex justify-between items-center'>
-                    <h1 className='text-3xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                        Pronóstico & Confiabilidad
-                    </h1>
-                    <div className='flex gap-4 items-center'>
-                        <select
-                            value={dateRange}
-                            onChange={(e) => setDateRange(e.target.value)}
-                            className='border rounded-xl px-4 py-2 text-sm font-bold shadow-sm'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
+            <div className='max-w-7xl mx-auto w-full space-y-10'>
+                {/* Header Pattern consistent with Empresas */}
+                <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex items-center gap-8'>
+                        <Link
+                            href='/clientes'
+                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            title='Volver a Leads'
                         >
-                            <option value="all">Todo Histórico</option>
-                            <option value="30">Últimos 30 días</option>
-                            <option value="90">Últimos 90 días</option>
-                            <option value="180">Últimos 180 días</option>
-                        </select>
-                        <select
-                            value={filterSeller}
-                            onChange={(e) => setFilterSeller(e.target.value)}
-                            className='border rounded-xl px-4 py-2 text-sm font-bold shadow-sm'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
+                        </Link>
+                        <div className='flex items-center gap-6'>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <TrendingUp size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
+                            <div>
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                    Pronóstico & Confiabilidad
+                                </h1>
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Análisis predictivo basado en comportamiento histórico.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='flex gap-3'>
+                            <select
+                                value={dateRange}
+                                onChange={(e) => setDateRange(e.target.value)}
+                                className='bg-transparent px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 cursor-pointer outline-none'
+                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            >
+                                <option value="all">Todo Histórico</option>
+                                <option value="30">Últimos 30 días</option>
+                                <option value="90">Últimos 90 días</option>
+                                <option value="180">Últimos 180 días</option>
+                            </select>
+                            <select
+                                value={filterSeller}
+                                onChange={(e) => setFilterSeller(e.target.value)}
+                                className='bg-transparent px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 cursor-pointer outline-none'
+                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            >
+                                <option value="All">Todos los Vendedores</option>
+                                {sellers.map(s => <option key={s} value={s!}>{s}</option>)}
+                            </select>
+                        </div>
+                        <button
+                            onClick={fetchLeads}
+                            className='px-5 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2'
                         >
-                            <option value="All">Todos los Vendedores</option>
-                            {sellers.map(s => <option key={s} value={s!}>{s}</option>)}
-                        </select>
+                            <span>Actualizar</span>
+                            <RotateCw size={12} strokeWidth={2.5} />
+                        </button>
                     </div>
                 </div>
 
-                {/* Dashboard Cards */}
+                {/* Metric Cards redesigned */}
                 <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
-                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Pipeline Seleccionado</label>
-                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{globalStats.totalLeads} <span className='text-sm font-normal' style={{ color: 'var(--text-secondary)' }}>Leads</span></p>
+                    <div className='p-6 rounded-[30px] border shadow-sm transition-all hover:scale-[1.02]' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col'>
+                            <label className='text-[10px] font-black uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Pipeline Seleccionado</label>
+                            <div className='flex items-baseline gap-2 mt-2'>
+                                <p className='text-3xl font-black' style={{ color: 'var(--text-primary)' }}>{globalStats.totalLeads}</p>
+                                <span className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Leads</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Histórico Analizado</label>
-                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{globalStats.historicalCount} <span className='text-sm font-normal' style={{ color: 'var(--text-secondary)' }}>Cerrados</span></p>
+                    <div className='p-6 rounded-[30px] border shadow-sm transition-all hover:scale-[1.02]' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col'>
+                            <label className='text-[10px] font-black uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Histórico Analizado</label>
+                            <div className='flex items-baseline gap-2 mt-2'>
+                                <p className='text-3xl font-black' style={{ color: 'var(--text-primary)' }}>{globalStats.historicalCount}</p>
+                                <span className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Cerrados</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className='p-6 rounded-2xl border shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <label className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Error Cuadrático (Brier)</label>
-                        <p className='text-3xl font-black text-[#2048FF] mt-2'>
-                            {globalStats.avgLogLoss.toFixed(3)}
-                        </p>
+                    <div className='p-6 rounded-[30px] border shadow-sm transition-all hover:scale-[1.02]' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col'>
+                            <label className='text-[10px] font-black uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Error Cuadrático (Brier)</label>
+                            <p className='text-3xl font-black mt-2 text-[#2048FF] shadow-blue-500/5'>
+                                {globalStats.avgLogLoss.toFixed(3)}
+                            </p>
+                        </div>
                     </div>
-                    <div className='bg-[#1700AC] p-6 rounded-2xl border border-[#1700AC] shadow-lg'>
-                        <label className='text-[10px] font-black text-white/50 uppercase tracking-[0.2em]'>Forecast Ajustado (Total)</label>
-                        <p className='text-3xl font-black text-white mt-1'>
-                            ${globalStats.adjustedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </p>
-                        <p className='text-[10px] text-white/60 font-medium mt-1'>Pipeline real ponderado por confiabilidad</p>
+                    <div className='bg-[#2048FF] p-6 rounded-[30px] border-none shadow-xl shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 group'>
+                        <div className='flex flex-col'>
+                            <label className='text-[10px] font-black text-white/50 uppercase tracking-[0.2em]'>Forecast Ajustado (Total)</label>
+                            <p className='text-3xl font-black text-white mt-1'>
+                                ${globalStats.adjustedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </p>
+                            <p className='text-[10px] text-white/60 font-medium mt-1 uppercase tracking-tighter'>Pipeline ponderado por confiabilidad</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className='bg-blue-900/10 p-4 rounded-xl border border-blue-900/20 flex items-center justify-between'>
-                    <div>
-                        <p className='text-xs font-bold text-blue-900 uppercase tracking-widest'>Filtro Activo: Solo Negociación</p>
-                        <p className='text-[10px] text-blue-900/60'>
-                            El forecast solo incluye {globalStats.negotiationCount} leads en etapa de Negociación.
-                        </p>
+                <div className='px-6 py-4 rounded-2xl border flex items-center justify-between shadow-sm transition-all'
+                    style={{ background: 'rgba(32, 72, 255, 0.05)', borderColor: 'rgba(32, 72, 255, 0.1)' }}>
+                    <div className='flex items-center gap-4'>
+                        <div className='w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center'>
+                            <Filter size={18} className='text-[#2048FF]' />
+                        </div>
+                        <div>
+                            <p className='text-xs font-black text-[#2048FF] uppercase tracking-widest'>Filtro Activo: Solo Negociación</p>
+                            <p className='text-[10px] font-bold opacity-60' style={{ color: 'var(--text-primary)' }}>
+                                El forecast solo incluye {globalStats.negotiationCount} leads en etapa de Negociación.
+                            </p>
+                        </div>
                     </div>
                     <div className='text-right'>
-                        <p className='text-xs font-bold text-blue-900'>Total Bruto: ${globalStats.pipelineForecast.toLocaleString('es-MX')}</p>
+                        <p className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Total Bruto</p>
+                        <p className='text-xl font-black text-[#2048FF]'>${globalStats.pipelineForecast.toLocaleString('es-MX')}</p>
                     </div>
                 </div>
 
-                {/* Main Table */}
-                <div className='rounded-[40px] border shadow-2xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                    <table className='w-full text-left'>
-                        <thead className='bg-gray-50 border-b border-gray-100'>
-                            <tr>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest'>Vendedor</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Conf. (Score)</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Forecast Negoc.</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center bg-blue-50/50'>Forecast Real (Adj)</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Tasa Cierre</th>
-                                <th className='px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center'>Muestra</th>
-                            </tr>
-                        </thead>
-                        <tbody className='divide-y divide-gray-50'>
-                            {statsPerSeller.map((s, idx) => (
-                                <tr key={s.name} className='transition-colors group' style={{ borderBottom: '1px solid var(--card-border)' }}>
-                                    <td className='px-6 py-4'>
-                                        <div className='flex items-center gap-3'>
-                                            <span className='w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs'>
-                                                {idx + 1}
-                                            </span>
-                                            <span className='font-bold' style={{ color: 'var(--text-primary)' }}>{s.name}</span>
-                                        </div>
-                                    </td>
-                                    <td className='px-6 py-4 text-center'>
-                                        <div className='flex flex-col items-center gap-1'>
-                                            <span className={`text-lg font-black ${s.score > 70 ? 'text-emerald-600' : s.score > 40 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                {s.score > 0 ? s.score.toFixed(1) : (s.historicalLeads.length > 0 ? 'Sin datos' : 'N/A')}
-                                            </span>
-                                            <div className='w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1'>
-                                                <div
-                                                    className={`h-full transition-all duration-500 ${s.score > 70 ? 'bg-emerald-500' : s.score > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                                    style={{ width: `${s.score}%` }}
-                                                />
-                                            </div>
-                                            <p className='text-[9px] font-bold text-gray-400 mt-1 uppercase tracking-tighter'>
-                                                Basado en {s.historicalLeads.length} leads
-                                            </p>
-                                        </div>
-                                    </td>
-                                    <td className='px-6 py-4 text-center'>
-                                        <p className='font-bold text-gray-400'>${s.pipelineExpectedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
-                                        <p className='text-[10px] text-gray-400'>{s.leads.filter(l => l.etapa === 'Negociación').length} en negoc.</p>
-                                    </td>
-                                    <td className='px-6 py-4 text-center bg-blue-50/20'>
-                                        <p className='font-black text-[#1700AC] text-lg'>${s.pipelineAdjustedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
-                                        <p className='text-[10px] text-blue-600/60 uppercase font-black tracking-tighter'>Ponderado</p>
-                                    </td>
-                                    <td className='px-6 py-4 text-center font-bold' style={{ color: 'var(--text-primary)' }}>{s.winRate.toFixed(1)}%</td>
-                                    <td className='px-6 py-4 text-center'>
-                                        <span className={`px-3 py-1.5 rounded-lg text-sm font-black ${s.historicalLeads.length < 10 ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-600'}`}>
-                                            {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}
-                                        </span>
-                                    </td>
+                {/* Main Table Container stylized */}
+                <div className='rounded-[40px] shadow-2xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-8 py-6 border-b flex items-center justify-between' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex items-center gap-4'>
+                            <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                <LayoutDashboard size={24} />
+                            </div>
+                            <div>
+                                <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Métricas por Colaborador</h2>
+                                <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Evaluación de Precisión Predictiva</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className='overflow-x-auto'>
+                        <table className='w-full text-left border-collapse'>
+                            <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+                                <tr>
+                                    <th className='px-8 py-5 whitespace-nowrap'>Vendedor</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Conf. (Score)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Negoc.</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Real (Adj)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Tasa Cierre</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Muestra</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                                {statsPerSeller.map((s, idx) => (
+                                    <tr key={s.name} className='transition-colors group hover:bg-black/5'>
+                                        <td className='px-8 py-5'>
+                                            <div className='flex items-center gap-3'>
+                                                <span className='w-8 h-8 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] text-white flex items-center justify-center font-black text-[10px] shadow-sm'>
+                                                    {s.name.charAt(0).toUpperCase()}
+                                                </span>
+                                                <span className='font-bold text-sm' style={{ color: 'var(--text-primary)' }}>{s.name}</span>
+                                            </div>
+                                        </td>
+                                        <td className='px-8 py-5 text-center'>
+                                            <div className='flex flex-col items-center gap-2'>
+                                                <span className={`text-base font-black ${s.score > 70 ? 'text-emerald-500' : s.score > 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                                                    {s.score > 0 ? s.score.toFixed(1) : (s.historicalLeads.length > 0 ? 'Sin datos' : 'N/A')}
+                                                </span>
+                                                <div className='w-20 h-1.5 bg-gray-500/10 rounded-full overflow-hidden'>
+                                                    <div
+                                                        className={`h-full transition-all duration-700 ${s.score > 70 ? 'bg-emerald-500' : s.score > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                        style={{ width: `${s.score}%`, boxShadow: '0 0 10px currentColor' }}
+                                                    />
+                                                </div>
+                                                <p className='text-[8px] font-black uppercase tracking-[0.1em] opacity-40' style={{ color: 'var(--text-secondary)' }}>
+                                                    {s.historicalLeads.length} leads
+                                                </p>
+                                            </div>
+                                        </td>
+                                        <td className='px-8 py-5 text-center'>
+                                            <p className='font-bold text-sm' style={{ color: 'var(--text-primary)' }}>${s.pipelineExpectedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                            <p className='text-[10px] font-bold opacity-40 uppercase tracking-tighter' style={{ color: 'var(--text-secondary)' }}>{s.leads.filter(l => l.etapa === 'Negociación').length} en negoc.</p>
+                                        </td>
+                                        <td className='px-8 py-5 text-center' style={{ backgroundColor: 'rgba(32, 72, 255, 0.02)' }}>
+                                            <p className='font-black text-[#2048FF] text-base'>${s.pipelineAdjustedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                            <p className='text-[8px] font-black text-[#2048FF]/60 uppercase tracking-widest'>Ponderado</p>
+                                        </td>
+                                        <td className='px-8 py-5 text-center font-black text-sm' style={{ color: 'var(--text-primary)' }}>{s.winRate.toFixed(1)}%</td>
+                                        <td className='px-8 py-5 text-center'>
+                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${s.historicalLeads.length < 10
+                                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-600'
+                                                : 'bg-blue-500/10 border-blue-500/20 text-[#2048FF]'
+                                                }`}>
+                                                {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                {/* Guidance */}
+                {/* Redesigned Guidance Section using transparent-bordered themed cards */}
                 <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                    <div className='bg-blue-50 p-6 rounded-2xl border border-blue-100'>
-                        <p className='text-blue-800 font-bold mb-2'>¿Cómo leer el Forecast del Pipeline?</p>
-                        <p className='text-blue-700/80 text-sm leading-relaxed'>
-                            Es el valor que esperamos cerrar pronto. Se calcula sumando el (Valor Estimado × Probabilidad %) de cada lead abierto.
-                            Combínalo con el **Score de Confiabilidad** para saber qué tan realistas son las promesas de cada vendedor.
-                        </p>
-                    </div>
-                    {statsPerSeller.some(s => s.historicalLeads.length < 10) && (
-                        <div className='bg-amber-50 p-6 rounded-2xl border border-amber-100'>
-                            <p className='text-amber-800 font-bold mb-2'>Validez Estadística Limitada</p>
-                            <p className='text-amber-700/80 text-sm leading-relaxed'>
-                                Algunos vendedores tienen pocos cierres registrados. El Score de Confiabilidad será más preciso a medida que cierren más leads y comparemos sus predicciones con la realidad.
+                    <div className='p-6 rounded-[30px] border shadow-sm flex gap-4 transition-all hover:bg-blue-500/5' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center shrink-0'>
+                            <Info size={24} className='text-[#2048FF]' />
+                        </div>
+                        <div>
+                            <p className='font-black text-sm uppercase tracking-widest leading-none mb-3' style={{ color: 'var(--text-primary)' }}>Interpretación del Forecast</p>
+                            <p className='text-xs font-medium leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
+                                Se calcula sumando el (Valor Estimado × Probabilidad %) de cada lead abierto. El **Score de Confiabilidad** pondera este valor para ofrecer una visión realista basada en cierres pasados.
                             </p>
+                        </div>
+                    </div>
+
+                    {statsPerSeller.some(s => s.historicalLeads.length < 10) && (
+                        <div className='p-6 rounded-[30px] border shadow-sm flex gap-4 border-amber-500/20 transition-all hover:bg-amber-500/5' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                            <div className='w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0'>
+                                <AlertCircle size={24} className='text-amber-500' />
+                            </div>
+                            <div>
+                                <p className='font-black text-sm uppercase tracking-widest leading-none mb-3 text-amber-600'>Validez Estadística</p>
+                                <p className='text-xs font-medium leading-relaxed text-amber-600/80'>
+                                    Algunos vendedores tienen pocos cierres registrados. El Score de Confiabilidad ganará precisión automáticamente a medida que el sistema capture más comportamiento histórico.
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>

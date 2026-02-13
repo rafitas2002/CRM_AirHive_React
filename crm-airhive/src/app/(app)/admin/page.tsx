@@ -116,12 +116,12 @@ export default function AdminDashboard() {
         }
     }, [leads, history])
 
-    if (loading) return <div className='h-full flex items-center justify-center bg-[#f8fafc]'><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
+    if (loading) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
 
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Header */}
                 <div className='flex justify-between items-center'>

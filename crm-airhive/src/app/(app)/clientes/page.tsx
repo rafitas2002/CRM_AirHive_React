@@ -421,9 +421,10 @@ export default function LeadsPage() {
     }
 
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto space-y-10 w-full'>
                 {/* External Header - Page Level */}
+                {/* Header Pattern consistent with Empresas */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
