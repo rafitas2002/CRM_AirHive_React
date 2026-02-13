@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import EmployeesClient from './EmployeesClient'
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
 export const metadata = {
     title: 'Equipo - CRM Air Hive'
@@ -55,18 +56,14 @@ export default async function EmployeesPage() {
     })
 
     return (
-        <div className='p-8 max-w-7xl mx-auto'>
-            <div className='flex justify-between items-end mb-8'>
-                <div>
-                    <h1 className='text-3xl font-black text-[#0A1635] tracking-tight'>Gestión de Equipo</h1>
-                    <p className='text-gray-500 font-medium mt-2'>Administra los usuarios y roles del sistema.</p>
-                </div>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+            <div className='max-w-7xl mx-auto space-y-10 w-full'>
+                <EmployeesClient
+                    initialEmployees={employees || []}
+                    currentUserRole={userProfile?.role}
+                />
             </div>
-
-            <EmployeesClient
-                initialEmployees={employees || []}
-                currentUserRole={userProfile?.role}
-            />
+            <RichardDawkinsFooter />
         </div>
     )
 }

@@ -34,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <EventTracker />
             <div className='h-screen flex flex-col overflow-hidden' style={{ background: 'var(--background)' }}>
                 <TopBar />
-                <main className='flex-1 overflow-hidden' style={{ background: 'var(--background)' }}>
+                <main className='flex-1 overflow-auto' style={{ background: 'var(--background)' }}>
                     {children}
                 </main>
             </div>

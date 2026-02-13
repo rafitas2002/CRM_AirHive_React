@@ -64,6 +64,10 @@ export type Database = {
                     last_snapshot_at: string | null
                     email: string | null
                     telefono: string | null
+                    original_pre_lead_id: number | null
+                    original_vendedor_id: string | null
+                    converted_at: string | null
+                    converted_by: string | null
                 }
                 Insert: {
                     id?: number
@@ -128,6 +132,7 @@ export type Database = {
                     notas: string | null
                     created_at: string
                     updated_at: string
+                    is_converted: boolean
                 }
                 Insert: {
                     id?: number
@@ -140,8 +145,7 @@ export type Database = {
                     vendedor_id?: string | null
                     vendedor_name?: string | null
                     notas?: string | null
-                    created_at?: string
-                    updated_at?: string
+                    is_converted?: boolean
                 }
                 Update: {
                     id?: number

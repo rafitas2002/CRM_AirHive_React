@@ -24,8 +24,10 @@ import {
     Building2,
     Timer,
     CheckCircle,
-    MapPin
+    MapPin,
+    Hash
 } from 'lucide-react'
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function CorrelacionesPage() {
@@ -510,6 +512,7 @@ export default function CorrelacionesPage() {
                         <RaceHistoryTable races={pastRaces} />
                     </div>
                 </div>
+                <RichardDawkinsFooter />
             </div>
         </div>
     )

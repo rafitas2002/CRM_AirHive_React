@@ -22,8 +22,8 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
 
     if (periods.length === 0) {
         return (
-            <div className="text-center p-8 bg-slate-800/50 rounded-xl border border-slate-700">
-                <p className="text-slate-400">No hay historial de carreras todavía.</p>
+            <div className="text-center p-8 rounded-xl border border-dashed transition-all" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                <p className="font-bold uppercase text-[10px] tracking-widest" style={{ color: 'var(--text-secondary)' }}>No hay historial de carreras todavía.</p>
             </div>
         )
     }
@@ -35,29 +35,29 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
                 const title = results[0]?.title || `Carrera de ${period}`
 
                 return (
-                    <div key={period} className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden">
-                        <div className="px-6 py-4 bg-slate-800/60 border-b border-slate-700 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div key={period} className="rounded-2xl border overflow-hidden transition-all duration-500" style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className="px-6 py-4 border-b flex items-center justify-between" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                            <h3 className="text-lg font-black tracking-tight flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                 <Trophy className="w-5 h-5 text-yellow-500" />
                                 {title}
                             </h3>
-                            <span className="text-xs text-slate-400 font-mono uppercase tracking-wider">
+                            <span className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-auto" style={{ color: 'var(--text-secondary)' }}>
                                 {period}
                             </span>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-slate-700/50">
-                                        <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Rango</th>
-                                        <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Vendedor</th>
-                                        <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Ventas Totales</th>
-                                        <th className="px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Medalla</th>
+                                    <tr className="border-b" style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                                        <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Rango</th>
+                                        <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Vendedor</th>
+                                        <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Ventas Totales</th>
+                                        <th className="px-6 py-3 text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Medalla</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-700/30">
+                                <tbody className="divide-y" style={{ borderColor: 'var(--card-border)' }}>
                                     {results.map((res) => (
-                                        <tr key={res.user_id} className="hover:bg-slate-700/20 transition-colors">
+                                        <tr key={res.user_id} className="hover:bg-[var(--hover-bg)] transition-colors">
                                             <td className="px-6 py-4">
                                                 <span className={`
                                                     inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm
@@ -69,18 +69,18 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
                                                     {res.rank}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 font-medium text-slate-200">
+                                            <td className="px-6 py-4 font-bold" style={{ color: 'var(--text-primary)' }}>
                                                 {res.name}
                                             </td>
-                                            <td className="px-6 py-4 font-mono text-slate-300">
+                                            <td className="px-6 py-4 font-black" style={{ color: 'var(--text-primary)' }}>
                                                 ${res.total_sales.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {res.medal && (
                                                     <div className="flex items-center gap-1">
                                                         <Medal className={`w-5 h-5 ${res.medal === 'gold' ? 'text-yellow-500' :
-                                                                res.medal === 'silver' ? 'text-slate-300' :
-                                                                    'text-amber-700'
+                                                            res.medal === 'silver' ? 'text-slate-300' :
+                                                                'text-amber-700'
                                                             }`} />
                                                         <span className="text-xs capitalize text-slate-400">
                                                             {res.medal === 'gold' ? 'Oro' : res.medal === 'silver' ? 'Plata' : 'Bronce'}
