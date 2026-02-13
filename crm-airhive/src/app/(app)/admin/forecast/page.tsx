@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -243,7 +244,7 @@ export default function ForecastDashboard() {
     }, [filteredLeads, statsPerSeller])
     burial:
     return (
-        <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'var(--background)' }}>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 <div className='flex justify-between items-center'>
                     <h1 className='text-3xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -311,7 +312,7 @@ export default function ForecastDashboard() {
                 </div>
 
                 {/* Main Table */}
-                <div className='rounded-2xl border shadow-sm overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='rounded-[40px] border shadow-2xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     <table className='w-full text-left'>
                         <thead className='bg-gray-50 border-b border-gray-100'>
                             <tr>
@@ -388,6 +389,7 @@ export default function ForecastDashboard() {
                         </div>
                     )}
                 </div>
+                <RichardDawkinsFooter />
             </div>
         </div>
     )

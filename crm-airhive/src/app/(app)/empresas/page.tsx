@@ -9,7 +9,10 @@ import CompanyModal, { CompanyData } from '@/components/CompanyModal'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
-import Image from 'next/image' // Added Image import
+import Image from 'next/image'
+import { Search, Table as TableIcon, Pencil, RotateCw, Building2 } from 'lucide-react'
+
+import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
 export type CompanyWithProjects = CompanyData & {
     activeProjects: number
@@ -248,181 +251,194 @@ export default function EmpresasPage() {
     }
 
     return (
-        <div className='h-full flex flex-col p-8 overflow-hidden' style={{ background: 'var(--background)' }}>
-            <div className='w-full mx-auto flex flex-col h-full gap-8'>
-                {/* Header - Fixed */}
-                <div className='shrink-0 flex flex-col gap-6 p-4 rounded-3xl' style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
-                    <div className='flex items-center justify-between'>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+            <div className='max-w-7xl mx-auto space-y-10 w-full'>
+                {/* External Header - Page Level */}
+                <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex items-center gap-8'>
+                        <Link
+                            href='/clientes'
+                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            title='Volver a Leads'
+                        >
+                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
+                        </Link>
                         <div className='flex items-center gap-6'>
-                            <Link
-                                href='/clientes'
-                                className='w-12 h-12 flex items-center justify-center border rounded-2xl transition-all hover:scale-105 active:scale-95'
-                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}
-                                title='Volver a Leads'
-                            >
-                                <span className='text-xl' style={{ color: 'var(--text-primary)' }}>←</span>
-                            </Link>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <Building2 size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
                             <div>
-                                <h1 className='text-3xl font-black tracking-tight flex items-center gap-3' style={{ color: 'var(--text-primary)' }}>
-                                    <span className='opacity-40'>🏢</span> Catálogo de Empresas
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                    Catálogo de Empresas
                                 </h1>
-                                <p className='mt-1 font-bold text-xs uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>
-                                    Gestión centralizada de cuentas y contactos corporativos
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Gestión centralizada de cuentas y relaciones corporativas.
                                 </p>
                             </div>
                         </div>
+                    </div>
 
+                    <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${isEditingMode
-                                    ? 'bg-[#2048FF] text-white shadow-[0_0_20px_rgba(32,72,255,0.3)]'
-                                    : 'border hover:bg-white/5'
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                    ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
+                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
-                                    background: 'var(--background)',
                                     borderColor: 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 } : {}}
                             >
-                                {isEditingMode ? 'Terminar Edición' : 'Editar Catálogo'}
+                                <div className='flex items-center gap-2'>
+                                    {isEditingMode ? (
+                                        <span>Terminar Edición</span>
+                                    ) : (
+                                        <>
+                                            <span>Editar Catálogo</span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </div>
                             </button>
                             <button
                                 onClick={fetchCompanies}
-                                className='px-5 py-2.5 border rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-white/5'
+                                className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
                                 style={{
-                                    background: 'var(--background)',
+                                    background: 'var(--card-bg)',
                                     borderColor: 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 }}
                             >
-                                Actualizar
-                            </button>
-                            <button
-                                onClick={openCreateModal}
-                                className='px-6 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-[0_10px_20px_rgba(32,72,255,0.2)]'
-                            >
-                                + Nueva Empresa
+                                <div className='flex items-center gap-2'>
+                                    <span>Actualizar</span>
+                                    <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
+                                </div>
                             </button>
                         </div>
-                    </div>
-
-                    {/* Filter Bar */}
-                    <div className='flex flex-wrap items-center gap-4'>
-                        <div className='flex-1 relative'>
-                            <span className='absolute left-4 top-1/2 -translate-y-1/2 opacity-30'>🔍</span>
-                            <input
-                                type="text"
-                                placeholder="Buscar por nombre o ubicación..."
-                                value={filterSearch}
-                                onChange={(e) => setFilterSearch(e.target.value)}
-                                className='w-full pl-12 pr-4 py-3 rounded-2xl border focus:outline-none focus:ring-4 focus:ring-[#2048FF]/10 text-xs font-bold transition-all placeholder:opacity-30'
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            />
-                        </div>
-
-                        <div className='flex items-center gap-2'>
-                            <label className='text-[10px] font-black uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>Industria</label>
-                            <select
-                                value={filterIndustry}
-                                onChange={(e) => setFilterIndustry(e.target.value)}
-                                className='rounded-2xl border px-5 py-3 text-xs font-black transition-all cursor-pointer hover:border-[#2048FF] outline-none focus:ring-2 focus:ring-[#2048FF]/50'
-                                style={{
-                                    background: 'var(--background)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All" style={{ background: 'var(--card-bg)' }}>Todas</option>
-                                {uniqueIndustries.map(ind => (
-                                    <option key={ind} value={ind!} style={{ background: 'var(--card-bg)' }}>{ind}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className='flex items-center gap-2'>
-                            <label className='text-[10px] font-black uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>Ubicación</label>
-                            <select
-                                value={filterLocation}
-                                onChange={(e) => setFilterLocation(e.target.value)}
-                                className='rounded-2xl border px-5 py-3 text-xs font-black transition-all cursor-pointer hover:border-[#2048FF] outline-none focus:ring-2 focus:ring-[#2048FF]/50'
-                                style={{
-                                    background: 'var(--background)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All" style={{ background: 'var(--card-bg)' }}>Todas</option>
-                                {uniqueLocations.map(loc => (
-                                    <option key={loc} value={loc} style={{ background: 'var(--card-bg)' }}>{loc}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className='flex items-center gap-2'>
-                            <label className='text-[10px] font-black uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>Ordenar Por</label>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
-                                className='rounded-2xl border px-5 py-3 text-xs font-black transition-all cursor-pointer hover:border-[#2048FF] outline-none focus:ring-2 focus:ring-[#2048FF]/50'
-                                style={{
-                                    background: 'var(--background)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="alphabetical" style={{ background: 'var(--card-bg)' }}>Nombre (A-Z)</option>
-                                <option value="antiquity" style={{ background: 'var(--card-bg)' }}>Antigüedad Empresa</option>
-                                <option value="projectAntiquity" style={{ background: 'var(--card-bg)' }}>Antigüedad Proyectos</option>
-                            </select>
-                        </div>
-
-                        <div className='flex items-center gap-2'>
-                            <label className='text-[10px] font-black uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>Tamaño</label>
-                            <select
-                                value={filterSize}
-                                onChange={(e) => setFilterSize(e.target.value)}
-                                className='rounded-2xl border px-5 py-3 text-xs font-black transition-all cursor-pointer hover:border-[#2048FF] outline-none focus:ring-2 focus:ring-[#2048FF]/50'
-                                style={{
-                                    background: 'var(--background)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <option value="All" style={{ background: 'var(--card-bg)' }}>Cualquier Tamaño</option>
-                                <option value="1" style={{ background: 'var(--card-bg)' }}>Micro</option>
-                                <option value="2" style={{ background: 'var(--card-bg)' }}>Pequeña</option>
-                                <option value="3" style={{ background: 'var(--card-bg)' }}>Mediana</option>
-                                <option value="4" style={{ background: 'var(--card-bg)' }}>Grande</option>
-                                <option value="5" style={{ background: 'var(--card-bg)' }}>Corporativo</option>
-                            </select>
-                        </div>
-
-                        <div className='ml-auto pl-4 border-l border-white/5 flex flex-col items-end'>
-                            <span className='text-xl font-black leading-none' style={{ color: 'var(--text-primary)' }}>{filteredCompanies.length}</span>
-                            <span className='text-[8px] font-black uppercase tracking-widest opacity-30 mt-1' style={{ color: 'var(--text-secondary)' }}>Cuentas</span>
-                        </div>
+                        <button
+                            onClick={() => {
+                                setModalCompanyData(null)
+                                setIsCompanyModalOpen(true)
+                            }}
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                        >
+                            + Nueva Empresa
+                        </button>
                     </div>
                 </div>
 
-                {/* Table Section - Scrollable */}
-                <div className='flex-1 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-700 rounded-3xl border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.1)]' style={{ background: 'var(--card-bg)' }}>
-                    <CompaniesTable
-                        companies={filteredCompanies}
-                        isEditingMode={isEditingMode}
-                        currentUserProfile={auth.profile}
-                        onRowClick={handleRowClick}
-                        onEdit={handleEditClick}
-                        onDelete={handleDeleteClick}
-                    />
+                {/* Main Table Container */}
+                <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col mb-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                            <div className='flex items-center gap-4'>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                    <TableIcon size={24} />
+                                </div>
+                                <div>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Empresas</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Gestión de Inteligencia Corporativa</p>
+                                </div>
+                            </div>
+
+                            <div className='flex items-center gap-3'>
+                                <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
+                                    <span className='text-2xl font-black tracking-tighter text-blue-600 dark:text-blue-400'>{filteredCompanies.length}</span>
+                                    <div className='flex flex-col'>
+                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
+                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Encontrados</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='flex flex-col lg:flex-row items-center gap-4'>
+                            <div className='relative flex-1 w-full'>
+                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
+                                <input
+                                    type='text'
+                                    placeholder='Buscar por nombre, ubicación, etiquetas...'
+                                    value={filterSearch}
+                                    onChange={(e) => setFilterSearch(e.target.value)}
+                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
+                                    style={{ color: 'var(--text-primary)' }}
+                                />
+                            </div>
+
+                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={filterIndustry}
+                                        onChange={(e) => setFilterIndustry(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Industria: Todas</option>
+                                        {uniqueIndustries.map(ind => (
+                                            <option key={ind} value={ind!}>{ind}</option>
+                                        ))}
+                                    </select>
+
+                                    <select
+                                        value={filterLocation}
+                                        onChange={(e) => setFilterLocation(e.target.value)}
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Ubicación: Todas</option>
+                                        {uniqueLocations.map(loc => (
+                                            <option key={loc} value={loc}>{loc}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                    <select
+                                        value={filterSize}
+                                        onChange={(e) => setFilterSize(e.target.value)}
+                                        className='flex-1 lg:min-w-[140px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="All">Tamaño: Todo</option>
+                                        <option value="1">Micro</option>
+                                        <option value="2">Pequeña</option>
+                                        <option value="3">Mediana</option>
+                                        <option value="4">Grande</option>
+                                        <option value="5">Corporativo</option>
+                                    </select>
+
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value)}
+                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                    >
+                                        <option value="alphabetical">Orden: Nombre</option>
+                                        <option value="antiquity">Orden: Antigüedad</option>
+                                        <option value="projectAntiquity">Orden: Proyectos</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className='flex-1 overflow-x-auto custom-scrollbar'>
+                        <CompaniesTable
+                            companies={filteredCompanies}
+                            isEditingMode={isEditingMode}
+                            currentUserProfile={auth.profile}
+                            onRowClick={handleRowClick}
+                            onEdit={handleEditClick}
+                            onDelete={handleDeleteClick}
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* Company Modal (for creation) */}
+            <RichardDawkinsFooter />
+
             <CompanyModal
                 isOpen={isCompanyModalOpen}
                 onClose={() => setIsCompanyModalOpen(false)}

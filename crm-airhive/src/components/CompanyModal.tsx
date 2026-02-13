@@ -395,7 +395,7 @@ export default function CompanyModal({
                                         >
                                             <span
                                                 className={`text-xs font-black uppercase tracking-widest transition-colors duration-300
-                                                    ${formData.tamano === tier.id ? '' : 'text-white group-hover:!text-[inherit]'}
+                                                    ${formData.tamano === tier.id ? '' : 'text-[var(--text-secondary)] group-hover:scale-105'}
                                                 `}
                                                 style={{ color: formData.tamano === tier.id ? tier.color : undefined }}
                                             >
@@ -403,7 +403,7 @@ export default function CompanyModal({
                                             </span>
                                             <span
                                                 className={`text-[10px] font-bold mt-1 transition-opacity duration-300
-                                                    ${formData.tamano === tier.id ? 'opacity-100' : 'text-white/60 group-hover:opacity-100'}
+                                                    ${formData.tamano === tier.id ? 'opacity-100' : 'text-[var(--text-secondary)] opacity-40 group-hover:opacity-100'}
                                                 `}
                                                 style={{ color: formData.tamano === tier.id ? tier.color : undefined }}
                                             >

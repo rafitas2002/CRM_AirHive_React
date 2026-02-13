@@ -32,8 +32,9 @@ export default function CompaniesTable({
     return (
         <div className='overflow-x-auto'>
             <table className='w-full text-left border-collapse'>
-                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
                     <tr>
+                        {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
                         <th className='px-8 py-5'>Logo</th>
                         <th className='px-8 py-5'>Nombre</th>
                         <th className='px-8 py-5'>Industria</th>
@@ -44,7 +45,7 @@ export default function CompaniesTable({
                         <th className='px-8 py-5'>Tamaño</th>
                         <th className='px-8 py-5'>Website</th>
                         {isEditingMode && (
-                            <th className='px-8 py-5 text-center'>Acciones</th>
+                            <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>
                         )}
                     </tr>
                 </thead>
@@ -55,10 +56,9 @@ export default function CompaniesTable({
                             onClick={() => !isEditingMode && onRowClick?.(company)}
                             className={`transition-colors group ${isEditingMode ? '' : 'hover:bg-black/5 cursor-pointer'}`}
                         >
-                            {/* Logo */}
-                            <td className='px-8 py-5 text-center'>
-                                <div className='flex items-center gap-4'>
-                                    {isEditingMode && checkPermission(company, currentUserProfile) && (
+                            {isEditingMode && (
+                                <td className='px-2 py-5 text-center'>
+                                    {checkPermission(company, currentUserProfile) ? (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation()
@@ -72,7 +72,15 @@ export default function CompaniesTable({
                                                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                                             </svg>
                                         </button>
+                                    ) : (
+                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
                                     )}
+                                </td>
+                            )}
+
+                            {/* Logo */}
+                            <td className='px-8 py-5 text-center'>
+                                <div className='flex items-center gap-4 justify-center'>
                                     <div className='w-10 h-10 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] flex items-center justify-center overflow-hidden shadow-md'>
                                         {company.logo_url ? (
                                             <Image
@@ -126,11 +134,11 @@ export default function CompaniesTable({
                             {/* Proyectos Activos */}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border'
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                                            color: company.activeProjects > 0 ? '#10b981' : 'rgba(255, 255, 255, 0.4)'
+                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.15)' : 'var(--hover-bg)',
+                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.3)' : 'var(--card-border)',
+                                            color: company.activeProjects > 0 ? '#10b981' : 'var(--project-count-empty)'
                                         }}>
                                         {company.activeProjects}
                                     </span>
@@ -143,11 +151,11 @@ export default function CompaniesTable({
                             {/* Proyectos en Proceso */}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border'
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                                            color: company.processProjects > 0 ? '#f59e0b' : 'rgba(255, 255, 255, 0.4)'
+                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.15)' : 'var(--hover-bg)',
+                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.3)' : 'var(--card-border)',
+                                            color: company.processProjects > 0 ? '#f59e0b' : 'var(--project-count-empty)'
                                         }}>
                                         {company.processProjects}
                                     </span>
@@ -160,11 +168,11 @@ export default function CompaniesTable({
                             {/* Proyectos Perdidos */}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border'
+                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
                                         style={{
-                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)',
-                                            color: company.lostProjects > 0 ? '#f43f5e' : 'rgba(255, 255, 255, 0.4)'
+                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.15)' : 'var(--hover-bg)',
+                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.3)' : 'var(--card-border)',
+                                            color: company.lostProjects > 0 ? '#f43f5e' : 'var(--project-count-empty)'
                                         }}>
                                         {company.lostProjects}
                                     </span>
@@ -188,16 +196,16 @@ export default function CompaniesTable({
                                         rel='noopener noreferrer'
                                         className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs transition-all shadow-sm'
                                         style={{
-                                            backgroundColor: 'rgba(32, 72, 255, 0.25)',
-                                            color: '#a3b8ff'
+                                            backgroundColor: 'var(--website-badge-bg)',
+                                            color: 'var(--website-badge-text)'
                                         }}
                                         onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'rgba(32, 72, 255, 0.65)'
+                                            e.currentTarget.style.backgroundColor = '#2048FF'
                                             e.currentTarget.style.color = '#ffffff'
                                         }}
                                         onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'rgba(32, 72, 255, 0.25)'
-                                            e.currentTarget.style.color = '#a3b8ff'
+                                            e.currentTarget.style.backgroundColor = 'var(--website-badge-bg)'
+                                            e.currentTarget.style.color = 'var(--website-badge-text)'
                                         }}
                                         onClick={(e) => e.stopPropagation()}
                                     >
@@ -213,29 +221,27 @@ export default function CompaniesTable({
                                 )}
                             </td>
 
-                            {/* Acciones */}
+                            {/* Acciones (Delete) */}
                             {isEditingMode && (
-                                <td className='px-8 py-5 text-center'>
-                                    <div className='flex items-center justify-center gap-3'>
-                                        {checkPermission(company, currentUserProfile) ? (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    onDelete?.(company.id!)
-                                                }}
-                                                className='p-2.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-all'
-                                                title='Eliminar empresa'
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                    <path d="M3 6h18" />
-                                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                                </svg>
-                                            </button>
-                                        ) : (
-                                            <span className='text-gray-300 p-2' title='Sin permisos para modificar'>🔒</span>
-                                        )}
-                                    </div>
+                                <td className='px-2 py-5 text-center'>
+                                    {checkPermission(company, currentUserProfile) ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onDelete?.(company.id!)
+                                            }}
+                                            className='p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all'
+                                            title='Eliminar empresa'
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M3 6h18" />
+                                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                            </svg>
+                                        </button>
+                                    ) : (
+                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
+                                    )}
                                 </td>
                             )}
                         </tr>
@@ -257,11 +263,11 @@ function checkPermission(company: CompanyWithProjects, profile: any) {
 
 function renderSizeBadge(level: number) {
     const tiers = [
-        { name: 'Micro', textColor: '#a7f3d0', bgColor: 'rgba(16, 185, 129, 0.25)' },      // Light emerald text, darker transparent emerald bg
-        { name: 'Pequeña', textColor: '#bfdbfe', bgColor: 'rgba(59, 130, 246, 0.25)' },    // Light blue text, darker transparent blue bg
-        { name: 'Mediana', textColor: '#c7d2fe', bgColor: 'rgba(99, 102, 241, 0.25)' },    // Light indigo text, darker transparent indigo bg
-        { name: 'Grande', textColor: '#fde68a', bgColor: 'rgba(245, 158, 11, 0.25)' },     // Light amber text, darker transparent amber bg
-        { name: 'Corporativo', textColor: '#ddd6fe', bgColor: 'rgba(139, 92, 246, 0.25)' } // Light purple text, darker transparent purple bg
+        { name: 'Micro', textColor: 'var(--tier-1-text)', bgColor: 'var(--tier-1-bg)' },
+        { name: 'Pequeña', textColor: 'var(--tier-2-text)', bgColor: 'var(--tier-2-bg)' },
+        { name: 'Mediana', textColor: 'var(--tier-3-text)', bgColor: 'var(--tier-3-bg)' },
+        { name: 'Grande', textColor: 'var(--tier-4-text)', bgColor: 'var(--tier-4-bg)' },
+        { name: 'Corporativo', textColor: 'var(--tier-5-text)', bgColor: 'var(--tier-5-bg)' }
     ]
 
     const tier = tiers[level - 1] || tiers[0]
