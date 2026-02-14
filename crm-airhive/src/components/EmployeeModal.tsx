@@ -205,24 +205,24 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className='bg-white rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]'
+                    className='bg-[var(--card-bg)] rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] border border-[var(--card-border)]'
                 >
                     {/* Header */}
-                    <div className='px-6 py-4 border-b flex justify-between items-center bg-gray-50 flex-shrink-0'>
+                    <div className='px-6 py-4 border-b flex justify-between items-center bg-[var(--table-header-bg)] border-[var(--card-border)] flex-shrink-0'>
                         <div>
-                            <h3 className='text-lg font-bold text-[#0A1635]'>
+                            <h3 className='text-lg font-bold text-[var(--text-primary)]'>
                                 {employee ? 'Ficha de Empleado' : 'Nuevo Empleado'}
                             </h3>
-                            <p className='text-xs text-gray-500'>Personal ID v2.0</p>
+                            <p className='text-xs text-[var(--text-secondary)]'>Personal ID v2.0</p>
                         </div>
-                        <button onClick={onClose} className='p-2 hover:bg-gray-200 rounded-full transition-colors'>
-                            <X className='w-5 h-5 text-gray-500' />
+                        <button onClick={onClose} className='p-2 hover:bg-[var(--hover-bg)] rounded-full transition-colors'>
+                            <X className='w-5 h-5 text-[var(--text-secondary)]' />
                         </button>
                     </div>
 
                     <div className='flex flex-1 overflow-hidden'>
                         {/* Sidebar */}
-                        <div className='w-56 bg-gray-50 border-r py-4 px-2 space-y-1 flex-shrink-0 overflow-y-auto'>
+                        <div className='w-56 bg-[var(--hover-bg)] border-r border-[var(--card-border)] py-4 px-2 space-y-1 flex-shrink-0 overflow-y-auto'>
                             {TABS.map(tab => {
                                 const Icon = tab.icon
                                 const isActive = activeTab === tab.id
@@ -232,11 +232,11 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                                         onClick={() => setActiveTab(tab.id)}
                                         className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-semibold transition-all text-left
                                             ${isActive
-                                                ? 'bg-white text-[#2048FF] shadow-sm ring-1 ring-black/5'
-                                                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                                                ? 'bg-[var(--card-bg)] text-[#2048FF] shadow-sm ring-1 ring-black/5'
+                                                : 'text-[var(--text-secondary)] hover:bg-[var(--card-bg)]/50 hover:text-[var(--text-primary)]'
                                             }`}
                                     >
-                                        <Icon size={18} className={isActive ? 'text-[#2048FF]' : 'text-gray-400'} />
+                                        <Icon size={18} className={isActive ? 'text-[#2048FF]' : 'text-[var(--text-secondary)]'} />
                                         {tab.label}
                                         {isActive && <ChevronRight size={14} className='ml-auto' />}
                                     </button>
@@ -245,9 +245,9 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                         </div>
 
                         {/* Content */}
-                        <div className='flex-1 overflow-y-auto p-8 bg-white relative'>
+                        <div className='flex-1 overflow-y-auto p-8 bg-[var(--card-bg)] relative'>
                             {loadingCatalogs && (
-                                <div className='absolute inset-0 bg-white/80 z-10 flex items-center justify-center'>
+                                <div className='absolute inset-0 bg-[var(--card-bg)]/80 z-10 flex items-center justify-center'>
                                     <div className='animate-pulse text-sm text-[#2048FF] font-bold'>Cargando catálogos...</div>
                                 </div>
                             )}
@@ -278,7 +278,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                                                 <div className='relative'>
                                                     <input type={showPassword ? 'text' : 'password'} required={!employee} minLength={6} className='input'
                                                         value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
-                                                    <button type='button' onClick={() => setShowPassword(!showPassword)} className='absolute right-3 top-2.5 text-gray-400'>
+                                                    <button type='button' onClick={() => setShowPassword(!showPassword)} className='absolute right-3 top-2.5 text-[var(--text-secondary)]'>
                                                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                                     </button>
                                                 </div>
@@ -427,7 +427,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
 
                                             <div>
                                                 <label className='label'>Antigüedad</label>
-                                                <div className={`input ${formData.details.start_date ? 'bg-blue-50 text-[#2048FF] font-bold' : 'bg-gray-100 text-gray-500'}`}>
+                                                <div className={`input ${formData.details.start_date ? 'bg-blue-50/10 text-[#2048FF] font-bold border-blue-500/20' : 'bg-[var(--hover-bg)] text-[var(--text-secondary)]'}`}>
                                                     {formData.details.start_date ? calculateTenure(formData.details.start_date) : '-'}
                                                 </div>
                                             </div>
@@ -439,9 +439,9 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                     </div>
 
                     {/* Footer */}
-                    <div className='p-6 border-t bg-gray-50 flex justify-end gap-3 flex-shrink-0'>
+                    <div className='p-6 border-t border-[var(--card-border)] bg-[var(--hover-bg)] flex justify-end gap-3 flex-shrink-0'>
                         <button type='button' onClick={onClose}
-                            className='px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 rounded-lg'>
+                            className='px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--card-bg)] rounded-lg hover:text-[var(--text-primary)] transition-all'>
                             Cancelar
                         </button>
                         <button onClick={handleSubmit} disabled={loading}
@@ -453,9 +453,9 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                 </motion.div>
 
                 <style jsx>{`
-                    .label { display: block; font-size: 0.75rem; font-weight: 700; color: #6B7280; text-transform: uppercase; margin-bottom: 0.25rem; }
-                    .input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #E5E7EB; border-radius: 0.6rem; background-color: #F9FAFB; font-size: 0.875rem; outline: none; transition: all; }
-                    .input:focus { border-color: #2048FF; ring: 2px solid #2048FF; background-color: white; }
+                    .label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.25rem; }
+                    .input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--input-border); border-radius: 0.6rem; background-color: var(--input-bg); font-size: 0.875rem; outline: none; transition: all; color: var(--text-primary); }
+                    .input:focus { border-color: #2048FF; ring: 2px solid #2048FF; background-color: var(--background); }
                     .input:disabled { opacity: 0.7; cursor: not-allowed; }
                 `}</style>
             </div>

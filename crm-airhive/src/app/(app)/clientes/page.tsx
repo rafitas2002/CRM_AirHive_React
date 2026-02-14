@@ -426,19 +426,17 @@ export default function LeadsPage() {
                 {/* External Header - Page Level */}
                 {/* Header Pattern consistent with Empresas */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                    <div className='flex items-center gap-8'>
-                        <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <Users size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
-                            </div>
-                            <div>
-                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Leads & Prospección
-                                </h1>
-                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Gestión y seguimiento de oportunidades comerciales.
-                                </p>
-                            </div>
+                    <div className='flex items-center gap-6'>
+                        <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                            <Users size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                        </div>
+                        <div>
+                            <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                Leads & Prospección
+                            </h1>
+                            <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                Gestión y seguimiento de oportunidades comerciales.
+                            </p>
                         </div>
                     </div>
 
@@ -483,7 +481,7 @@ export default function LeadsPage() {
                         </div>
                         <button
                             onClick={openCreateModal}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-6 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
                         >
                             + Nuevo Lead
                         </button>
@@ -495,7 +493,7 @@ export default function LeadsPage() {
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-primary)' }}>
                                     <ListFilter size={24} />
                                 </div>
                                 <div>
@@ -505,8 +503,8 @@ export default function LeadsPage() {
                             </div>
 
                             <div className='flex items-center gap-3'>
-                                <div className='px-5 py-2 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter text-[#2048FF]'>{sortedAndFilteredLeads.length}</span>
+                                <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
+                                    <span className='text-2xl font-black tracking-tighter' style={{ color: 'var(--input-focus)' }}>{sortedAndFilteredLeads.length}</span>
                                     <div className='flex flex-col'>
                                         <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Prospectos</span>
                                         <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Filtrados</span>
@@ -515,8 +513,9 @@ export default function LeadsPage() {
                             </div>
                         </div>
 
-                        <div className='flex flex-col lg:flex-row items-center gap-4'>
-                            <div className='relative flex-1 w-full'>
+                        <div className='flex flex-col gap-4'>
+                            {/* Row 1: Search Bar (Full Width) */}
+                            <div className='relative w-full'>
                                 <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
                                 <input
                                     type='text'
@@ -528,12 +527,15 @@ export default function LeadsPage() {
                                 />
                             </div>
 
-                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
-                                <div className='flex flex-1 lg:flex-none gap-2'>
+                            {/* Row 2: Filters Grouped */}
+                            {/* Row 2: Filters & Sort - Standardized Layout */}
+                            <div className='flex flex-col lg:flex-row items-center justify-between gap-4 w-full'>
+                                {/* Left: Filter Pill */}
+                                <div className='flex items-center gap-2 p-1 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl shadow-sm overflow-x-auto max-w-full'>
                                     <select
                                         value={filterStage}
                                         onChange={(e) => setFilterStage(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
                                     >
                                         <option value="All">Etapa: Todas</option>
                                         <option value="Prospección">Prospección</option>
@@ -541,11 +543,11 @@ export default function LeadsPage() {
                                         <option value="Cerrado Ganado">Cerrado Ganado</option>
                                         <option value="Cerrado Perdido">Cerrado Perdido</option>
                                     </select>
-
+                                    <div className='w-px h-5 bg-[var(--card-border)] shrink-0' />
                                     <select
                                         value={filterOwner}
                                         onChange={(e) => setFilterOwner(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
                                     >
                                         <option value="All">Vendedor: Todos</option>
                                         {uniqueOwners.map(owner => (
@@ -554,11 +556,12 @@ export default function LeadsPage() {
                                     </select>
                                 </div>
 
-                                <div className='flex flex-1 lg:flex-none gap-2'>
+                                {/* Right: Sort & Actions */}
+                                <div className='flex items-center gap-2 shrink-0'>
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
-                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95 shadow-sm'
                                     >
                                         <option value="fecha_registro-desc">Orden: Reciente</option>
                                         <option value="fecha_registro-asc">Orden: Antiguo</option>
@@ -566,22 +569,22 @@ export default function LeadsPage() {
                                         <option value="calificacion-desc">Orden: Estrellas</option>
                                         <option value="probabilidad-desc">Orden: Prob.</option>
                                     </select>
-                                </div>
 
-                                {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
-                                    <button
-                                        onClick={() => {
-                                            setFilterSearch('')
-                                            setFilterStage('All')
-                                            setFilterOwner('All')
-                                            setSortBy('fecha_registro-desc')
-                                        }}
-                                        className='p-2.5 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors shadow-sm'
-                                        title='Limpiar Filtros'
-                                    >
-                                        <RotateCw size={18} />
-                                    </button>
-                                )}
+                                    {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
+                                        <button
+                                            onClick={() => {
+                                                setFilterSearch('')
+                                                setFilterStage('All')
+                                                setFilterOwner('All')
+                                                setSortBy('fecha_registro-desc')
+                                            }}
+                                            className='p-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm group'
+                                            title='Limpiar Filtros'
+                                        >
+                                            <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

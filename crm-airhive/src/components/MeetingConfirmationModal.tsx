@@ -35,7 +35,7 @@ export default function MeetingConfirmationModal({
 
     return (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4'>
-            <div className='bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl transform transition-all'>
+            <div className='bg-[var(--card-bg)] rounded-2xl p-6 max-w-md w-full shadow-2xl transform transition-all'>
                 {/* Header */}
                 <div className='text-center mb-6'>
                     <div className='w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4'>
@@ -44,7 +44,7 @@ export default function MeetingConfirmationModal({
                     <h2 className='text-2xl font-bold text-[#0F2A44] mb-2'>
                         ¿La junta se llevó a cabo?
                     </h2>
-                    <p className='text-sm text-gray-600'>
+                    <p className='text-sm text-[var(--text-secondary)]'>
                         Confirma si la reunión se realizó para registrar el snapshot del pronóstico
                     </p>
                 </div>
@@ -80,14 +80,14 @@ export default function MeetingConfirmationModal({
 
                 {/* Notes */}
                 <div className='mb-6'>
-                    <label className='block text-sm font-bold text-[#0F2A44] mb-2'>
+                    <label className='block text-sm font-bold text-[var(--text-primary)] mb-2'>
                         Notas de la junta (opcional)
                     </label>
                     <textarea
                         placeholder='¿Cómo fue la junta? ¿Qué se discutió?'
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        className='w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none text-gray-900 placeholder:text-gray-500'
+                        className='w-full p-3 border-2 border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
                         rows={3}
                         disabled={isSubmitting}
                     />
@@ -114,8 +114,8 @@ export default function MeetingConfirmationModal({
                 </div>
 
                 {/* Info Footer */}
-                <div className='mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200'>
-                    <p className='text-xs text-gray-600 text-center'>
+                <div className='mt-4 p-3 bg-[var(--hover-bg)] rounded-lg border border-[var(--card-border)]'>
+                    <p className='text-xs text-[var(--text-secondary)] text-center'>
                         <span className='font-bold'>Importante:</span> El snapshot solo se creará si confirmas que la junta se realizó
                     </p>
                 </div>

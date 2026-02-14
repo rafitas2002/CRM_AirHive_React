@@ -206,7 +206,7 @@ export default function ClientDetailView({
                                 </div>
 
                                 <div>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Contacto Directo</label>
                                     <div className='flex flex-wrap gap-2'>
                                         {client.email && (
                                             <button
@@ -259,7 +259,7 @@ export default function ClientDetailView({
 
                                 <div className='grid grid-cols-2 gap-6 pt-4 border-t border-gray-50'>
                                     <div className='space-y-1.5'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Etapa Actual</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block'>Etapa Actual</label>
                                         <div className='inline-block'>
                                             <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2
                                                 ${client.etapa === 'Cerrado Ganado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
@@ -271,7 +271,7 @@ export default function ClientDetailView({
                                         </div>
                                     </div>
                                     <div className='space-y-1.5'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Calificación</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block'>Calificación</label>
                                         <div className='text-lg font-bold flex gap-0.5'>
                                             {[1, 2, 3, 4, 5].map((star) => (
                                                 <span key={star} className={star <= (client.calificacion || 0) ? 'text-amber-400' : 'text-gray-200'}>
@@ -284,7 +284,7 @@ export default function ClientDetailView({
 
                                 <div className='space-y-3 pt-4 border-t border-gray-50'>
                                     <div className='flex justify-between items-end'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Confianza de Cierre</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>Confianza de Cierre</label>
                                         <span className={`text-xl font-black ${(client as any).probabilidad >= 70 ? 'text-emerald-500' : (client as any).probabilidad >= 40 ? 'text-amber-500' : 'text-slate-400'}`}>
                                             {(client as any).probabilidad || 0}%
                                         </span>
@@ -317,9 +317,9 @@ export default function ClientDetailView({
                                     <p className='text-xs font-bold text-[var(--text-primary)] leading-relaxed bg-[var(--hover-bg)] p-4 rounded-3xl border border-[var(--card-border)]'>{client.oportunidad || 'Sin descripción de oportunidad.'}</p>
                                 </div>
                                 <div className='relative'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Notas Internas</label>
-                                    <div className='p-4 bg-[#FFF9E6] rounded-3xl border border-[#F5E6B3]'>
-                                        <p className='text-[11px] font-bold text-[#856404] italic leading-loose whitespace-pre-wrap'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Notas Internas</label>
+                                    <div className='p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-3xl border border-yellow-100 dark:border-yellow-800/30'>
+                                        <p className='text-[11px] font-bold text-yellow-800 dark:text-yellow-200 italic leading-loose whitespace-pre-wrap'>
                                             {client.notas || 'No se han agregado notas adicionales aún.'}
                                         </p>
                                     </div>
@@ -385,7 +385,7 @@ export default function ClientDetailView({
                             {loadingCompany ? (
                                 <div className='py-12 flex flex-col items-center justify-center gap-4'>
                                     <div className='w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
-                                    <p className='text-[10px] font-black text-gray-400 uppercase animate-pulse'>Sincronizando...</p>
+                                    <p className='text-[10px] font-black text-[var(--text-secondary)] uppercase animate-pulse'>Sincronizando...</p>
                                 </div>
                             ) : company ? (
                                 <div className='space-y-8'>
@@ -434,9 +434,9 @@ export default function ClientDetailView({
                             ) : (
                                 <button
                                     onClick={() => onEditClient(client)}
-                                    className='w-full py-12 flex flex-col items-center justify-center gap-4 bg-[#F8FAFC] rounded-[40px] border-2 border-dashed border-gray-100 text-gray-300 hover:bg-blue-50/50 hover:border-blue-100 hover:text-blue-500 transition-all group'
+                                    className='w-full py-12 flex flex-col items-center justify-center gap-4 bg-[var(--hover-bg)] rounded-[40px] border-2 border-dashed border-[var(--card-border)] text-[var(--text-secondary)] hover:bg-blue-50/50 hover:border-blue-100 hover:text-blue-500 transition-all group'
                                 >
-                                    <div className='w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform'>🏢</div>
+                                    <div className='w-16 h-16 bg-[var(--card-bg)] rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform'>🏢</div>
                                     <span className='text-[10px] font-black uppercase tracking-[0.3em]'>Vincular Empresa</span>
                                 </button>
                             )}

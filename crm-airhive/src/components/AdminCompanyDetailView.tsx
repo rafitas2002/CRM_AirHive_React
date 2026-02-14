@@ -124,17 +124,42 @@ export default function AdminCompanyDetailView({
                                 </div>
 
                                 <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
-                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Website</label>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-3'>Sitio Web</label>
                                     {company.website ? (
                                         <a
                                             href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
                                             target='_blank'
-                                            className='text-blue-500 font-bold hover:underline flex items-center gap-2 truncate text-lg'
+                                            rel='noopener noreferrer'
+                                            className='group flex items-center gap-3 p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 hover:from-blue-500/20 hover:to-purple-500/20 rounded-xl border border-blue-500/20 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg'
                                         >
-                                            <span className='text-xl'>🌐</span> {company.website}
+                                            <div className='flex items-center justify-center w-10 h-10 rounded-lg bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors'>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className='text-blue-500'>
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                                </svg>
+                                            </div>
+                                            <div className='flex-1 min-w-0'>
+                                                <p className='text-[var(--text-primary)] font-bold text-sm truncate'>{company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</p>
+                                                <p className='text-[var(--text-secondary)] text-[10px] font-bold uppercase tracking-wider'>Visitar sitio web</p>
+                                            </div>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className='text-blue-500 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform'>
+                                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                                <polyline points="15 3 21 3 21 9" />
+                                                <line x1="10" y1="14" x2="21" y2="3" />
+                                            </svg>
                                         </a>
                                     ) : (
-                                        <p className='text-[var(--text-secondary)]'>No registrado</p>
+                                        <div className='flex items-center gap-3 p-4 bg-[var(--background)] rounded-xl border border-[var(--card-border)]'>
+                                            <div className='flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--hover-bg)]'>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className='text-[var(--text-secondary)] opacity-30'>
+                                                    <circle cx="12" cy="12" r="10"></circle>
+                                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                                </svg>
+                                            </div>
+                                            <p className='text-[var(--text-secondary)] font-medium text-sm'>No registrado</p>
+                                        </div>
                                     )}
                                 </div>
 

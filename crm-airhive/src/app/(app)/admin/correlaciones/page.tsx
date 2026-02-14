@@ -25,7 +25,8 @@ import {
     Timer,
     CheckCircle,
     MapPin,
-    Hash
+    Hash,
+    ListTodo
 } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -116,6 +117,7 @@ export default function CorrelacionesPage() {
             if (sortBy === 'tenure') return b.tenureMonths - a.tenureMonths
             if (sortBy === 'age') return (b.age || 0) - (a.age || 0)
             if (sortBy === 'growth') return b.growth - a.growth
+            if (sortBy === 'completedTasks') return b.completedTasks - a.completedTasks
             if (sortBy === 'efficiency') return b.medalRatio - a.medalRatio
             if (sortBy === 'meetings') return a.meetingsPerClose - b.meetingsPerClose // Lower is better
             if (sortBy === 'accuracy') return b.forecastAccuracy - a.forecastAccuracy
@@ -250,6 +252,13 @@ export default function CorrelacionesPage() {
                             >
                                 🔄
                             </button>
+                            <button
+                                onClick={() => router.push('/admin/tareas-completadas')}
+                                className='p-2 rounded-xl transition-colors hover:bg-slate-800 text-blue-400'
+                                title='Ver Historial de Tareas'
+                            >
+                                <ListTodo size={20} />
+                            </button>
                         </div>
                     </div>
 
@@ -373,6 +382,7 @@ export default function CorrelacionesPage() {
                                     <option value="totalSales">Ordenar por: Ventas</option>
                                     <option value="totalMedals">Ordenar por: Total Medallas</option>
                                     <option value="gold">Ordenar por: Oro</option>
+                                    <option value="completedTasks">Ordenar por: Tareas Completadas</option>
                                     <option value="efficiency">Ordenar por: Eficiencia (Pts/Mes)</option>
                                     <option value="meetings">Ordenar por: Effort (Mtg/Close)</option>
                                     <option value="accuracy">Ordenar por: Forecast Accuracy</option>
@@ -414,6 +424,7 @@ export default function CorrelacionesPage() {
                                         <th className='px-8 py-5'>Antigüedad</th>
                                         <th className='px-8 py-5'>Ventas Totales</th>
                                         <th className='px-8 py-5'>Crecimiento</th>
+                                        <th className='px-8 py-5 text-center'>Tareas</th>
                                         <th className='px-8 py-5 text-center'>Medallas</th>
                                         <th className='px-8 py-5 text-center'>Effort (Mtg/C)</th>
                                         <th className='px-8 py-5 text-center'>Accuracy</th>
@@ -464,6 +475,11 @@ export default function CorrelacionesPage() {
                                                     )}
                                                 </div>
                                             </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm text-blue-500 bg-blue-500/10 px-3 py-1 rounded-lg'>
+                                                    {item.completedTasks || 0}
+                                                </span>
+                                            </td>
                                             <td className='px-8 py-5'>
                                                 <div className='flex items-center justify-center gap-3'>
                                                     <span title='Oro' className='flex items-center gap-1'><Trophy size={14} className='text-amber-500' /> <span className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{item.medals.gold}</span></span>
@@ -513,8 +529,8 @@ export default function CorrelacionesPage() {
                     </div>
                 </div>
                 <RichardDawkinsFooter />
-            </div>
-        </div>
+            </div >
+        </div >
     )
 }
 

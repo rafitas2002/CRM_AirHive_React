@@ -259,8 +259,8 @@ export default function CalendarioPage() {
                                         {Object.entries(groupedMeetings).map(([date, dayMeetings]) => (
                                             <div key={date} className='space-y-6'>
                                                 <div className='flex items-center gap-4'>
-                                                    <div className='px-6 py-2.5 bg-[#0A1635] rounded-[20px] shadow-xl'>
-                                                        <h2 className='text-[10px] font-black text-white uppercase tracking-[0.2em]'>{date}</h2>
+                                                    <div className='px-6 py-2.5 bg-[var(--table-header-bg)] rounded-[20px] shadow-xl border border-[var(--card-border)]'>
+                                                        <h2 className='text-[10px] font-black text-[var(--text-primary)] uppercase tracking-[0.2em]'>{date}</h2>
                                                     </div>
                                                     <div className='h-px flex-1 bg-[var(--card-border)] opacity-30 shadow-sm' />
                                                     <span className='text-[10px] font-black opacity-30 uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>{dayMeetings.length} Juntas</span>
@@ -304,9 +304,9 @@ export default function CalendarioPage() {
                                                                         <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black border-2 uppercase tracking-wider ${stage.bg} ${stage.text} ${stage.border}`}>
                                                                             {meeting.etapa}
                                                                         </span>
-                                                                        <div className='flex items-center gap-1.5 px-3 py-1 bg-gray-50 rounded-lg border border-gray-100'>
-                                                                            <Clock size={10} className='text-gray-400' />
-                                                                            <span className='text-[9px] font-bold text-gray-500 uppercase'>{meeting.duration_minutes}m</span>
+                                                                        <div className='flex items-center gap-1.5 px-3 py-1 bg-[var(--hover-bg)] rounded-lg border border-[var(--card-border)]'>
+                                                                            <Clock size={10} className='text-[var(--text-secondary)]' />
+                                                                            <span className='text-[9px] font-bold text-[var(--text-secondary)] uppercase'>{meeting.duration_minutes}m</span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -317,7 +317,7 @@ export default function CalendarioPage() {
                                                                     </h3>
                                                                     <div className='space-y-2'>
                                                                         <div className='flex items-center gap-3'>
-                                                                            <div className='w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-xs'>🏢</div>
+                                                                            <div className='w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-xs'>🏢</div>
                                                                             <p className='text-xs font-black uppercase tracking-tight truncate' style={{ color: 'var(--text-secondary)' }}>{meeting.empresa}</p>
                                                                         </div>
                                                                         {meeting.seller_name && (
@@ -363,16 +363,16 @@ export default function CalendarioPage() {
 
                                                                 {/* Actions Overlay */}
                                                                 {isEditMode && (meeting.meeting_status === 'scheduled' || meeting.meeting_status === 'not_held') && (
-                                                                    <div className='absolute inset-0 bg-white/70 backdrop-blur-md flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all z-10'>
+                                                                    <div className='absolute inset-0 bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all z-10'>
                                                                         <button
                                                                             onClick={(e) => { e.stopPropagation(); handleEditMeeting(meeting); }}
-                                                                            className='w-14 h-14 bg-white text-blue-600 rounded-[22px] shadow-2xl border border-blue-100 hover:bg-blue-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center'
+                                                                            className='w-14 h-14 bg-[var(--card-bg)] text-blue-600 rounded-[22px] shadow-2xl border border-blue-500/30 hover:bg-blue-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center'
                                                                         >
                                                                             <Pencil size={24} strokeWidth={2.5} />
                                                                         </button>
                                                                         <button
                                                                             onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(meeting); }}
-                                                                            className='w-14 h-14 bg-white text-rose-600 rounded-[22px] shadow-2xl border border-rose-100 hover:bg-rose-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center'
+                                                                            className='w-14 h-14 bg-[var(--card-bg)] text-rose-600 rounded-[22px] shadow-2xl border border-rose-500/30 hover:bg-rose-600 hover:text-white transition-all transform hover:scale-110 flex items-center justify-center'
                                                                         >
                                                                             <Trash2 size={24} strokeWidth={2.5} />
                                                                         </button>
