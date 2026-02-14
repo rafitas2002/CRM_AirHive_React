@@ -53,51 +53,30 @@ export default function ProfileView({ userId }: ProfileViewProps) {
 
     return (
         <div className='max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500'>
-            {/* Header Card */}
-            <div className='bg-[var(--card-bg)] rounded-2xl shadow-sm border border-[var(--card-border)] p-8 flex items-center gap-8 relative overflow-hidden'>
-                <div className='absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2' />
 
-                <div className='relative shrink-0'>
-                    <div className='w-32 h-32 rounded-full overflow-hidden border-4 border-white dark:border-gray-800 shadow-xl'>
-                        {profile.avatar_url ? (
-                            <img
-                                src={profile.avatar_url}
-                                alt="Profile"
-                                className='w-full h-full object-cover'
-                            />
-                        ) : (
-                            <div className='w-full h-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 flex items-center justify-center text-4xl'>
-                                👤
-                            </div>
-                        )}
-                    </div>
-                    <div className='absolute bottom-2 right-2 w-6 h-6 bg-emerald-500 border-4 border-white dark:border-gray-800 rounded-full shadow-lg' title="Activo" />
+            {/* Header Card */}
+            <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex items-center gap-8 relative overflow-hidden'>
+                <div className='absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#2048FF]/10 to-transparent rounded-bl-full -mr-16 -mt-16 pointer-events-none' />
+
+                <div className='w-24 h-24 rounded-2xl bg-gradient-to-br from-[#2048FF] to-[#0A1635] flex items-center justify-center text-5xl font-bold text-white shadow-xl shadow-blue-900/20 z-10'>
+                    {profile.full_name?.charAt(0).toUpperCase() || '?'}
                 </div>
 
-                <div className='relative flex-1'>
-                    <div className='flex items-start justify-between'>
-                        <div>
-                            <h1 className='text-3xl font-black text-[var(--text-primary)] mb-2'>
-                                {profile.first_name} {profile.last_name}
-                            </h1>
-                            <p className='text-[var(--text-secondary)] font-medium text-lg flex items-center gap-2'>
-                                📧 {profile.email}
-                            </p>
-                        </div>
-                        <button className='px-4 py-2 bg-[var(--input-bg)] hover:bg-[var(--hover-bg)] text-[var(--text-primary)] rounded-lg font-bold text-sm transition-colors border border-[var(--card-border)] shadow-sm'>
-                            ✏️ Editar Perfil
-                        </button>
-                    </div>
-
-                    <div className='mt-6 flex flex-wrap gap-3'>
-                        <span className='px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold border border-blue-100 dark:border-blue-800'>
-                            🏢 {profile.department || 'Sin Departamento'}
+                <div className='flex-1 z-10'>
+                    <h1 className='text-3xl font-black text-[#0A1635] mb-2 tracking-tight'>{profile.full_name}</h1>
+                    <div className='flex flex-wrap items-center gap-4 text-sm font-medium'>
+                        <span className={`px-3 py-1 rounded-full ${roleColor} flex items-center gap-2`}>
+                            {profile.role === 'admin' ? <Award size={14} /> : <Briefcase size={14} />}
+                            {roleLabel}
                         </span>
-                        <span className='px-3 py-1 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-bold border border-purple-100 dark:border-purple-800'>
-                            💼 {profile.position || 'Sin Puesto'}
+                        <span className='flex items-center gap-1.5 text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-100'>
+                            <Mail size={14} />
+                            {profile.username?.includes('@') ? profile.username : `${profile.username}@airhive.mx`}
+                            {/* Fallback layout if username isnt email */}
                         </span>
-                        <span className='px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-bold border border-amber-100 dark:border-amber-800'>
-                            📅 Unido: {new Date(profile.created_at).toLocaleDateString()}
+                        <span className='flex items-center gap-1.5 text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-100'>
+                            <Clock size={14} />
+                            {details.start_date ? `Ingreso: ${new Date(details.start_date + 'T12:00:00').toLocaleDateString()}` : 'Sin fecha ingreso'}
                         </span>
                     </div>
                 </div>
@@ -107,73 +86,52 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 {/* Left Column: Identity & Status */}
                 <div className='space-y-6'>
                     {/* Status Card */}
-                    <div className='bg-[var(--card-bg)] p-6 rounded-2xl shadow-sm border border-[var(--card-border)]'>
-                        <h3 className='text-sm font-black text-[var(--text-secondary)] uppercase tracking-widest mb-4'>
-                            Estado del Sistema
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-100'>
+                        <h3 className='text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2'>
+                            <Activity size={16} /> Estado
                         </h3>
-                        <div className='flex items-center justify-between p-3 bg-[var(--hover-bg)] rounded-xl border border-[var(--card-border)]'>
-                            <div className='flex items-center gap-3'>
-                                <div className='w-2 h-2 rounded-full bg-emerald-500 animate-pulse' />
-                                <span className='font-bold text-[var(--text-primary)] text-sm'>En Línea</span>
-                            </div>
-                            <span className='text-xs text-[var(--text-secondary)]'>Ahora</span>
+                        <div className={`p-4 rounded-xl flex items-center justify-between ${details.employee_status === 'activo' ? 'bg-emerald-50 border border-emerald-100' : 'bg-gray-50 border border-gray-200'}`}>
+                            <span className='text-sm font-bold text-gray-600'>Estado Actual</span>
+                            <span className={`px-3 py-1 rounded-lg text-sm font-black uppercase ${details.employee_status === 'activo' ? 'bg-emerald-500 text-white shadow-emerald-200 shadow-lg' : 'bg-gray-400 text-white'}`}>
+                                {details.employee_status || 'DESCONOCIDO'}
+                            </span>
                         </div>
                     </div>
 
                     {/* Job Details */}
-                    <div className='bg-[var(--card-bg)] p-6 rounded-2xl shadow-sm border border-[var(--card-border)]'>
-                        <h3 className='text-sm font-black text-[var(--text-secondary)] uppercase tracking-widest mb-4'>
-                            Detalles Laborales
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-100'>
+                        <h3 className='text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2'>
+                            <Briefcase size={16} /> Posición
                         </h3>
                         <div className='space-y-4'>
-                            <div>
-                                <label className='text-xs font-bold text-[var(--text-secondary)]'>Departamento</label>
-                                <p className='font-bold text-[var(--text-primary)]'>{profile.department || 'No asignado'}</p>
-                            </div>
-                            <div className='w-full h-px bg-[var(--card-border)]' />
-                            <div>
-                                <label className='text-xs font-bold text-[var(--text-secondary)]'>Puesto Actual</label>
-                                <p className='font-bold text-[var(--text-primary)]'>{profile.position || 'No asignado'}</p>
-                            </div>
+                            <InfoRow label="Puesto" value={resolve('job_positions', details.job_position_id)} />
+                            <InfoRow label="Área" value={resolve('areas', details.area_id)} />
+                            <InfoRow label="Seniority" value={resolve('seniority_levels', details.seniority_id)} highlight />
                         </div>
                     </div>
                 </div>
 
                 {/* Middle Column: Personal Info */}
                 <div className='space-y-6'>
-                    <div className='bg-[var(--card-bg)] p-6 rounded-2xl shadow-sm border border-[var(--card-border)] h-full'>
-                        <h3 className='text-sm font-black text-[var(--text-secondary)] uppercase tracking-widest mb-4'>
-                            Información Personal
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full'>
+                        <h3 className='text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2'>
+                            <User size={16} /> Información Personal
                         </h3>
-                        <div className='space-y-6'>
-                            <div className='flex items-center gap-4 p-4 rounded-xl hover:bg-[var(--hover-bg)] transition-colors border border-transparent hover:border-[var(--card-border)]'>
-                                <div className='w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-xl'>
-                                    📧
-                                </div>
-                                <div>
-                                    <label className='text-xs font-bold text-[var(--text-secondary)]'>Correo Electrónico</label>
-                                    <p className='font-bold text-[var(--text-primary)] break-all'>{profile.email}</p>
-                                </div>
+                        <div className='space-y-5'>
+                            <div className='grid grid-cols-1 gap-4'>
+                                <InfoRow label="Género" value={resolve('genders', details.gender_id)} icon={<User size={14} className="text-blue-500" />} />
+                                <InfoRow label="Fecha Nacimiento" value={details.birth_date ? new Date(details.birth_date + 'T12:00:00').toLocaleDateString() : '-'} icon={<Calendar size={14} className="text-pink-500" />} />
+                                <InfoRow label="Ciudad" value={resolve('cities', details.city_id)} icon={<MapPin size={14} className="text-orange-500" />} />
+                                <InfoRow label="País" value={resolve('countries', details.country_id)} icon={<Globe size={14} className="text-green-500" />} />
                             </div>
 
-                            <div className='flex items-center gap-4 p-4 rounded-xl hover:bg-[var(--hover-bg)] transition-colors border border-transparent hover:border-[var(--card-border)]'>
-                                <div className='w-10 h-10 rounded-full bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-xl'>
-                                    🆔
-                                </div>
-                                <div>
-                                    <label className='text-xs font-bold text-[var(--text-secondary)]'>ID de Usuario</label>
-                                    <p className='font-mono text-xs font-bold text-[var(--text-primary)]'>{profile.id}</p>
-                                </div>
-                            </div>
-
-                            <div className='flex items-center gap-4 p-4 rounded-xl hover:bg-[var(--hover-bg)] transition-colors border border-transparent hover:border-[var(--card-border)]'>
-                                <div className='w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-xl'>
-                                    🔐
-                                </div>
-                                <div>
-                                    <label className='text-xs font-bold text-[var(--text-secondary)]'>Rol de Acceso</label>
-                                    <p className='font-bold text-[var(--text-primary)] uppercase'>{profile.role || 'Usuario'}</p>
-                                </div>
+                            <div className='pt-4 border-t border-gray-50'>
+                                <h4 className='text-xs font-bold text-gray-400 mb-3'>EDUCACIÓN</h4>
+                                <InfoRow label="Nivel" value={resolve('education_levels', details.education_level_id)} icon={<BookOpen size={14} className="text-violet-500" />} />
+                                <div className='mt-2' />
+                                <InfoRow label="Universidad" value={resolve('universities', details.university_id)} icon={<Building size={14} className="text-indigo-500" />} />
+                                <div className='mt-2' />
+                                <InfoRow label="Carrera" value={resolve('careers', details.career_id)} icon={<GraduationCap size={14} className="text-cyan-500" />} />
                             </div>
                         </div>
                     </div>
@@ -181,30 +139,24 @@ export default function ProfileView({ userId }: ProfileViewProps) {
 
                 {/* Right Column: Contract */}
                 <div className='space-y-6'>
-                    <div className='bg-[var(--card-bg)] p-6 rounded-2xl shadow-sm border border-[var(--card-border)] h-full relative overflow-hidden'>
-                        <div className='absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2' />
-
-                        <h3 className='text-sm font-black text-[var(--text-secondary)] uppercase tracking-widest mb-4'>
-                            Contrato y Vinculación
+                    <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-full'>
+                        <h3 className='text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2'>
+                            <Briefcase size={16} /> Contrato
                         </h3>
+                        <div className='space-y-4'>
+                            <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
+                                <span className='text-xs text-gray-400 font-bold block mb-1'>TIPO DE CONTRATO</span>
+                                <span className='text-sm font-bold text-[#0A1635]'>{resolve('contract_types', details.contract_type_id)}</span>
+                            </div>
+                            <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
+                                <span className='text-xs text-gray-400 font-bold block mb-1'>MODALIDAD</span>
+                                <span className='text-sm font-bold text-[#0A1635]'>{resolve('work_modalities', details.work_modality_id)}</span>
+                            </div>
 
-                        <div className='bg-[var(--hover-bg)] rounded-xl p-6 text-center border border-[var(--card-border)] mb-6'>
-                            <div className='text-3xl font-black text-[var(--text-primary)] mb-1'>
-                                Active
-                            </div>
-                            <div className='text-xs font-bold text-emerald-500 uppercase tracking-widest'>
-                                Staff Member
-                            </div>
-                        </div>
-
-                        <div className='space-y-3'>
-                            <div className='flex justify-between items-center text-sm'>
-                                <span className='text-[var(--text-secondary)]'>Inicio de Contrato</span>
-                                <span className='font-bold text-[var(--text-primary)]'>{new Date(profile.created_at).toLocaleDateString()}</span>
-                            </div>
-                            <div className='flex justify-between items-center text-sm'>
-                                <span className='text-[var(--text-secondary)]'>Tipo</span>
-                                <span className='font-bold text-[var(--text-primary)]'>Indefinido</span>
+                            <div className='pt-2'>
+                                <InfoRow label="ID Interno" value={profile.id.slice(0, 8)} />
+                                <div className='h-2' />
+                                <InfoRow label="Última Act." value={new Date(details.updated_at || profile.created_at).toLocaleDateString()} />
                             </div>
                         </div>
                     </div>

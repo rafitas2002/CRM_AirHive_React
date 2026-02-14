@@ -169,9 +169,9 @@ export default function MeetingModal({
 
     return (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm'>
-            <div className='w-full max-w-2xl bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col max-h-[90vh]'>
+            <div className='w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col max-h-[90vh]'>
                 {/* Header */}
-                <div className='bg-[#0F2A44] px-6 py-4 flex items-center justify-between shrink-0 border-b border-white/10'>
+                <div className='bg-[#0F2A44] px-6 py-4 flex items-center justify-between shrink-0'>
                     <h2 className='text-xl font-bold text-white'>
                         {mode === 'create' ? '📅 Nueva Reunión' : '✏️ Editar Reunión'}
                     </h2>
@@ -188,7 +188,7 @@ export default function MeetingModal({
                     <form id='meeting-form' onSubmit={handleSubmit} className='space-y-4'>
                         {/* Título */}
                         <div className='space-y-1.5'>
-                            <label className='block text-sm font-bold text-[var(--text-primary)]'>
+                            <label className='block text-sm font-bold text-[#0F2A44]'>
                                 Título de la Reunión <span className='text-red-500'>*</span>
                             </label>
                             <input
@@ -196,7 +196,7 @@ export default function MeetingModal({
                                 required
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-gray-900 placeholder:text-gray-500'
                                 placeholder='Ej: Presentación de propuesta'
                             />
                         </div>
@@ -204,7 +204,7 @@ export default function MeetingModal({
                         {/* Fecha y Hora + Duración */}
                         <div className='grid grid-cols-2 gap-4'>
                             <div className='space-y-1.5'>
-                                <label className='block text-sm font-bold text-[var(--text-primary)]'>
+                                <label className='block text-sm font-bold text-[#0F2A44]'>
                                     Fecha y Hora <span className='text-red-500'>*</span>
                                 </label>
                                 <input
@@ -212,12 +212,12 @@ export default function MeetingModal({
                                     required
                                     value={formData.start_time}
                                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                    className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-gray-900 placeholder:text-gray-500'
                                 />
                             </div>
 
                             <div className='space-y-1.5'>
-                                <label className='block text-sm font-bold text-[var(--text-primary)]'>
+                                <label className='block text-sm font-bold text-[#0F2A44]'>
                                     Duración (minutos)
                                 </label>
                                 <input
@@ -226,14 +226,14 @@ export default function MeetingModal({
                                     step='1'
                                     value={formData.duration_minutes}
                                     onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
-                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                    className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-gray-900 placeholder:text-gray-500'
                                 />
                             </div>
                         </div>
 
                         {/* Tipo de Reunión */}
                         <div className='space-y-1.5'>
-                            <label className='block text-sm font-bold text-[var(--text-primary)]'>
+                            <label className='block text-sm font-bold text-[#0F2A44]'>
                                 Tipo de Reunión
                             </label>
                             <div className='grid grid-cols-3 gap-3'>
@@ -244,7 +244,7 @@ export default function MeetingModal({
                                         onClick={() => setFormData({ ...formData, meeting_type: type })}
                                         className={`px-4 py-3 rounded-lg font-bold transition-all border-2 ${formData.meeting_type === type
                                             ? 'bg-[#2048FF] text-white border-[#2048FF]'
-                                            : 'bg-[var(--input-bg)] text-[var(--text-primary)] border-[var(--input-border)] hover:border-[#2048FF]'
+                                            : 'bg-white text-gray-700 border-gray-300 hover:border-[#2048FF]'
                                             }`}
                                     >
                                         {type === 'presencial' && '🏢 Presencial'}
@@ -267,14 +267,14 @@ export default function MeetingModal({
 
                         {/* Notas */}
                         <div className='space-y-1.5'>
-                            <label className='block text-sm font-bold text-[var(--text-primary)]'>
+                            <label className='block text-sm font-bold text-[#0F2A44]'>
                                 Notas
                             </label>
                             <textarea
                                 rows={3}
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none text-gray-900 placeholder:text-gray-500'
                                 placeholder='Agenda, temas a tratar, etc.'
                             />
                         </div>
@@ -282,16 +282,16 @@ export default function MeetingModal({
                         {/* Integración con Calendario - More prominent */}
                         <div className='pt-2'>
                             {isGoogleConnected ? (
-                                <div className='bg-emerald-500/10 p-5 rounded-2xl border-2 border-emerald-500/20 shadow-sm'>
+                                <div className='bg-emerald-50 p-5 rounded-2xl border-2 border-emerald-200 shadow-sm'>
                                     <div className='flex items-center justify-between mb-3'>
                                         <div>
-                                            <p className='text-sm font-black text-emerald-600 flex items-center gap-2'>
+                                            <p className='text-sm font-black text-emerald-900 flex items-center gap-2'>
                                                 🗓️ Google Calendar
                                             </p>
-                                            <p className='text-[10px] text-emerald-500 font-bold uppercase tracking-wider'>Sincronización Automática</p>
+                                            <p className='text-[10px] text-emerald-600 font-bold uppercase tracking-wider'>Sincronización Automática</p>
                                         </div>
                                         <div className='flex items-center gap-3'>
-                                            <span className={`text-[10px] font-black uppercase ${formData.calendar_provider === 'google' ? 'text-emerald-500' : 'text-gray-400'}`}>
+                                            <span className={`text-[10px] font-black uppercase ${formData.calendar_provider === 'google' ? 'text-emerald-600' : 'text-gray-400'}`}>
                                                 {formData.calendar_provider === 'google' ? 'Activado' : 'Desactivado'}
                                             </span>
                                             <label className='relative inline-flex items-center cursor-pointer'>
@@ -301,27 +301,27 @@ export default function MeetingModal({
                                                     checked={formData.calendar_provider === 'google'}
                                                     onChange={(e) => setFormData({ ...formData, calendar_provider: e.target.checked ? 'google' : null })}
                                                 />
-                                                <div className="w-14 h-7 bg-[var(--input-bg)] border border-[var(--input-border)] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-500/30 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-[var(--text-secondary)] after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-checked:after:bg-white"></div>
+                                                <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                                             </label>
                                         </div>
                                     </div>
-                                    <p className='text-xs text-emerald-600/80 leading-snug'>
+                                    <p className='text-xs text-emerald-700 leading-snug'>
                                         {formData.calendar_provider === 'google'
                                             ? '✅ Esta reunión se agendará automáticamente en tu Google Calendar y se enviarán las invitaciones a los asistentes.'
                                             : 'Esta reunión se guardará de forma local en el CRM solamente.'}
                                     </p>
                                     {formData.meeting_type === 'video' && formData.calendar_provider === 'google' && (
-                                        <div className='mt-3 py-2 px-3 bg-blue-500/10 rounded-xl border border-blue-500/20'>
-                                            <p className='text-[11px] text-blue-500 font-black flex items-center gap-2'>
+                                        <div className='mt-3 py-2 px-3 bg-blue-100/50 rounded-xl border border-blue-200'>
+                                            <p className='text-[11px] text-blue-700 font-black flex items-center gap-2'>
                                                 ✨ Google Meet Incluido
                                             </p>
                                         </div>
                                     )}
                                 </div>
                             ) : (
-                                <div className='bg-blue-500/5 p-5 rounded-2xl border-2 border-dashed border-blue-500/20'>
-                                    <p className='text-sm font-bold text-blue-500 mb-2'>🗓️ Integración con Calendario</p>
-                                    <p className='text-xs text-[var(--text-secondary)] leading-relaxed'>
+                                <div className='bg-blue-50/50 p-5 rounded-2xl border-2 border-dashed border-blue-200'>
+                                    <p className='text-sm font-bold text-blue-900 mb-2'>🗓️ Integración con Calendario</p>
+                                    <p className='text-xs text-blue-700 leading-relaxed'>
                                         Para que tus juntas se agreguen a Google Calendar automáticamente, primero **conecta tu cuenta** en la sección principal del Calendario.
                                     </p>
                                 </div>
@@ -331,11 +331,11 @@ export default function MeetingModal({
                 </div>
 
                 {/* Footer */}
-                <div className='bg-[var(--hover-bg)] px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-[var(--card-border)]'>
+                <div className='bg-gray-50 px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-gray-200'>
                     <button
                         type='button'
                         onClick={onClose}
-                        className='px-4 py-2 text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] transition-colors bg-[var(--card-bg)] border border-[var(--input-border)] rounded-lg shadow-sm hover:shadow'
+                        className='px-4 py-2 text-gray-700 font-medium hover:text-gray-900 transition-colors bg-white border border-gray-300 rounded-lg shadow-sm hover:shadow'
                     >
                         Cancelar
                     </button>
