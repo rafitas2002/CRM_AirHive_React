@@ -17,10 +17,8 @@ interface Task {
     estado: 'pendiente' | 'completada' | 'atrasada' | 'cancelada'
     prioridad: 'baja' | 'media' | 'alta'
     vendedor_id: string
-    asignado_a?: string
     cliente_empresa?: string
     cliente_nombre?: string
-    asignado?: { full_name: string }
 }
 
 export default function TareasPage() {
@@ -35,8 +33,6 @@ export default function TareasPage() {
     const [currentTask, setCurrentTask] = useState<Task | null>(null)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [deleteId, setDeleteId] = useState<number | null>(null)
-    const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false)
-    const [taskToComplete, setTaskToComplete] = useState<Task | null>(null)
 
     const fetchTasks = async () => {
         const isInitial = tasks.length === 0
@@ -46,8 +42,7 @@ export default function TareasPage() {
                 .from('tareas') as any)
                 .select(`
                 *,
-                clientes:lead_id (empresa, nombre),
-                asignado:asignado_a (full_name)
+                clientes:lead_id (empresa, nombre)
             `)
                 .order('fecha_vencimiento', { ascending: true })
 
@@ -61,8 +56,7 @@ export default function TareasPage() {
 
             setTasks(transformed)
         } catch (error) {
-            console.error('Error fetching tasks:', JSON.stringify(error, null, 2))
-            if (error) alert(`Error cargando tareas: ${error.message || 'Error desconocido'}`)
+            console.error('Error fetching tasks:', error)
         } finally {
             if (isInitial) setLoading(false)
         }
@@ -109,58 +103,16 @@ export default function TareasPage() {
     }
 
     const toggleStatus = async (task: Task) => {
-        if (task.estado !== 'completada') {
-            setTaskToComplete(task)
-            setIsCompleteModalOpen(true)
-            return
-        }
-
-        // Checkbox logic for un-completing (no confirmation needed)
+        const newStatus = task.estado === 'completada' ? 'pendiente' : 'completada'
         try {
             const { error } = await (supabase
                 .from('tareas') as any)
-                .update({ estado: 'pendiente' })
+                .update({ estado: newStatus })
                 .eq('id', task.id)
             if (error) throw error
             fetchTasks()
         } catch (error: any) {
             alert('Error al actualizar estado: ' + error.message)
-        }
-    }
-
-    const handleConfirmCompletion = async () => {
-        if (!taskToComplete) return
-        try {
-            // 1. Update task status
-            const { error: updateError } = await (supabase
-                .from('tareas') as any)
-                .update({ estado: 'completada' })
-                .eq('id', taskToComplete.id)
-            if (updateError) throw updateError
-
-            // 2. Create History Log (Stamp)
-            // We verify if we are the one completing it, effectively stamping it
-            if (auth.user) {
-                const { error: historyError } = await (supabase
-                    .from('historial_tareas') as any)
-                    .insert({
-                        tarea_id: taskToComplete.id,
-                        user_id: auth.user.id,
-                        titulo: taskToComplete.titulo,
-                        empresa: taskToComplete.cliente_empresa || 'N/A'
-                    })
-
-                if (historyError) {
-                    console.error('Error creando historial:', historyError)
-                    // We don't block the completion if history fails, but we log it
-                }
-            }
-
-            fetchTasks()
-            setIsCompleteModalOpen(false)
-            setTaskToComplete(null)
-        } catch (error: any) {
-            alert('Error al completar tarea: ' + error.message)
         }
     }
 
@@ -199,8 +151,8 @@ export default function TareasPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[var(--card-bg)] rounded-[22px] flex items-center justify-center border border-[var(--card-border)] shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <CheckSquare size={36} className="text-[var(--text-primary)] drop-shadow-sm" strokeWidth={1.5} />
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <CheckSquare size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -250,7 +202,7 @@ export default function TareasPage() {
                                         <div className={`px-5 py-2 rounded-[20px] shadow-sm border-2 flex items-center gap-2 ${groupName === 'Atrasadas' ? 'bg-rose-50 border-rose-100 text-rose-600' :
                                             groupName === 'Hoy' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' :
                                                 groupName === 'Completadas' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                                                    'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-primary)]'}`}
+                                                    'bg-white border-gray-100 text-gray-800'}`}
                                             style={groupName === 'Próximamente' ? {
                                                 background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)'
                                             } : {}}
@@ -286,19 +238,10 @@ export default function TareasPage() {
                                                 }}
                                                 onClick={() => { setModalMode('edit'); setCurrentTask(task); setIsModalOpen(true); }}
                                             >
-                                                {/* Assigned User Avatar */}
-                                                {task.asignado && (
-                                                    <div className='absolute -top-3 -right-3 z-10'>
-                                                        <div className='w-8 h-8 rounded-full bg-blue-600 border-2 border-[var(--card-bg)] flex items-center justify-center text-white text-[10px] font-black shadow-lg transform rotate-12 group-hover:rotate-0 transition-all'>
-                                                            {task.asignado.full_name.charAt(0)}
-                                                        </div>
-                                                    </div>
-                                                )}
-
                                                 {/* Priority Indicator */}
-                                                <div className={`absolute top-8 right-8 px-3 py-1.2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 shadow-sm ${task.prioridad === 'alta' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                                                    task.prioridad === 'media' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                                                        'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                                                <div className={`absolute top-8 right-8 px-3 py-1.2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 shadow-sm ${task.prioridad === 'alta' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                    task.prioridad === 'media' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                        'bg-gray-50 text-gray-400 border-gray-100'
                                                     }`}>
                                                     {task.prioridad}
                                                 </div>
@@ -308,9 +251,9 @@ export default function TareasPage() {
                                                         onClick={(e) => { e.stopPropagation(); toggleStatus(task); }}
                                                         className={`w-10 h-10 rounded-[14px] border-2 flex items-center justify-center transition-all flex-shrink-0 shadow-sm ${task.estado === 'completada'
                                                             ? 'bg-emerald-500 border-emerald-500 text-white rotate-[360deg]'
-                                                            : 'bg-[var(--background)] border-[var(--card-border)] hover:border-blue-500 group-hover:scale-110'}`}
+                                                            : 'bg-white border-gray-200 hover:border-blue-500 group-hover:scale-110'}`}
                                                     >
-                                                        {task.estado === 'completada' ? <CheckCircle2 size={18} /> : <div className="w-[18px] h-[18px] rounded-full border-2 border-[var(--text-secondary)] opacity-30" />}
+                                                        {task.estado === 'completada' ? <CheckCircle2 size={18} /> : null}
                                                     </button>
                                                     <div className='min-w-0 flex-1 mt-1'>
                                                         <h3 className={`text-xl font-black leading-tight truncate pr-14 transition-all ${task.estado === 'completada' ? 'line-through opacity-40' : ''}`}
@@ -373,8 +316,7 @@ export default function TareasPage() {
                                             </div>
                                         ))}
                                     </div>
-                                )
-                                }
+                                )}
                             </div>
                         )
                     })}
@@ -400,15 +342,6 @@ export default function TareasPage() {
                 message="¿Estás seguro de que deseas eliminar esta tarea? Esta acción no se puede deshacer."
                 isDestructive
             />
-
-            <ConfirmModal
-                isOpen={isCompleteModalOpen}
-                onClose={() => setIsCompleteModalOpen(false)}
-                onConfirm={handleConfirmCompletion}
-                title="Completar Tarea"
-                message="¿Estás seguro de que deseas marcar esta tarea como completada?"
-                isDestructive={false}
-            />
-        </div >
+        </div>
     )
 }

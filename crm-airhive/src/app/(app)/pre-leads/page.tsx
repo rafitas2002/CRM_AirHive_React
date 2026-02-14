@@ -286,17 +286,19 @@ export default function PreLeadsPage() {
                 {/* External Header - Page Level */}
                 {/* Header Pattern consistent with Empresas */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                    <div className='flex items-center gap-6'>
-                        <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                            <Target size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
-                        </div>
-                        <div>
-                            <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                Archivo de Pre-Leads
-                            </h1>
-                            <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                Exploración y calificación inicial de prospectos.
-                            </p>
+                    <div className='flex items-center gap-8'>
+                        <div className='flex items-center gap-6'>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <Target size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
+                            <div>
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                    Archivo de Pre-Leads
+                                </h1>
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Exploración y calificación inicial de prospectos.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -341,7 +343,7 @@ export default function PreLeadsPage() {
                         </div>
                         <button
                             onClick={() => { setModalMode('create'); setCurrentPreLead(null); setIsModalOpen(true); }}
-                            className='px-6 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-8 py-3 bg-[#8B5CF6] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-purple-500/20 hover:scale-105 active:scale-95 transition-all'
                         >
                             + Registrar Pre-Lead
                         </button>
@@ -353,7 +355,7 @@ export default function PreLeadsPage() {
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-primary)' }}>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
                                     <ListFilter size={24} />
                                 </div>
                                 <div>
@@ -363,8 +365,8 @@ export default function PreLeadsPage() {
                             </div>
 
                             <div className='flex items-center gap-3'>
-                                <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter' style={{ color: 'var(--input-focus)' }}>{filteredPreLeads.length}</span>
+                                <div className='px-5 py-2 bg-gradient-to-br from-violet-500/10 to-blue-500/10 rounded-2xl border border-violet-500/20 flex items-center gap-3 shadow-sm'>
+                                    <span className='text-2xl font-black tracking-tighter text-[#8B5CF6]'>{filteredPreLeads.length}</span>
                                     <div className='flex flex-col'>
                                         <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
                                         <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Pre-Calificados</span>
@@ -376,82 +378,81 @@ export default function PreLeadsPage() {
                         <div className='flex flex-col gap-4'>
                             {/* Row 1: Search Bar (Full Width) */}
                             <div className='relative w-full'>
-                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
+                                <Search className='absolute left-5 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={20} />
                                 <input
                                     type='text'
                                     placeholder='Buscar por empresa, contacto, correos...'
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
+                                    className='w-full pl-14 pr-6 py-4 bg-[var(--background)] border border-[var(--card-border)] rounded-[22px] text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-inner'
                                     style={{ color: 'var(--text-primary)' }}
                                 />
                             </div>
 
                             {/* Row 2: Filters Grouped */}
-                            {/* Row 2: Filters & Sort - Standardized Layout */}
-                            <div className='flex flex-col lg:flex-row items-center justify-between gap-4 w-full'>
-                                {/* Left: Filter Pill */}
-                                <div className='flex items-center gap-2 p-1 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl shadow-sm overflow-x-auto max-w-full'>
-                                    <select
-                                        value={vendedorFilter}
-                                        onChange={(e) => setVendedorFilter(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
-                                    >
-                                        <option value="All">Vendedor: Todos</option>
-                                        {uniqueVendedores.map(v => (
-                                            <option key={v as string} value={v as string}>{v as string}</option>
-                                        ))}
-                                    </select>
-                                    <div className='w-px h-5 bg-[var(--card-border)] shrink-0' />
-                                    <select
-                                        value={industryFilter}
-                                        onChange={(e) => setIndustryFilter(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
-                                    >
-                                        <option value="All">Industria: Todas</option>
-                                        {uniqueIndustries.map(ind => (
-                                            <option key={ind as string} value={ind as string}>{ind as string}</option>
-                                        ))}
-                                    </select>
-                                    <div className='w-px h-5 bg-[var(--card-border)] shrink-0' />
-                                    <select
-                                        value={locationFilter}
-                                        onChange={(e) => setLocationFilter(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
-                                    >
-                                        <option value="All">Ubicación: Todas</option>
-                                        {uniqueLocations.map(loc => (
-                                            <option key={loc as string} value={loc as string}>{loc as string}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Right: Sort & Actions */}
-                                <div className='flex items-center gap-2 shrink-0'>
-                                    <select
-                                        value={sortBy}
-                                        onChange={(e) => setSortBy(e.target.value)}
-                                        className='min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95 shadow-sm'
-                                    >
-                                        <option value="recent">Orden: Reciente</option>
-                                        <option value="name">Orden: Alfabético</option>
-                                    </select>
-
-                                    {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || sortBy !== 'recent') && (
-                                        <button
-                                            onClick={() => {
-                                                setSearch('')
-                                                setVendedorFilter('All')
-                                                setIndustryFilter('All')
-                                                setLocationFilter('All')
-                                                setSortBy('recent')
-                                            }}
-                                            className='p-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm group'
-                                            title='Limpiar Filtros'
+                            <div className='flex flex-wrap items-center justify-between gap-4'>
+                                <div className='flex flex-wrap items-center gap-3'>
+                                    <div className='flex items-center gap-2 p-1.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl shadow-sm'>
+                                        <select
+                                            value={vendedorFilter}
+                                            onChange={(e) => setVendedorFilter(e.target.value)}
+                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
                                         >
-                                            <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
-                                        </button>
-                                    )}
+                                            <option value="All">Vendedor: Todos</option>
+                                            {uniqueVendedores.map(v => (
+                                                <option key={v as string} value={v as string}>{v as string}</option>
+                                            ))}
+                                        </select>
+                                        <div className='w-px h-4 bg-[var(--card-border)]' />
+                                        <select
+                                            value={industryFilter}
+                                            onChange={(e) => setIndustryFilter(e.target.value)}
+                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                        >
+                                            <option value="All">Industria: Todas</option>
+                                            {uniqueIndustries.map(ind => (
+                                                <option key={ind as string} value={ind as string}>{ind as string}</option>
+                                            ))}
+                                        </select>
+                                        <div className='w-px h-4 bg-[var(--card-border)]' />
+                                        <select
+                                            value={locationFilter}
+                                            onChange={(e) => setLocationFilter(e.target.value)}
+                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                        >
+                                            <option value="All">Ubicación: Todas</option>
+                                            {uniqueLocations.map(loc => (
+                                                <option key={loc as string} value={loc as string}>{loc as string}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className='flex items-center gap-2'>
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value)}
+                                            className='min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95 shadow-sm'
+                                        >
+                                            <option value="recent">Orden: Reciente</option>
+                                            <option value="name">Orden: Alfabético</option>
+                                        </select>
+
+                                        {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || sortBy !== 'recent') && (
+                                            <button
+                                                onClick={() => {
+                                                    setSearch('')
+                                                    setVendedorFilter('All')
+                                                    setIndustryFilter('All')
+                                                    setLocationFilter('All')
+                                                    setSortBy('recent')
+                                                }}
+                                                className='p-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm group'
+                                                title='Limpiar Filtros'
+                                            >
+                                                <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
