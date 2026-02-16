@@ -40,7 +40,8 @@ export async function getAdminCorrelationData() {
             { data: meetings, error: meetError },
             { data: clients, error: clientError },
             { data: industries, error: indError },
-            { data: companies, error: compError }
+            { data: companies, error: compError },
+            { data: taskHistory, error: taskError }
         ] = await Promise.all([
             supabaseAdmin.from('profiles').select('id, full_name') as any,
             supabaseAdmin.from('employee_profiles').select('*') as any,
@@ -49,7 +50,8 @@ export async function getAdminCorrelationData() {
             supabaseAdmin.from('meetings').select('*') as any,
             supabaseAdmin.from('clientes').select('*') as any,
             supabaseAdmin.from('industrias').select('*') as any,
-            supabaseAdmin.from('empresas').select('*') as any
+            supabaseAdmin.from('empresas').select('*') as any,
+            supabaseAdmin.from('historial_tareas').select('user_id') as any
         ])
 
         if (profError) throw profError
@@ -60,6 +62,7 @@ export async function getAdminCorrelationData() {
         if (clientError) throw clientError
         if (indError) throw indError
         if (compError) throw compError
+        if (taskError) throw taskError
 
         // 3. Aggregate Performance by User
         const performanceMap: Record<string, {
@@ -171,6 +174,9 @@ export async function getAdminCorrelationData() {
             const effectiveTenure = Math.max(1, tenureMonths)
             const medalRatio = medalScore / effectiveTenure
 
+            // Task Completion Metric
+            const completedTasks = (taskHistory || []).filter((t: any) => t.user_id === p.id).length
+
             return {
                 userId: p.id,
                 name: p.full_name || 'Desconocido',
@@ -182,6 +188,7 @@ export async function getAdminCorrelationData() {
                 totalMedals,
                 medalScore,
                 medalRatio,
+                completedTasks,
                 growth,
                 meetingsPerClose,
                 forecastAccuracy,
@@ -195,6 +202,150 @@ export async function getAdminCorrelationData() {
         return { success: true, data: masterData }
     } catch (error: any) {
         console.error('[AdminCorrelation] General Exception:', error)
+        return { success: false, error: error.message }
+    }
+}
+
+export async function getUserActivitySummary(targetUserId: string) {
+    try {
+        const cookieStore = await cookies()
+        const supabase = createClient(cookieStore)
+        const supabaseAdmin = createAdminClient()
+
+        // 1. Verify Auth & Role
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        const { data: profile } = await (supabaseAdmin.from('profiles') as any).select('role').eq('id', user.id).single()
+        if (profile?.role !== 'admin' && profile?.role !== 'rh') {
+            return { success: false, error: 'Acceso denegado' }
+        }
+
+        // 2. Fetch Data
+        const [
+            { data: raceResults },
+            { data: meetings },
+            { data: clients },
+            { data: tasks },
+            { data: taskHistory },
+            { data: industries },
+            { data: companies }
+        ] = await Promise.all([
+            supabaseAdmin.from('race_results').select('*').eq('user_id', targetUserId).order('period', { ascending: true }) as any,
+            supabaseAdmin.from('meetings').select('*').eq('seller_id', targetUserId).order('start_time', { ascending: false }) as any,
+            supabaseAdmin.from('clientes').select('*').eq('owner_id', targetUserId) as any,
+            supabaseAdmin.from('tareas').select('*').eq('vendedor_id', targetUserId).order('fecha_vencimiento', { ascending: false }) as any,
+            supabaseAdmin.from('historial_tareas').select('*').eq('user_id', targetUserId).order('fecha_completado', { ascending: false }) as any,
+            supabaseAdmin.from('industrias').select('*') as any,
+            supabaseAdmin.from('empresas').select('*') as any
+        ])
+
+        // 3. Performance Aggregation
+        let totalSales = 0
+        const medals = { gold: 0, silver: 0, bronze: 0 }
+        const salesHistory: any[] = []
+        raceResults?.forEach((res: any) => {
+            totalSales += Number(res.total_sales || 0)
+            salesHistory.push({ period: res.period, amount: Number(res.total_sales || 0) })
+            if (res.medal === 'gold') medals.gold++
+            if (res.medal === 'silver') medals.silver++
+            if (res.medal === 'bronze') medals.bronze++
+        })
+
+        const closedWon = (clients || []).filter((c: any) => c.etapa === 'Cerrada Ganada')
+        const meetingsPerClose = closedWon.length > 0 ? (meetings || []).length / closedWon.length : (meetings || []).length
+
+        let totalForecastError = 0
+        closedWon.forEach((c: any) => totalForecastError += (100 - (c.probabilidad || 0)))
+        const forecastAccuracy = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
+
+        const industryMap: Record<string, number> = {}
+        closedWon.forEach((c: any) => {
+            const company = (companies || []).find((comp: any) => comp.id === c.empresa_id)
+            const industry = (industries || []).find((ind: any) => ind.id === company?.industria_id)
+            const indName = industry?.name || 'Otro'
+            industryMap[indName] = (industryMap[indName] || 0) + 1
+        })
+        const topIndustry = Object.entries(industryMap).sort((a: any, b: any) => b[1] - a[1])[0]?.[0] || 'N/A'
+
+        // 3.1 Modal Impact
+        const closedWithPhysical = closedWon.filter((c: any) => {
+            const clientMeetings = (meetings || []).filter((m: any) => m.lead_id === c.id)
+            return clientMeetings.some((m: any) => m.meeting_type === 'presencial')
+        })
+        const physicalCloseRate = closedWon.length > 0 ? (closedWithPhysical.length / closedWon.length) * 100 : 0
+
+        // 3.2 Response Speed
+        let totalResponseTimeMs = 0
+        let responseCount = 0
+        const userClients = (clients || [])
+        userClients.forEach((c: any) => {
+            const firstMeeting = (meetings || [])
+                .filter((m: any) => m.lead_id === c.id)
+                .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+
+            if (firstMeeting) {
+                const diff = new Date(firstMeeting.start_time).getTime() - new Date(c.created_at).getTime()
+                if (diff > 0) {
+                    totalResponseTimeMs += diff
+                    responseCount++
+                }
+            }
+        })
+        const avgResponseTimeHours = responseCount > 0 ? (totalResponseTimeMs / responseCount) / (1000 * 60 * 60) : 0
+
+        // 4. Combined Activity List
+        const activityList = [
+            ...(tasks || []).map((t: any) => ({
+                id: t.id,
+                type: 'task',
+                title: t.titulo,
+                description: t.descripcion,
+                status: t.estado,
+                date: t.fecha_vencimiento,
+                created_at: t.created_at
+            })),
+            ...(taskHistory || []).map((h: any) => ({
+                id: `h-${h.id}`,
+                type: 'task_completion',
+                title: h.titulo,
+                description: `Completada en ${h.empresa}`,
+                status: 'completada',
+                date: h.fecha_completado,
+                created_at: h.fecha_completado
+            })),
+            ...(meetings || []).map((m: any) => ({
+                id: m.id,
+                type: 'meeting',
+                title: m.title,
+                description: m.notes,
+                status: m.meeting_status,
+                date: m.start_time,
+                created_at: m.created_at
+            }))
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+        return {
+            success: true,
+            data: {
+                metrics: {
+                    totalSales,
+                    medals,
+                    totalMedals: medals.gold + medals.silver + medals.bronze,
+                    meetingsPerClose,
+                    forecastAccuracy,
+                    topIndustry,
+                    physicalCloseRate,
+                    avgResponseTimeHours,
+                    lastRaceAmount: salesHistory.length > 0 ? salesHistory[salesHistory.length - 1].amount : 0,
+                    completedTasksCount: (taskHistory || []).length,
+                    pendingTasksCount: (tasks || []).filter((t: any) => t.estado === 'pendiente').length
+                },
+                activities: activityList
+            }
+        }
+    } catch (error: any) {
+        console.error('[AdminUserActivity] Error:', error)
         return { success: false, error: error.message }
     }
 }
