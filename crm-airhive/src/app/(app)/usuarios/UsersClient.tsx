@@ -12,6 +12,7 @@ interface UsersClientProps {
 export default function UsersClient({ initialUsers }: UsersClientProps) {
     const [users, setUsers] = useState(initialUsers)
     const [search, setSearch] = useState('')
+    const [selectedArea, setSelectedArea] = useState<string | null>(null)
     const [selectedUser, setSelectedUser] = useState<any>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [catalogs, setCatalogs] = useState<Record<string, any[]>>({})
@@ -19,7 +20,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
     useEffect(() => {
         const fetchCats = async () => {
             const res = await getCatalogs()
-            if (res.success) setCatalogs(res.data)
+            if (res.success) setCatalogs(res.data || {})
         }
         fetchCats()
     }, [])
@@ -29,7 +30,11 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         const fullName = (user.full_name || '').toLowerCase()
         const role = (user.role || '').toLowerCase()
         const department = (user.details?.area_id ? resolve('areas', user.details.area_id) : '').toLowerCase()
-        return fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower)
+
+        const matchesSearch = fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower)
+        const matchesArea = !selectedArea || user.details?.area_id === selectedArea
+
+        return matchesSearch && matchesArea
     })
 
     function resolve(table: string, id: string) {
@@ -63,6 +68,31 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                         onChange={(e) => setSearch(e.target.value)}
                     />
                 </div>
+            </div>
+
+            {/* Area Filters Chips */}
+            <div className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 -mx-2 px-2 no-scrollbar">
+                <button
+                    onClick={() => setSelectedArea(null)}
+                    className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${!selectedArea
+                        ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
+                        : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
+                        }`}
+                >
+                    Todos
+                </button>
+                {(catalogs.areas || []).map(area => (
+                    <button
+                        key={area.id}
+                        onClick={() => setSelectedArea(area.id)}
+                        className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${selectedArea === area.id
+                            ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
+                            : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
+                            }`}
+                    >
+                        {area.name}
+                    </button>
+                ))}
             </div>
 
             {/* Grid */}

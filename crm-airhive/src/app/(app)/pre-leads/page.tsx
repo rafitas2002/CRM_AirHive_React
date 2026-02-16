@@ -117,7 +117,13 @@ export default function PreLeadsPage() {
                     telefonos: data.telefonos,
                     correos: data.correos,
                     ubicacion: data.ubicacion,
-                    notas: data.notas
+                    notas: data.notas,
+                    // New fields
+                    industria: data.industria,
+                    industria_id: data.industria_id,
+                    tamano: data.tamano,
+                    website: data.website,
+                    logo_url: data.logo_url
                 },
                 auth.user?.id || ''
             )
@@ -129,8 +135,13 @@ export default function PreLeadsPage() {
             // Step 2: Save pre-lead with empresa_id
             const table = supabase.from('pre_leads') as any
             const preLeadData = {
-                ...data,
-                empresa_id: companyResult.id,
+                nombre_empresa: data.nombre_empresa,
+                nombre_contacto: data.nombre_contacto,
+                correos: data.correos,
+                telefonos: data.telefonos,
+                ubicacion: data.ubicacion,
+                notas: data.notas,
+                giro_empresa: data.industria || data.giro_empresa || 'Sin clasificar',
                 vendedor_id: auth.user?.id,
                 vendedor_name: auth.profile?.full_name || auth.username
             }
@@ -167,7 +178,7 @@ export default function PreLeadsPage() {
         // Mappear Pre-Lead a Lead structure with empresa_id
         const initialLeadData = {
             empresa: pl.nombre_empresa,
-            empresa_id: pl.empresa_id, // Link to the same company
+            empresa_id: pl.empresa_id || undefined, // Fallback to undefined if missing
             nombre: pl.nombre_contacto || '',
             email: pl.correos?.[0] || '',
             telefono: pl.telefonos?.[0] || '',
@@ -202,14 +213,8 @@ export default function PreLeadsPage() {
 
             if (insertError) throw insertError
 
-            // 2. If conversion, mark pre-lead as converted
-            if (clientModalMode === 'convert') {
-                const { error: updateError } = await (supabase.from('pre_leads') as any)
-                    .update({ is_converted: true })
-                    .eq('id', sourcePreLead.id)
-
-                if (updateError) console.warn('Lead created but Pre-Lead status not updated:', updateError)
-            }
+            // 2. If conversion, we ignore is_converted for now as column is missing in DB
+            // We can still use fetchPreLeads() which will show updated state if filtered
 
             setIsClientModalOpen(false)
             fetchPreLeads()

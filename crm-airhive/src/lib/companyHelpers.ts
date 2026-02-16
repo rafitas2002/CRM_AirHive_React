@@ -36,21 +36,24 @@ export async function createCompanyFromPreLead(
         correos?: string[]
         ubicacion?: string
         notas?: string
+        industria?: string
+        industria_id?: string
+        tamano?: number
+        website?: string
+        logo_url?: string
     },
     userId: string
 ): Promise<{ id: string; nombre: string } | null> {
     const companyData = {
         nombre: preLead.nombre_empresa.trim(),
-        telefono: preLead.telefonos?.[0] || null,
-        email: preLead.correos?.[0] || null,
         ubicacion: preLead.ubicacion || null,
-        notas: preLead.notas || null,
-        created_by: userId,
-        // Default values for required fields
-        industria: 'Sin clasificar',
-        tamano: 1,
-        website: null,
-        logo_url: null
+        descripcion: preLead.notas || null,
+        owner_id: userId,
+        industria: preLead.industria || 'Sin clasificar',
+        industria_id: preLead.industria_id || null,
+        tamano: preLead.tamano || 1,
+        sitio_web: preLead.website || null,
+        logo_url: preLead.logo_url || null
     }
 
     const { data, error } = await (supabase.from('empresas') as any).insert(companyData).select('id, nombre').single()
@@ -75,6 +78,11 @@ export async function findOrCreateCompany(
         correos?: string[]
         ubicacion?: string
         notas?: string
+        industria?: string
+        industria_id?: string
+        tamano?: number
+        website?: string
+        logo_url?: string
     },
     userId: string
 ): Promise<{ id: string; nombre: string; isNew: boolean } | null> {

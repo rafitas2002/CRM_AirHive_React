@@ -40,7 +40,7 @@ export default async function UsuariosPage() {
     })
 
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto space-y-10 w-full'>
                 <UsersClient
                     initialUsers={employees || []}

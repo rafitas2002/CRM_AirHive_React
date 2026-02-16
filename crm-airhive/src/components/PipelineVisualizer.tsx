@@ -16,10 +16,10 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
     const maxValue = Math.max(...data.map(d => d.value))
 
     return (
-        <div className='bg-white p-8 rounded-3xl border border-gray-100 shadow-sm h-full flex flex-col'>
+        <div className='p-8 rounded-3xl border shadow-sm h-full flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='mb-8'>
-                <h3 className='text-xl font-black text-[#0A1635] tracking-tight'>Embudo de Pipeline</h3>
-                <p className='text-xs text-gray-400 font-medium mt-1 uppercase tracking-widest'>Distribución por etapa de venta</p>
+                <h3 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Embudo de Pipeline</h3>
+                <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Distribución por etapa de venta</p>
             </div>
 
             <div className='flex-1 flex flex-col justify-between gap-4'>
@@ -31,8 +31,8 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
                         <div key={item.stage} className='flex items-center gap-4 group'>
                             <div className='w-full'>
                                 <div className='flex justify-between items-center mb-1 px-2'>
-                                    <span className='text-[10px] font-black text-[#0A1635] uppercase'>{item.stage}</span>
-                                    <span className='text-[10px] font-black text-gray-400'>${item.value.toLocaleString()}</span>
+                                    <span className='text-[10px] font-black uppercase' style={{ color: 'var(--text-primary)' }}>{item.stage}</span>
+                                    <span className='text-[10px] font-black' style={{ color: 'var(--text-secondary)' }}>${item.value.toLocaleString()}</span>
                                 </div>
                                 <div className='relative h-12 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-[1.02] cursor-default'>
                                     <div
@@ -69,13 +69,13 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
                 })}
             </div>
 
-            <div className='mt-8 pt-4 border-t border-gray-50 flex justify-between items-end'>
+            <div className='mt-8 pt-4 border-t flex justify-between items-end' style={{ borderColor: 'var(--card-border)' }}>
                 <div>
-                    <label className='text-[8px] font-black text-gray-400 uppercase tracking-widest'>Total Leads</label>
-                    <p className='text-xl font-black text-[#0A1635]'>{totalLeads}</p>
+                    <label className='text-[8px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Total Leads</label>
+                    <p className='text-xl font-black' style={{ color: 'var(--text-primary)' }}>{totalLeads}</p>
                 </div>
                 <div className='text-right'>
-                    <label className='text-[8px] font-black text-gray-400 uppercase tracking-widest'>Salud del Embudo</label>
+                    <label className='text-[8px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Salud del Embudo</label>
                     <p className='text-xs font-bold text-emerald-500 uppercase'>Óptimo</p>
                 </div>
             </div>
