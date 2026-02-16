@@ -42,18 +42,18 @@ export default function CalendarWeekView({
     }
 
     return (
-        <div className='bg-[var(--card-bg)] rounded-3xl border border-[var(--card-border)] shadow-xl overflow-hidden flex flex-col flex-1 min-h-0'>
+        <div className='bg-white rounded-3xl border border-gray-100 shadow-xl overflow-hidden flex flex-col flex-1 min-h-0'>
             {/* Week Header */}
-            <div className='grid grid-cols-[80px_repeat(7,1fr)] bg-[var(--table-header-bg)] border-b border-[var(--card-border)] shrink-0'>
-                <div className='h-12 border-r border-[var(--card-border)]' />
+            <div className='grid grid-cols-[80px_repeat(7,1fr)] bg-gray-50 border-b border-gray-100 shrink-0'>
+                <div className='h-12 border-r border-gray-100' />
                 {weekDays.map((day, i) => {
                     const isToday = day.toDateString() === new Date().toDateString()
                     return (
-                        <div key={i} className={`h-12 flex flex-col items-center justify-center border-r border-[var(--card-border)] last:border-r-0 ${isToday ? 'bg-blue-500/10' : ''}`}>
-                            <span className={`text-[10px] font-black uppercase tracking-wider ${isToday ? 'text-[#2048FF]' : 'text-[var(--text-secondary)]'}`}>
+                        <div key={i} className={`h-12 flex flex-col items-center justify-center border-r border-gray-100 last:border-r-0 ${isToday ? 'bg-blue-50/50' : ''}`}>
+                            <span className={`text-[10px] font-black uppercase tracking-wider ${isToday ? 'text-[#2048FF]' : 'text-gray-400'}`}>
                                 {day.toLocaleDateString('es-MX', { weekday: 'short' })}
                             </span>
-                            <span className={`text-base font-black ${isToday ? 'text-[#2048FF]' : 'text-[var(--text-primary)]'}`}>
+                            <span className={`text-base font-black ${isToday ? 'text-[#2048FF]' : 'text-[#0F2A44]'}`}>
                                 {day.getDate()}
                             </span>
                         </div>
@@ -62,13 +62,13 @@ export default function CalendarWeekView({
             </div>
 
             {/* Scrollable Grid Area */}
-            <div className='flex-1 overflow-y-auto custom-scrollbar relative bg-[var(--background)]'>
+            <div className='flex-1 overflow-y-auto custom-scrollbar relative'>
                 <div className='grid grid-cols-[80px_repeat(7,1fr)] min-h-full'>
                     {/* Hour Labels */}
-                    <div className='bg-[var(--hover-bg)]/30 border-r border-[var(--card-border)]'>
+                    <div className='bg-gray-50/30 border-r border-gray-100'>
                         {hours.map(hour => (
-                            <div key={hour} className='h-20 border-b border-[var(--card-border)] flex items-start justify-center pt-2'>
-                                <span className='text-[10px] font-black text-[var(--text-secondary)] tabular-nums uppercase'>
+                            <div key={hour} className='h-20 border-b border-gray-100 flex items-start justify-center pt-2'>
+                                <span className='text-[10px] font-black text-gray-400 tabular-nums uppercase'>
                                     {hour > 12 ? `${hour - 12} PM` : hour === 12 ? '12 PM' : `${hour} AM`}
                                 </span>
                             </div>
@@ -77,11 +77,11 @@ export default function CalendarWeekView({
 
                     {/* Day Columns */}
                     {weekDays.map((day, dayIdx) => (
-                        <div key={dayIdx} className='relative border-r border-[var(--card-border)] last:border-r-0'>
+                        <div key={dayIdx} className='relative border-r border-gray-100 last:border-r-0'>
                             {hours.map(hour => {
                                 const dayMeetings = getMeetingsForDayAndHour(day, hour)
                                 return (
-                                    <div key={hour} className='h-20 border-b border-[var(--card-border)] group hover:bg-[var(--hover-bg)] transition-colors'>
+                                    <div key={hour} className='h-20 border-b border-gray-100 group hover:bg-gray-50/50 transition-colors'>
                                         {dayMeetings.map(mtg => {
                                             const urgency = getUrgencyColor(mtg.urgencyLevel || 'scheduled')
                                             return (

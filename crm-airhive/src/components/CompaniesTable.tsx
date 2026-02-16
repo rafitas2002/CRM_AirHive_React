@@ -43,6 +43,7 @@ export default function CompaniesTable({
                         <th className='px-8 py-5'>En Proceso</th>
                         <th className='px-8 py-5'>Perdidos</th>
                         <th className='px-8 py-5'>Tamaño</th>
+                        <th className='px-8 py-5'>Website</th>
                         {isEditingMode && (
                             <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>
                         )}
@@ -184,6 +185,40 @@ export default function CompaniesTable({
                             {/* Tamaño */}
                             <td className='px-8 py-5'>
                                 {renderSizeBadge(company.tamano || 0)}
+                            </td>
+
+                            {/* Website */}
+                            <td className='px-8 py-5'>
+                                {company.website ? (
+                                    <a
+                                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs transition-all shadow-sm'
+                                        style={{
+                                            backgroundColor: 'var(--website-badge-bg)',
+                                            color: 'var(--website-badge-text)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
+                                            e.currentTarget.style.color = '#ffffff'
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--website-badge-bg)'
+                                            e.currentTarget.style.color = 'var(--website-badge-text)'
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                            <polyline points="15 3 21 3 21 9" />
+                                            <line x1="10" y1="14" x2="21" y2="3" />
+                                        </svg>
+                                    </a>
+                                ) : (
+                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>-</span>
+                                )}
                             </td>
 
                             {/* Acciones (Delete) */}

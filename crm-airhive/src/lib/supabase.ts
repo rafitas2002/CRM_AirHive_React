@@ -521,41 +521,6 @@ export type Database = {
                     created_at?: string
                 }
             }
-            historial_modificaciones_tareas: {
-                Row: {
-                    id: number
-                    tarea_id: number
-                    user_id: string | null
-                    campo_modificado: string
-                    valor_anterior: string | null
-                    valor_nuevo: string | null
-                    motivo: string
-                    origen_cambio: string
-                    created_at: string
-                }
-                Insert: {
-                    id?: number
-                    tarea_id: number
-                    user_id?: string | null
-                    campo_modificado: string
-                    valor_anterior?: string | null
-                    valor_nuevo?: string | null
-                    motivo: string
-                    origen_cambio: string
-                    created_at?: string
-                }
-                Update: {
-                    id?: number
-                    tarea_id?: number
-                    user_id?: string | null
-                    campo_modificado?: string
-                    valor_anterior?: string | null
-                    valor_nuevo?: string | null
-                    motivo?: string
-                    origen_cambio?: string
-                    created_at?: string
-                }
-            }
         }
     }
 }

@@ -69,21 +69,21 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className='bg-[var(--card-bg)] rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] relative border border-[var(--card-border)]'
+                    className='bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] relative'
                 >
                     {/* Header */}
-                    <div className='px-8 py-6 border-b border-[var(--card-border)] flex justify-between items-center bg-[var(--table-header-bg)] flex-shrink-0'>
+                    <div className='px-8 py-6 border-b flex justify-between items-center bg-gray-50/50 flex-shrink-0'>
                         <div className='flex items-center gap-3'>
                             <div className='w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center'>
                                 <Trophy className='w-5 h-5 text-amber-600' />
                             </div>
                             <div>
-                                <h2 className='text-xl font-black text-[var(--text-primary)] tracking-tight'>Detalles de la Carrera</h2>
-                                <p className='text-xs text-[var(--text-secondary)] font-medium uppercase tracking-wider'>Estadísticas y Leyendas</p>
+                                <h2 className='text-xl font-black text-[#0A1635] tracking-tight'>Detalles de la Carrera</h2>
+                                <p className='text-xs text-gray-500 font-medium uppercase tracking-wider'>Estadísticas y Leyendas</p>
                             </div>
                         </div>
-                        <button onClick={onClose} className='p-2 hover:bg-[var(--hover-bg)] rounded-full transition-colors'>
-                            <X className='w-5 h-5 text-[var(--text-secondary)]' />
+                        <button onClick={onClose} className='p-2 hover:bg-gray-100 rounded-full transition-colors'>
+                            <X className='w-5 h-5 text-gray-400' />
                         </button>
                     </div>
 
@@ -99,7 +99,7 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                 onClick={() => setActiveTab(tab.id as any)}
                                 className={`flex items-center gap-2 px-6 py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === tab.id
                                     ? 'border-[#2048FF] text-[#2048FF]'
-                                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                    : 'border-transparent text-gray-400 hover:text-gray-600'
                                     }`}
                             >
                                 <tab.icon size={16} />
@@ -114,12 +114,12 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                         {activeTab === 'info' && (
                             <div className='grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300'>
                                 {EMOJI_SCALE.map((item, idx) => (
-                                    <div key={idx} className='flex items-center gap-4 p-4 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] hover:bg-[var(--card-bg)] hover:shadow-md transition-all'>
+                                    <div key={idx} className='flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:shadow-md transition-all'>
                                         <div className='text-4xl filter drop-shadow-sm'>{item.emoji}</div>
                                         <div>
-                                            <h4 className='font-bold text-[var(--text-primary)] text-lg'>{item.label}</h4>
+                                            <h4 className='font-bold text-[#0A1635] text-lg'>{item.label}</h4>
                                             <p className='text-xs font-bold text-[#2048FF] uppercase tracking-wider mb-1'>{item.range}</p>
-                                            <p className='text-sm text-[var(--text-secondary)]'>{item.desc}</p>
+                                            <p className='text-sm text-gray-500'>{item.desc}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -142,15 +142,15 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                     <div className='space-y-4'>
                                         {/* Podium Top 3 Highlight could go here, but simple list for now */}
                                         {stats.map((stat, idx) => (
-                                            <div key={idx} className='flex items-center p-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] hover:shadow-md transition-all'>
+                                            <div key={idx} className='flex items-center p-4 rounded-xl border border-gray-100 bg-white hover:shadow-md transition-all'>
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black mr-4 ${idx === 0 ? 'bg-amber-100 text-amber-600' :
                                                     idx === 1 ? 'bg-gray-100 text-gray-600' :
-                                                        idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-[var(--hover-bg)] text-[var(--text-secondary)]'
+                                                        idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-gray-50 text-gray-400'
                                                     }`}>
                                                     {idx + 1}
                                                 </div>
                                                 <div className='flex-1'>
-                                                    <h3 className='font-bold text-[var(--text-primary)] text-lg'>{stat.name}</h3>
+                                                    <h3 className='font-bold text-[#0A1635] text-lg'>{stat.name}</h3>
                                                 </div>
                                                 <div className='flex gap-4 items-center'>
                                                     {stat.gold > 0 && (
@@ -182,7 +182,7 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                         {/* History Tab */}
                         {activeTab === 'history' && (
                             <div className='animate-in fade-in duration-300 space-y-6'>
-                                <div className='flex justify-end sticky top-0 bg-[var(--card-bg)] z-10 py-2'>
+                                <div className='flex justify-end sticky top-0 bg-white z-10 py-2'>
                                     <button
                                         onClick={handleSync}
                                         disabled={syncing}
@@ -218,16 +218,16 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                                 const top3 = runners.slice(0, 3)
 
                                                 return (
-                                                    <div key={period} className='border border-[var(--card-border)] rounded-2xl overflow-hidden bg-[var(--card-bg)] shadow-sm hover:shadow-md transition-shadow'>
-                                                        <div className='bg-[var(--hover-bg)] px-6 py-3 border-b border-[var(--card-border)] flex justify-between items-center'>
-                                                            <h4 className='font-black text-[var(--text-primary)] capitalize text-lg tracking-tight'>{monthName}</h4>
-                                                            <span className='text-xs font-bold text-[var(--text-secondary)] bg-[var(--card-bg)] px-2 py-1 rounded-md border border-[var(--card-border)]'>
+                                                    <div key={period} className='border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow'>
+                                                        <div className='bg-gradient-to-r from-gray-50 to-white px-6 py-3 border-b border-gray-100 flex justify-between items-center'>
+                                                            <h4 className='font-black text-[#0A1635] capitalize text-lg tracking-tight'>{monthName}</h4>
+                                                            <span className='text-xs font-bold text-gray-400 bg-white px-2 py-1 rounded-md border'>
                                                                 {runners.length} Participantes
                                                             </span>
                                                         </div>
-                                                        <div className='divide-y divide-[var(--card-border)]'>
+                                                        <div className='divide-y divide-gray-50'>
                                                             {top3.map((runner: any, idx: number) => (
-                                                                <div key={idx} className='px-6 py-4 flex items-center justify-between hover:bg-[var(--hover-bg)] transition-colors'>
+                                                                <div key={idx} className='px-6 py-4 flex items-center justify-between hover:bg-blue-50/30 transition-colors'>
                                                                     <div className='flex items-center gap-4'>
                                                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-sm border
                                                                         ${idx === 0 ? 'bg-yellow-100 border-yellow-200 text-yellow-700' :
@@ -236,8 +236,8 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                                                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
                                                                         </div>
                                                                         <div>
-                                                                            <span className='text-sm font-bold text-[var(--text-primary)] block'>{runner.name}</span>
-                                                                            <span className='text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider'>
+                                                                            <span className='text-sm font-bold text-[#0A1635] block'>{runner.name}</span>
+                                                                            <span className='text-[10px] text-gray-400 font-bold uppercase tracking-wider'>
                                                                                 {idx === 0 ? '1er Lugar' : idx === 1 ? '2do Lugar' : '3er Lugar'}
                                                                             </span>
                                                                         </div>

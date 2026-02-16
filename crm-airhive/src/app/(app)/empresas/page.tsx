@@ -255,17 +255,27 @@ export default function EmpresasPage() {
             <div className='max-w-7xl mx-auto space-y-10 w-full'>
                 {/* External Header - Page Level */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                    <div className='flex items-center gap-6'>
-                        <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                            <Building2 size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
-                        </div>
-                        <div>
-                            <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                Catálogo de Empresas
-                            </h1>
-                            <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                Gestión centralizada de cuentas y relaciones corporativas.
-                            </p>
+                    <div className='flex items-center gap-8'>
+                        <Link
+                            href='/clientes'
+                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            title='Volver a Leads'
+                        >
+                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
+                        </Link>
+                        <div className='flex items-center gap-6'>
+                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
+                                <Building2 size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            </div>
+                            <div>
+                                <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                                    Catálogo de Empresas
+                                </h1>
+                                <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                    Gestión centralizada de cuentas y relaciones corporativas.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -284,11 +294,14 @@ export default function EmpresasPage() {
                             >
                                 <div className='flex items-center gap-2'>
                                     {isEditingMode ? (
-                                        <span>Bloquear Edición</span>
+                                        <span>Terminar Edición</span>
                                     ) : (
                                         <>
                                             <span>Editar Catálogo</span>
-                                            <Pencil size={12} strokeWidth={2.5} className="opacity-80" />
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
                                         </>
                                     )}
                                 </div>
@@ -313,7 +326,7 @@ export default function EmpresasPage() {
                                 setModalCompanyData(null)
                                 setIsCompanyModalOpen(true)
                             }}
-                            className='px-6 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
                         >
                             + Nueva Empresa
                         </button>
@@ -325,7 +338,7 @@ export default function EmpresasPage() {
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-primary)' }}>
+                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
                                     <TableIcon size={24} />
                                 </div>
                                 <div>
@@ -336,7 +349,7 @@ export default function EmpresasPage() {
 
                             <div className='flex items-center gap-3'>
                                 <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter' style={{ color: 'var(--input-focus)' }}>{filteredCompanies.length}</span>
+                                    <span className='text-2xl font-black tracking-tighter text-blue-600 dark:text-blue-400'>{filteredCompanies.length}</span>
                                     <div className='flex flex-col'>
                                         <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
                                         <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Encontrados</span>
@@ -345,9 +358,8 @@ export default function EmpresasPage() {
                             </div>
                         </div>
 
-                        <div className='flex flex-col gap-4'>
-                            {/* Row 1: Search Bar (Full Width) */}
-                            <div className='relative w-full'>
+                        <div className='flex flex-col lg:flex-row items-center gap-4'>
+                            <div className='relative flex-1 w-full'>
                                 <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
                                 <input
                                     type='text'
@@ -359,37 +371,36 @@ export default function EmpresasPage() {
                                 />
                             </div>
 
-                            {/* Row 2: Filters Grouped */}
-                            {/* Row 2: Filters & Sort - Standardized Layout */}
-                            <div className='flex flex-col lg:flex-row items-center justify-between gap-4 w-full'>
-                                {/* Left: Filter Pill */}
-                                <div className='flex items-center gap-2 p-1 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl shadow-sm overflow-x-auto max-w-full'>
+                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
+                                <div className='flex flex-1 lg:flex-none gap-2'>
                                     <select
                                         value={filterIndustry}
                                         onChange={(e) => setFilterIndustry(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
                                     >
                                         <option value="All">Industria: Todas</option>
                                         {uniqueIndustries.map(ind => (
                                             <option key={ind} value={ind!}>{ind}</option>
                                         ))}
                                     </select>
-                                    <div className='w-px h-5 bg-[var(--card-border)] shrink-0' />
+
                                     <select
                                         value={filterLocation}
                                         onChange={(e) => setFilterLocation(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
                                     >
                                         <option value="All">Ubicación: Todas</option>
                                         {uniqueLocations.map(loc => (
                                             <option key={loc} value={loc}>{loc}</option>
                                         ))}
                                     </select>
-                                    <div className='w-px h-5 bg-[var(--card-border)] shrink-0' />
+                                </div>
+
+                                <div className='flex flex-1 lg:flex-none gap-2'>
                                     <select
                                         value={filterSize}
                                         onChange={(e) => setFilterSize(e.target.value)}
-                                        className='min-w-[120px] bg-transparent border-none px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                        className='flex-1 lg:min-w-[140px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
                                     >
                                         <option value="All">Tamaño: Todo</option>
                                         <option value="1">Micro</option>
@@ -398,35 +409,16 @@ export default function EmpresasPage() {
                                         <option value="4">Grande</option>
                                         <option value="5">Corporativo</option>
                                     </select>
-                                </div>
 
-                                {/* Right: Sort & Actions */}
-                                <div className='flex items-center gap-2 shrink-0'>
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
-                                        className='min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95 shadow-sm'
+                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
                                     >
                                         <option value="alphabetical">Orden: Nombre</option>
                                         <option value="antiquity">Orden: Antigüedad</option>
                                         <option value="projectAntiquity">Orden: Proyectos</option>
                                     </select>
-
-                                    {(filterSearch || filterIndustry !== 'All' || filterSize !== 'All' || filterLocation !== 'All' || sortBy !== 'alphabetical') && (
-                                        <button
-                                            onClick={() => {
-                                                setFilterSearch('')
-                                                setFilterIndustry('All')
-                                                setFilterSize('All')
-                                                setFilterLocation('All')
-                                                setSortBy('alphabetical')
-                                            }}
-                                            className='p-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm group'
-                                            title='Limpiar Filtros'
-                                        >
-                                            <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         </div>
