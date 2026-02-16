@@ -41,7 +41,8 @@ export async function getAdminCorrelationData() {
             { data: clients, error: clientError },
             { data: industries, error: indError },
             { data: companies, error: compError },
-            { data: taskHistory, error: taskError }
+            { data: taskHistory, error: taskError },
+            { data: preLeads, error: preError }
         ] = await Promise.all([
             supabaseAdmin.from('profiles').select('id, full_name') as any,
             supabaseAdmin.from('employee_profiles').select('*') as any,
@@ -51,7 +52,8 @@ export async function getAdminCorrelationData() {
             supabaseAdmin.from('clientes').select('*') as any,
             supabaseAdmin.from('industrias').select('*') as any,
             supabaseAdmin.from('empresas').select('*') as any,
-            supabaseAdmin.from('historial_tareas').select('user_id') as any
+            supabaseAdmin.from('historial_tareas').select('user_id') as any,
+            supabaseAdmin.from('pre_leads').select('*') as any
         ])
 
         if (profError) throw profError
@@ -63,6 +65,7 @@ export async function getAdminCorrelationData() {
         if (indError) throw indError
         if (compError) throw compError
         if (taskError) throw taskError
+        if (preError) throw preError
 
         // 3. Aggregate Performance by User
         const performanceMap: Record<string, {
@@ -177,6 +180,15 @@ export async function getAdminCorrelationData() {
             // Task Completion Metric
             const completedTasks = (taskHistory || []).filter((t: any) => t.user_id === p.id).length
 
+            // New Metrics: Pre-Leads & Conversions
+            const userPreLeads = (preLeads || []).filter((pl: any) => pl.vendedor_id === p.id)
+            const preLeadsCount = userPreLeads.length
+            const convertedPreLeads = userPreLeads.filter((pl: any) => pl.is_converted).length
+            const preLeadConversionRate = preLeadsCount > 0 ? (convertedPreLeads / preLeadsCount) * 100 : 0
+            const companiesCreated = (companies || []).filter((comp: any) => comp.owner_id === p.id).length
+
+            const avgPreLeadsPerMonth = tenureMonths > 0 ? preLeadsCount / tenureMonths : preLeadsCount
+
             return {
                 userId: p.id,
                 name: p.full_name || 'Desconocido',
@@ -195,7 +207,11 @@ export async function getAdminCorrelationData() {
                 topIndustry,
                 physicalCloseRate,
                 avgResponseTimeHours,
-                lastRaceAmount: perf.salesHistory.length > 0 ? perf.salesHistory[perf.salesHistory.length - 1].amount : 0
+                lastRaceAmount: perf.salesHistory.length > 0 ? perf.salesHistory[perf.salesHistory.length - 1].amount : 0,
+                preLeadsCount,
+                preLeadConversionRate,
+                companiesCreated,
+                avgPreLeadsPerMonth
             }
         })
 

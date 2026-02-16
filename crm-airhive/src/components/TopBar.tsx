@@ -5,13 +5,6 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 
-const links = [
-    { href: '/home', label: 'Home' },
-    { href: '/clientes', label: 'Leads' },
-    { href: '/tareas', label: 'Tareas' },
-    { href: '/calendario', label: 'Calendario' }
-]
-
 export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
@@ -44,6 +37,22 @@ export default function TopBar() {
                                 'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
                                 'transition-all duration-300 ease-out',
                                 pathname === '/home' ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                'group-hover:w-full group-hover:opacity-100'
+                            ].join(' ')}
+                        />
+                    </Link>
+
+                    {/* EQUIPO */}
+                    <Link
+                        href='/usuarios'
+                        className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
+                    >
+                        Equipo
+                        <span
+                            className={[
+                                'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                'transition-all duration-300 ease-out',
+                                pathname === '/usuarios' ? 'w-full opacity-100' : 'w-0 opacity-0',
                                 'group-hover:w-full group-hover:opacity-100'
                             ].join(' ')}
                         />

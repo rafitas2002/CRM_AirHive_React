@@ -23,11 +23,11 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     const sortedSellers = [...sellers].sort((a, b) => b.value - a.value)
 
     return (
-        <div className='bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8 relative'>
+        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex justify-between items-end'>
                 <div>
                     <div className='flex items-center gap-3'>
-                        <h3 className='text-xl font-black text-[#0A1635] tracking-tight flex items-center gap-2'>
+                        <h3 className='text-xl font-black tracking-tight flex items-center gap-2' style={{ color: 'var(--text-primary)' }}>
                             <Trophy className='w-5 h-5 text-amber-500' />
                             Carrera de Cierre
                         </h3>
@@ -39,7 +39,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                             <Info size={14} />
                         </button>
                     </div>
-                    <p className='text-xs text-gray-400 font-medium mt-1 uppercase tracking-widest'>Valor en Negociación vs Meta de Equipo</p>
+                    <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Valor en Negociación vs Meta de Equipo</p>
                 </div>
                 <div className='text-right'>
                     <p className='text-xs font-black text-[#1700AC] uppercase tracking-tighter'>Meta: ${maxGoal.toLocaleString()}</p>
@@ -61,21 +61,21 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                         <div key={seller.name} className='relative group'>
                             <div className='flex justify-between items-center mb-2'>
                                 <div className='flex items-center gap-2'>
-                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${index === 0 ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-400'}`}>
+                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${index === 0 ? 'bg-amber-500/20 text-amber-600' : 'text-[var(--text-secondary)]'}`} style={{ background: index === 0 ? undefined : 'var(--hover-bg)' }}>
                                         {index + 1}
                                     </span>
-                                    <span className='text-sm font-bold text-[#0A1635]'>{seller.name}</span>
+                                    <span className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{seller.name}</span>
                                 </div>
                                 <div className='flex items-center gap-3'>
                                     <div className='text-right'>
-                                        <p className='text-xs font-black text-[#0A1635]'>${seller.value.toLocaleString()}</p>
-                                        <p className='text-[8px] text-gray-400 font-bold uppercase'>Conf: {seller.reliability.toFixed(1)}%</p>
+                                        <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>${seller.value.toLocaleString()}</p>
+                                        <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>Conf: {seller.reliability.toFixed(1)}%</p>
                                     </div>
                                 </div>
                             </div>
 
                             <div className='relative h-10 flex items-end'>
-                                <div className='h-6 w-full bg-gray-50 rounded-full overflow-hidden relative border border-gray-100 p-1'>
+                                <div className='h-6 w-full rounded-full overflow-hidden relative border p-1' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, progress)}%` }}
@@ -129,7 +129,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                 })}
             </div>
 
-            <div className='flex justify-between text-[8px] font-black text-gray-400 uppercase tracking-[0.2em] pt-4 border-t border-gray-50'>
+            <div className='flex justify-between text-[8px] font-black uppercase tracking-[0.2em] pt-4 border-t' style={{ color: 'var(--text-secondary)', borderColor: 'var(--card-border)', opacity: 0.5 }}>
                 <span>Salida</span>
                 <span>25%</span>
                 <span>50%</span>

@@ -120,13 +120,13 @@ export default function UpcomingMeetingsWidget() {
                                         {meeting.meeting_type === 'llamada' && <span>📞</span>}
                                         {meeting.meeting_type === 'presencial' && <span>🏢</span>}
                                     </div>
-                                    <p className='font-bold text-sm text-gray-900 truncate'>
+                                    <p className='font-bold text-sm truncate' style={{ color: 'var(--text-primary)' }}>
                                         {meeting.title}
                                     </p>
-                                    <p className='text-xs text-gray-600 truncate'>
+                                    <p className='text-xs truncate' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
                                         {meeting.empresa}
                                     </p>
-                                    <p className='text-xs text-gray-500 mt-1'>
+                                    <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
                                         {startTime.toLocaleDateString('es-MX', {
                                             weekday: 'short',
                                             month: 'short',

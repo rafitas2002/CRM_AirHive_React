@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import TaskModal from '@/components/TaskModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { Plus, CheckSquare, Calendar, Clock, Building2, User, Pencil, Trash2, CheckCircle2, RotateCw, ListTodo, AlertCircle } from 'lucide-react'
+import { Plus, CheckSquare, Calendar, Clock, Building2, User, Pencil, Trash2, CheckCircle2, RotateCw, ListTodo, AlertCircle, Search } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
 interface Task {
@@ -33,6 +33,7 @@ export default function TareasPage() {
     const [currentTask, setCurrentTask] = useState<Task | null>(null)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [deleteId, setDeleteId] = useState<number | null>(null)
+    const [search, setSearch] = useState('')
 
     const fetchTasks = async () => {
         const isInitial = tasks.length === 0
@@ -127,7 +128,18 @@ export default function TareasPage() {
             'Completadas': []
         }
 
-        tasks.forEach(task => {
+        const filtered = tasks.filter(task => {
+            if (!search) return true
+            const query = search.toLowerCase()
+            return (
+                task.titulo.toLowerCase().includes(query) ||
+                task.descripcion?.toLowerCase().includes(query) ||
+                task.cliente_nombre?.toLowerCase().includes(query) ||
+                task.cliente_empresa?.toLowerCase().includes(query)
+            )
+        })
+
+        filtered.forEach(task => {
             if (task.estado === 'completada' || task.estado === 'cancelada') {
                 groups['Completadas'].push(task)
                 return
@@ -143,7 +155,7 @@ export default function TareasPage() {
         })
 
         return groups
-    }, [tasks])
+    }, [tasks, search])
 
     return (
         <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
@@ -189,6 +201,21 @@ export default function TareasPage() {
                             Nueva Tarea
                         </button>
                     </div>
+                </div>
+
+                {/* Search Bar Standardized */}
+                <div className='relative w-full max-w-2xl mx-auto'>
+                    <div className='absolute left-5 top-1/2 -translate-y-1/2 text-gray-400'>
+                        <Search size={20} />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar por título, cliente, empresa o descripción..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className='w-full pl-14 pr-6 py-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-[22px] text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
+                        style={{ color: 'var(--text-primary)' }}
+                    />
                 </div>
 
                 {/* Dashboard Area */}
