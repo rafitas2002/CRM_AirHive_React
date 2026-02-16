@@ -169,15 +169,19 @@ export default function TaskModal({
         }
 
         if (mode === 'edit' && changesDetected.length > 0) {
-            const { error: logError } = await supabase.from('historial_modificaciones_tareas').insert({
-                tarea_id: initialData.id,
-                user_id: (await supabase.auth.getUser()).data.user?.id,
-                campo_modificado: changesDetected.join(', '),
-                valor_anterior: changesDetected.includes('Fecha') ? initialData.fecha_vencimiento : initialData.tipo_actividad,
-                valor_nuevo: changesDetected.includes('Fecha') ? finalData.fecha_vencimiento : finalData.tipo_actividad,
-                motivo: changeReason,
-                origen_cambio: changeOrigin || 'Otro'
-            })
+            const { data: { user } } = await supabase.auth.getUser()
+
+            const { error: logError } = await (supabase
+                .from('historial_modificaciones_tareas') as any)
+                .insert({
+                    tarea_id: initialData.id,
+                    user_id: user?.id || null,
+                    campo_modificado: changesDetected.join(', '),
+                    valor_anterior: String(changesDetected.includes('Fecha') ? initialData.fecha_vencimiento : initialData.tipo_actividad),
+                    valor_nuevo: String(changesDetected.includes('Fecha') ? finalData.fecha_vencimiento : finalData.tipo_actividad),
+                    motivo: changeReason,
+                    origen_cambio: changeOrigin || 'Otro'
+                })
             if (logError) console.error('Error log modification:', logError)
         }
 
