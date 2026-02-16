@@ -412,6 +412,9 @@ export default function CorrelacionesPage() {
                                         <th className='px-8 py-5'>Género</th>
                                         <th className='px-8 py-5'>Edad</th>
                                         <th className='px-8 py-5'>Antigüedad</th>
+                                        <th className='px-8 py-5 text-center'>Pre-Leads</th>
+                                        <th className='px-8 py-5 text-center'>% Conv</th>
+                                        <th className='px-8 py-5 text-center'>Empresas</th>
                                         <th className='px-8 py-5'>Ventas Totales</th>
                                         <th className='px-8 py-5'>Crecimiento</th>
                                         <th className='px-8 py-5 text-center'>Medallas</th>
@@ -443,6 +446,20 @@ export default function CorrelacionesPage() {
                                                     <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>{item.tenureMonths} meses</span>
                                                     <span className='text-[10px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>En AirHive</span>
                                                 </div>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <div className='flex flex-col'>
+                                                    <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>{item.preLeadsCount}</span>
+                                                    <span className='text-[10px] font-bold opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                                        {item.avgPreLeadsPerMonth.toFixed(1)}/mes
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className='px-8 py-5 text-center font-black text-sm' style={{ color: item.preLeadConversionRate > 20 ? '#10b981' : 'var(--text-primary)' }}>
+                                                {item.preLeadConversionRate.toFixed(1)}%
+                                            </td>
+                                            <td className='px-8 py-5 text-center font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                {item.companiesCreated}
                                             </td>
                                             <td className='px-8 py-5 font-black text-sm' style={{ color: 'var(--text-primary)' }}>
                                                 ${item.totalSales.toLocaleString()}

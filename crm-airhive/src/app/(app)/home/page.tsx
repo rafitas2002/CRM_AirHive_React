@@ -214,21 +214,21 @@ function AdminDashboardView({ username }: { username: string }) {
                         />
 
                         {/* Top Performance Table Redesigned */}
-                        <div className='p-8 rounded-[40px] border shadow-xl' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                            <div className='flex justify-between items-center mb-8 pb-4 border-b' style={{ borderColor: 'var(--card-border)' }}>
-                                <h3 className='font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
+                        <div className='rounded-[40px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                            <div className='flex justify-between items-center px-8 py-5 border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                                <h3 className='font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
                                     🏆 Ranking de Confiabilidad
                                 </h3>
                                 <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
                             </div>
-                            <div className='grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6'>
+                            <div className='p-4 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4'>
                                 {stats.sellers.slice(0, 6).map((s, i) => (
                                     <div key={s.name} className='flex items-center justify-between p-4 rounded-2xl transition-all group' style={{ background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                                         <div className='flex items-center gap-4'>
-                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${i === 0 ? 'bg-amber-100 text-amber-600 border border-amber-200' :
-                                                i === 1 ? 'bg-slate-100 text-slate-500 border border-slate-200' :
-                                                    i === 2 ? 'bg-orange-100 text-orange-600 border border-orange-200' :
-                                                        'bg-gray-50 text-gray-400 border border-gray-100'
+                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${i === 0 ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' :
+                                                i === 1 ? 'bg-slate-500/20 text-slate-500 border border-slate-500/30' :
+                                                    i === 2 ? 'bg-orange-500/20 text-orange-600 border border-orange-500/30' :
+                                                        'bg-gray-500/10 text-gray-500 border border-gray-500/20'
                                                 }`}>
                                                 {i + 1}
                                             </div>

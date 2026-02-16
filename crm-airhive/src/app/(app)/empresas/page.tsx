@@ -256,17 +256,9 @@ export default function EmpresasPage() {
                 {/* External Header - Page Level */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
-                        <Link
-                            href='/clientes'
-                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                            title='Volver a Leads'
-                        >
-                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
-                        </Link>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <Building2 size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                                <Building2 size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
