@@ -55,8 +55,9 @@ export default function TareasPage() {
             }))
 
             setTasks(transformed)
-        } catch (error) {
-            console.error('Error fetching tasks:', error)
+        } catch (error: any) {
+            console.error('Error fetching tasks:', JSON.stringify(error, null, 2))
+            if (error) alert(`Error cargando tareas: ${error.message || 'Error desconocido'}`)
         } finally {
             if (isInitial) setLoading(false)
         }
@@ -145,14 +146,14 @@ export default function TareasPage() {
     }, [tasks])
 
     return (
-        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'var(--background)' }}>
+        <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto space-y-10 w-full'>
                 {/* External Header - Page Level */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <CheckSquare size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                                <CheckSquare size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>

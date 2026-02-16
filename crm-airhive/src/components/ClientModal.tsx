@@ -229,9 +229,9 @@ export default function ClientModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300'>
+        <div className='fixed inset-0 z-[100] flex items-start justify-center pt-16 pb-8 px-4 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300 overflow-y-auto'>
             <div
-                className='rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300 border'
+                className='rounded-[32px] w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300 border'
                 style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
             >
                 {/* Header Style match with Pre-Lead */}

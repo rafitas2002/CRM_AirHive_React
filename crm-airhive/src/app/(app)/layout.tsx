@@ -33,7 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <ThemeProvider>
             <GlobalMeetingHandler />
             <EventTracker />
-            <div className='h-screen flex flex-col relative overflow-hidden' style={{ background: 'transparent' }}>
+            <div className='h-screen flex flex-col relative overflow-hidden' style={{ background: 'var(--background)' }}>
                 {/* Decorative background identity layer */}
                 <VisualIdentityBackground />
                 <TopBar />

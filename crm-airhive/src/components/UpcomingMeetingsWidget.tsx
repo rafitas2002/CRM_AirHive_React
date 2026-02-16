@@ -61,33 +61,33 @@ export default function UpcomingMeetingsWidget() {
 
     if (loading) {
         return (
-            <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>
+            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas
                 </h2>
-                <p className='text-gray-400 text-sm animate-pulse'>Cargando...</p>
+                <p className='text-sm animate-pulse' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Cargando...</p>
             </div>
         )
     }
 
     if (meetings.length === 0) {
         return (
-            <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
-                <h2 className='text-lg font-bold text-[#0F2A44] mb-4'>
+            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas
                 </h2>
                 <div className='text-center py-6'>
-                    <p className='text-gray-500 text-sm mb-2'>No tienes juntas próximas</p>
-                    <p className='text-gray-400 text-xs'>Agenda juntas desde la ficha de cada lead</p>
+                    <p className='text-sm mb-2' style={{ color: 'var(--text-secondary)' }}>No tienes juntas próximas</p>
+                    <p className='text-xs' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Agenda juntas desde la ficha de cada lead</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className='bg-white p-6 rounded-2xl shadow-sm border border-gray-200'>
+        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex items-center justify-between mb-4'>
-                <h2 className='text-lg font-bold text-[#0F2A44]'>
+                <h2 className='text-lg font-bold' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas
                 </h2>
                 <Link
@@ -179,9 +179,9 @@ export default function UpcomingMeetingsWidget() {
             </div>
 
             {/* Summary */}
-            <div className='mt-4 pt-4 border-t border-gray-200'>
+            <div className='mt-4 pt-4 border-t' style={{ borderColor: 'var(--card-border)' }}>
                 <div className='flex items-center justify-between text-xs'>
-                    <span className='text-gray-600'>
+                    <span style={{ color: 'var(--text-secondary)' }}>
                         Mostrando {meetings.length} próximas juntas
                     </span>
                     {meetings.some(m => m.urgencyLevel === 'urgent' || m.urgencyLevel === 'overdue') && (
