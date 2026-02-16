@@ -158,36 +158,36 @@ function AdminDashboardView({ username }: { username: string }) {
 
                 {/* KPI Bar */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='bg-purple-50 p-8 rounded-[32px] border-2 border-purple-100 shadow-sm transition-all hover:shadow-md group'>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
-                            <label className='text-[10px] font-black uppercase tracking-widest text-purple-600'>Forecast Real (Adjusted)</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Forecast Real (Adjusted)</label>
                             <Zap className='w-5 h-5 text-purple-500 group-hover:animate-pulse' />
                         </div>
-                        <p className='text-4xl font-black text-purple-900'>
+                        <p className='text-4xl font-black' style={{ color: 'var(--text-primary)' }}>
                             ${stats.adjustedForecast.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                         </p>
-                        <p className='text-[10px] text-purple-400 font-bold mt-2 uppercase tracking-tight'>Ponderado por score histórico</p>
+                        <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Ponderado por score histórico</p>
                     </div>
 
-                    <div className='bg-amber-50 p-8 rounded-[32px] border-2 border-amber-100 shadow-sm transition-all hover:shadow-md group'>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
-                            <label className='text-[10px] font-black uppercase tracking-widest text-amber-600'>Calidad de Datos</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Calidad de Datos</label>
                             <AlertCircle className='w-5 h-5 text-amber-500 group-hover:shake' />
                         </div>
-                        <p className='text-4xl font-black text-amber-900'>{stats.dataWarnings}</p>
-                        <p className='text-[10px] text-amber-400 font-bold mt-2 uppercase tracking-tight'>Leads sin valor estimado</p>
+                        <p className='text-4xl font-black' style={{ color: 'var(--text-primary)' }}>{stats.dataWarnings}</p>
+                        <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Leads sin valor estimado</p>
                     </div>
 
-                    <div className='bg-emerald-50 p-8 rounded-[32px] border-2 border-emerald-100 shadow-sm transition-all hover:shadow-md group'>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
-                            <label className='text-[10px] font-black uppercase tracking-widest text-emerald-600'>Progreso Semanal</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Progreso Semanal</label>
                             <Target className='w-5 h-5 text-emerald-500' />
                         </div>
                         <div className='flex items-end gap-2'>
-                            <p className='text-4xl font-black text-emerald-900'>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
+                            <p className='text-4xl font-black' style={{ color: 'var(--text-primary)' }}>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
                             <p className='text-xs font-bold text-emerald-600 mb-2'>de la meta</p>
                         </div>
-                        <div className='w-full h-2 bg-emerald-200/50 rounded-full mt-3 overflow-hidden'>
+                        <div className='w-full h-2 rounded-full mt-3 overflow-hidden' style={{ background: 'var(--hover-bg)' }}>
                             <div className='h-full bg-emerald-500' style={{ width: `${Math.min(100, (stats.adjustedForecast / teamGoal * 100))}%` }} />
                         </div>
                     </div>
@@ -214,16 +214,16 @@ function AdminDashboardView({ username }: { username: string }) {
                         />
 
                         {/* Top Performance Table Redesigned */}
-                        <div className='bg-white p-8 rounded-[40px] border border-gray-100 shadow-xl'>
-                            <div className='flex justify-between items-center mb-8 pb-4 border-b border-gray-50'>
-                                <h3 className='font-black text-xs uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2'>
+                        <div className='p-8 rounded-[40px] border shadow-xl' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                            <div className='flex justify-between items-center mb-8 pb-4 border-b' style={{ borderColor: 'var(--card-border)' }}>
+                                <h3 className='font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
                                     🏆 Ranking de Confiabilidad
                                 </h3>
-                                <Users className='w-4 h-4 text-gray-300' />
+                                <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
                             </div>
                             <div className='grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6'>
                                 {stats.sellers.slice(0, 6).map((s, i) => (
-                                    <div key={s.name} className='flex items-center justify-between p-4 rounded-2xl hover:bg-blue-50/50 transition-all group'>
+                                    <div key={s.name} className='flex items-center justify-between p-4 rounded-2xl transition-all group' style={{ background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                                         <div className='flex items-center gap-4'>
                                             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${i === 0 ? 'bg-amber-100 text-amber-600 border border-amber-200' :
                                                 i === 1 ? 'bg-slate-100 text-slate-500 border border-slate-200' :
@@ -233,9 +233,9 @@ function AdminDashboardView({ username }: { username: string }) {
                                                 {i + 1}
                                             </div>
                                             <div>
-                                                <p className='font-black text-[#0A1635] text-sm group-hover:text-[#1700AC] transition-colors'>{s.name}</p>
+                                                <p className='font-black text-sm group-hover:text-[#1700AC] transition-colors' style={{ color: 'var(--text-primary)' }}>{s.name}</p>
                                                 <div className='flex items-center gap-2'>
-                                                    <div className='w-12 h-1 bg-gray-100 rounded-full overflow-hidden'>
+                                                    <div className='w-12 h-1 rounded-full overflow-hidden' style={{ background: 'var(--hover-bg)' }}>
                                                         <div className='h-full bg-blue-500' style={{ width: `${s.score}%` }} />
                                                     </div>
                                                     <span className='text-[9px] font-black text-blue-500'>{s.score.toFixed(0)}% Score</span>
@@ -243,8 +243,8 @@ function AdminDashboardView({ username }: { username: string }) {
                                             </div>
                                         </div>
                                         <div className='text-right'>
-                                            <p className='text-xs font-black text-[#0A1635]'>${(s.negotiationPipeline * (s.score / 100)).toLocaleString()}</p>
-                                            <p className='text-[8px] font-bold uppercase text-gray-400'>Forecast Adj</p>
+                                            <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>${(s.negotiationPipeline * (s.score / 100)).toLocaleString()}</p>
+                                            <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Forecast Adj</p>
                                         </div>
                                     </div>
                                 ))}
@@ -365,40 +365,44 @@ function SellerHomeView({ username }: { username: string }) {
                             <div className='grid grid-cols-2 gap-4'>
                                 <a
                                     href='/clientes'
-                                    className='p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors border-2 border-blue-200'
+                                    className='p-4 rounded-xl transition-all border-2 hover:scale-105'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >
-                                    <p className='font-bold text-blue-900 mb-1'>Ver Leads</p>
-                                    <p className='text-xs text-blue-700'>Gestiona tu pipeline</p>
+                                    <p className='font-bold mb-1 text-blue-600'>📊 Ver Leads</p>
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Gestiona tu pipeline</p>
                                 </a>
                                 <a
                                     href='/calendario'
-                                    className='p-4 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors border-2 border-purple-200'
+                                    className='p-4 rounded-xl transition-all border-2 hover:scale-105'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >
-                                    <p className='font-bold text-purple-900 mb-1'>Calendario</p>
-                                    <p className='text-xs text-purple-700'>Ver todas las juntas</p>
+                                    <p className='font-bold mb-1 text-purple-600'>📅 Calendario</p>
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Ver todas las juntas</p>
                                 </a>
                                 <a
                                     href='/empresas'
-                                    className='p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors border-2 border-emerald-200'
+                                    className='p-4 rounded-xl transition-all border-2 hover:scale-105'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >
-                                    <p className='font-bold text-emerald-900 mb-1'>Empresas</p>
-                                    <p className='text-xs text-emerald-700'>Gestionar cuentas</p>
+                                    <p className='font-bold mb-1 text-emerald-600'>🏢 Empresas</p>
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Gestionar cuentas</p>
                                 </a>
                                 <a
                                     href='/admin/forecast'
-                                    className='p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors border-2 border-amber-200'
+                                    className='p-4 rounded-xl transition-all border-2 hover:scale-105'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >
-                                    <p className='font-bold text-amber-900 mb-1'>Mi Score</p>
-                                    <p className='text-xs text-amber-700'>Ver confiabilidad</p>
+                                    <p className='font-bold mb-1 text-amber-600'>🎯 Mi Score</p>
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Ver confiabilidad</p>
                                 </a>
                             </div>
                         </div>
 
-                        <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl border-2 border-blue-200'>
-                            <h3 className='text-lg font-bold text-[#0F2A44] mb-2'>
+                        <div className='p-6 rounded-2xl border-2' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                            <h3 className='text-lg font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
                                 💡 Tip del Día
                             </h3>
-                            <p className='text-sm text-gray-700'>
+                            <p className='text-sm' style={{ color: 'var(--text-secondary)' }}>
                                 Recuerda actualizar la probabilidad de cierre de tus leads en <strong>Negociación</strong> antes de cada junta.
                                 El sistema congelará automáticamente el pronóstico al inicio de la reunión.
                             </p>
