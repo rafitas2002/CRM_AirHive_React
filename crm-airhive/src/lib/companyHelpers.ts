@@ -52,14 +52,18 @@ export async function createCompanyFromPreLead(
         industria: preLead.industria || 'Sin clasificar',
         industria_id: preLead.industria_id || null,
         tamano: preLead.tamano || 1,
-        sitio_web: preLead.website || null,
+        website: preLead.website || null,
         logo_url: preLead.logo_url || null
     }
 
     const { data, error } = await (supabase.from('empresas') as any).insert(companyData).select('id, nombre').single()
 
     if (error) {
-        console.error('Error creating company:', error)
+        console.error('Error in createCompanyFromPreLead [Full Object]:', error)
+        console.error('Error Message:', error.message)
+        console.error('Error Code:', error.code)
+        console.error('Error Details:', error.details)
+        console.error('Data attempted to insert:', companyData)
         return null
     }
 

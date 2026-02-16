@@ -143,7 +143,8 @@ export default function PreLeadsPage() {
                 notas: data.notas,
                 giro_empresa: data.industria || data.giro_empresa || 'Sin clasificar',
                 vendedor_id: auth.user?.id,
-                vendedor_name: auth.profile?.full_name || auth.username
+                vendedor_name: auth.profile?.full_name || auth.username,
+                empresa_id: companyResult.id
             }
 
             if (modalMode === 'create') {
@@ -167,7 +168,13 @@ export default function PreLeadsPage() {
             setIsModalOpen(false)
             fetchPreLeads()
         } catch (error: any) {
-            alert('Error al guardar: ' + error.message)
+            console.error('Error in handleSave Pre-Lead [Full Object]:', error)
+            console.error('Error Message:', error.message)
+            console.error('Error Code:', error.code)
+            console.error('Error Details:', error.details)
+            alert('Error al guardar: ' + (error.message || 'Error desconocido'))
+        } finally {
+            // Any cleanup or final actions can go here if needed
         }
     }
 
@@ -213,8 +220,13 @@ export default function PreLeadsPage() {
 
             if (insertError) throw insertError
 
-            // 2. If conversion, we ignore is_converted for now as column is missing in DB
-            // We can still use fetchPreLeads() which will show updated state if filtered
+            // 2. If conversion, mark the pre-lead as converted
+            if (clientModalMode === 'convert' && sourcePreLead?.id) {
+                await (supabase
+                    .from('pre_leads') as any)
+                    .update({ is_converted: true })
+                    .eq('id', sourcePreLead.id)
+            }
 
             setIsClientModalOpen(false)
             fetchPreLeads()
@@ -293,8 +305,8 @@ export default function PreLeadsPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <Target size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                                <Target size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -348,7 +360,7 @@ export default function PreLeadsPage() {
                         </div>
                         <button
                             onClick={() => { setModalMode('create'); setCurrentPreLead(null); setIsModalOpen(true); }}
-                            className='px-8 py-3 bg-[#8B5CF6] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-purple-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
                         >
                             + Registrar Pre-Lead
                         </button>
@@ -382,14 +394,14 @@ export default function PreLeadsPage() {
 
                         <div className='flex flex-col gap-4'>
                             {/* Row 1: Search Bar (Full Width) */}
-                            <div className='relative w-full'>
-                                <Search className='absolute left-5 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={20} />
+                            <div className='relative flex-1 w-full'>
+                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
                                 <input
                                     type='text'
                                     placeholder='Buscar por empresa, contacto, correos...'
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    className='w-full pl-14 pr-6 py-4 bg-[var(--background)] border border-[var(--card-border)] rounded-[22px] text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-inner'
+                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
                                     style={{ color: 'var(--text-primary)' }}
                                 />
                             </div>
