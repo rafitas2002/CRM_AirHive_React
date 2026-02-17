@@ -10,6 +10,7 @@ import {
     Target,
     AlertCircle,
     Users,
+    Trophy,
     ChevronRight,
     Search,
     Filter,
@@ -252,7 +253,8 @@ function AdminDashboardView({ username }: { username: string }) {
                         <div className='rounded-[40px] border shadow-xl overflow-hidden cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex justify-between items-center px-8 py-5 border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
                                 <h3 className='font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
-                                    🏆 Ranking de Confiabilidad
+                                    <Trophy size={14} strokeWidth={2.2} className='text-amber-500' />
+                                    Ranking de Confiabilidad
                                 </h3>
                                 <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
                             </div>

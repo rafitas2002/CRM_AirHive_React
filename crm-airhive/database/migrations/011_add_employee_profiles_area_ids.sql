@@ -1,0 +1,18 @@
+-- Add support for multi-area assignment per employee profile.
+ALTER TABLE IF EXISTS employee_profiles
+ADD COLUMN IF NOT EXISTS area_ids UUID[] DEFAULT '{}'::UUID[];
+
+-- Backfill existing single-area data.
+UPDATE employee_profiles
+SET area_ids = ARRAY[area_id]::UUID[]
+WHERE area_id IS NOT NULL
+  AND (area_ids IS NULL OR cardinality(area_ids) = 0);
+
+-- Add "Diseño" area to the catalog if it does not exist yet.
+INSERT INTO areas (name, is_active)
+SELECT 'Diseño', true
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM areas
+    WHERE lower(name) IN ('diseño', 'diseno')
+);

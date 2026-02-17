@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Save, Eye, EyeOff, Briefcase, Activity, Brain, Heart, ChevronRight, User } from 'lucide-react'
+import { X, Save, Eye, EyeOff, Briefcase, Activity, ChevronRight, User, Plus, Trash2 } from 'lucide-react'
 import CatalogSelect from './CatalogSelect'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { useAuth } from '@/lib/auth'
@@ -19,6 +19,26 @@ const TABS = [
     { id: 'personal', label: 'Datos Personales', icon: User },     // Educacion, Carrera, Ciudad (Employee)
     { id: 'contract', label: 'Contratación', icon: Activity },    // Contrato, Ingreso (RH)
 ]
+
+function normalizeAreaIds(rawDetails: any): string[] {
+    const raw = rawDetails?.area_ids ?? rawDetails?.areas_ids ?? rawDetails?.areas
+    const areaIds = new Set<string>()
+
+    if (Array.isArray(raw)) {
+        raw.forEach(item => {
+            if (typeof item === 'string' && item.trim()) areaIds.add(item.trim())
+            if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) areaIds.add(item.id.trim())
+        })
+    } else if (typeof raw === 'string' && raw.trim()) {
+        raw.split(',').map(v => v.trim()).filter(Boolean).forEach(v => areaIds.add(v))
+    }
+
+    if (typeof rawDetails?.area_id === 'string' && rawDetails.area_id.trim()) {
+        areaIds.add(rawDetails.area_id.trim())
+    }
+
+    return Array.from(areaIds)
+}
 
 export default function EmployeeModal({ isOpen, onClose, onSave, employee }: EmployeeModalProps) {
     const { profile: currentUser } = useAuth()
@@ -46,7 +66,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
         details: {
             // FKs
             job_position_id: '',
-            area_id: '',
+            area_ids: [''],
             seniority_id: '',
             gender_id: '',
             education_level_id: '',
@@ -73,6 +93,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
 
             if (employee) {
                 const d = employee.details || {}
+                const areaIds = normalizeAreaIds(d)
                 setFormData({
                     fullName: employee.full_name || '',
                     email: employee.username ? (employee.username.includes('@') ? employee.username : '') : '',
@@ -80,7 +101,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                     role: employee.role || 'seller',
                     details: {
                         job_position_id: d.job_position_id || '',
-                        area_id: d.area_id || '',
+                        area_ids: areaIds.length > 0 ? areaIds : [''],
                         seniority_id: d.seniority_id || '',
                         gender_id: d.gender_id || '',
                         education_level_id: d.education_level_id || '',
@@ -100,7 +121,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                 setFormData({
                     fullName: '', email: '', password: '', role: 'seller',
                     details: {
-                        job_position_id: '', area_id: '', seniority_id: '', gender_id: '',
+                        job_position_id: '', area_ids: [''], seniority_id: '', gender_id: '',
                         education_level_id: '', career_id: '', university_id: '',
                         contract_type_id: '', work_modality_id: '', city_id: '', country_id: '',
                         birth_date: '', start_date: '', employee_status: 'activo'
@@ -144,7 +165,7 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
 
         let years = now.getFullYear() - start.getFullYear()
         let months = now.getMonth() - start.getMonth()
-        let days = now.getDate() - start.getDate()
+        const days = now.getDate() - start.getDate()
 
         if (days < 0) {
             months--
@@ -174,6 +195,29 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
         }))
     }
 
+    const updateAreaAtIndex = (index: number, value: string) => {
+        setFormData((prev: any) => {
+            const currentAreas = Array.isArray(prev.details.area_ids) ? [...prev.details.area_ids] : ['']
+            currentAreas[index] = value
+            return { ...prev, details: { ...prev.details, area_ids: currentAreas } }
+        })
+    }
+
+    const addAreaField = () => {
+        setFormData((prev: any) => {
+            const currentAreas = Array.isArray(prev.details.area_ids) ? [...prev.details.area_ids] : ['']
+            return { ...prev, details: { ...prev.details, area_ids: [...currentAreas, ''] } }
+        })
+    }
+
+    const removeAreaField = (index: number) => {
+        setFormData((prev: any) => {
+            const currentAreas = Array.isArray(prev.details.area_ids) ? [...prev.details.area_ids] : ['']
+            const nextAreas = currentAreas.filter((_: string, i: number) => i !== index)
+            return { ...prev, details: { ...prev.details, area_ids: nextAreas.length > 0 ? nextAreas : [''] } }
+        })
+    }
+
     // For updating local catalog list when new item added
     const handleNewOption = (table: string, option: any) => {
         setCatalogs(prev => ({
@@ -187,7 +231,21 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
         setLoading(true)
         setError('')
         try {
-            const success = await onSave(formData)
+            const normalizedAreas = Array.from(new Set(
+                (Array.isArray(formData.details?.area_ids) ? formData.details.area_ids : [])
+                    .map((areaId: string) => (areaId || '').trim())
+                    .filter(Boolean)
+            ))
+
+            const payload = {
+                ...formData,
+                details: {
+                    ...formData.details,
+                    area_ids: normalizedAreas
+                }
+            }
+
+            const success = await onSave(payload)
             if (success) onClose()
         } catch (err: any) {
             setError(err.message || 'Error al guardar')
@@ -302,13 +360,47 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                                                 onNewOption={o => handleNewOption('job_positions', o)}
                                             />
 
-                                            <CatalogSelect
-                                                label='Área' tableName='areas' disabled={!isRH}
-                                                value={formData.details.area_id}
-                                                options={catalogs['areas'] || []}
-                                                onChange={v => updateDetail('area_id', v)}
-                                                onNewOption={o => handleNewOption('areas', o)}
-                                            />
+                                            <div className='col-span-2 space-y-3'>
+                                                <div className='flex items-center justify-between'>
+                                                    <label className='label'>Áreas</label>
+                                                    <button
+                                                        type='button'
+                                                        onClick={addAreaField}
+                                                        disabled={!isRH}
+                                                        className='inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] rounded-xl border border-[var(--card-border)] text-[#2048FF] hover:bg-[#2048FF]/10 disabled:opacity-50 disabled:cursor-not-allowed'
+                                                    >
+                                                        <Plus size={12} />
+                                                        Agregar Otra Área
+                                                    </button>
+                                                </div>
+
+                                                <div className='space-y-2'>
+                                                    {(Array.isArray(formData.details.area_ids) ? formData.details.area_ids : ['']).map((areaId: string, index: number) => (
+                                                        <div key={`area-${index}`} className='flex items-start gap-2'>
+                                                            <div className='flex-1'>
+                                                                <CatalogSelect
+                                                                    label={`Área ${index + 1}`}
+                                                                    tableName='areas'
+                                                                    disabled={!isRH}
+                                                                    value={areaId}
+                                                                    options={catalogs['areas'] || []}
+                                                                    onChange={v => updateAreaAtIndex(index, v)}
+                                                                    onNewOption={o => handleNewOption('areas', o)}
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type='button'
+                                                                onClick={() => removeAreaField(index)}
+                                                                disabled={!isRH || (formData.details.area_ids || []).length <= 1}
+                                                                className='mt-6 h-10 w-10 rounded-xl border border-[var(--card-border)] flex items-center justify-center text-rose-500 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed'
+                                                                title='Eliminar área'
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
 
                                             <CatalogSelect
                                                 label='Seniority' tableName='seniority_levels' disabled={!isRH}
@@ -322,9 +414,9 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
                                                 <label className='label'>Estado Empleado</label>
                                                 <select className='input' value={formData.details.employee_status} disabled={!isRH}
                                                     onChange={e => updateDetail('employee_status', e.target.value)}>
-                                                    <option value='activo'>🟢 Activo</option>
-                                                    <option value='baja'>🔴 Baja</option>
-                                                    <option value='pausa'>🟡 Pausa</option>
+                                                    <option value='activo'>Activo</option>
+                                                    <option value='baja'>Baja</option>
+                                                    <option value='pausa'>Pausa</option>
                                                 </select>
                                             </div>
                                         </div>

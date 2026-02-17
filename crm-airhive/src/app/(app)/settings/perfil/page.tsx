@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
+import { BarChart3, Users, CheckCircle2, CalendarDays, TrendingUp } from 'lucide-react'
 
 type UserStats = {
     leadsAsignadas: number
@@ -90,14 +91,15 @@ export default function PerfilPage() {
             {/* Performance Stats */}
             <div className='mb-6 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100'>
                 <h3 className='text-xl font-bold mb-4 text-[#0A1635] flex items-center gap-2'>
-                    📊 Estadísticas de Rendimiento
+                    <BarChart3 size={21} strokeWidth={2.2} className='text-[#2048FF]' />
+                    Estadísticas de Rendimiento
                 </h3>
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
                     {[
-                        { label: 'Leads Asignadas', value: stats.leadsAsignadas, icon: '👥', color: '#2048FF' },
-                        { label: 'Tareas Pendientes', value: stats.tareasPendientes, icon: '✅', color: '#f59e0b' },
-                        { label: 'Próximas Juntas', value: stats.proximasJuntas, icon: '📅', color: '#8b5cf6' },
-                        { label: 'Tasa de Conversión', value: `${stats.tasasConversion}%`, icon: '📊', color: '#10b981' }
+                        { label: 'Leads Asignadas', value: stats.leadsAsignadas, icon: Users, color: '#2048FF' },
+                        { label: 'Tareas Pendientes', value: stats.tareasPendientes, icon: CheckCircle2, color: '#f59e0b' },
+                        { label: 'Próximas Juntas', value: stats.proximasJuntas, icon: CalendarDays, color: '#8b5cf6' },
+                        { label: 'Tasa de Conversión', value: `${stats.tasasConversion}%`, icon: TrendingUp, color: '#10b981' }
                     ].map((stat, index) => (
                         <div
                             key={index}
@@ -105,10 +107,10 @@ export default function PerfilPage() {
                         >
                             <div className='flex items-center gap-4 mb-2'>
                                 <div
-                                    className='w-12 h-12 rounded-xl flex items-center justify-center text-2xl'
+                                    className='w-12 h-12 rounded-xl flex items-center justify-center'
                                     style={{ background: `${stat.color}15`, color: stat.color }}
                                 >
-                                    {stat.icon}
+                                    <stat.icon size={22} strokeWidth={2.1} />
                                 </div>
                                 <div className='flex-1'>
                                     <p className='text-xs font-bold text-gray-400 uppercase tracking-widest'>

@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getCatalogs } from '@/app/actions/catalogs'
-import { Mail, Briefcase, MapPin, Calendar, BookOpen, Award, User, Building, Globe, GraduationCap, Clock, Activity } from 'lucide-react'
+import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity } from 'lucide-react'
+import RoleBadge from '@/components/RoleBadge'
+import { getRoleMeta } from '@/lib/roleUtils'
 
 interface ProfileViewProps {
     userId: string
@@ -47,9 +49,26 @@ export default function ProfileView({ userId }: ProfileViewProps) {
         return item ? item.name : '-'
     }
 
-    // Colors & Icons logic
-    const roleColor = profile.role === 'admin' ? 'bg-purple-100 text-purple-700' : profile.role === 'rh' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
-    const roleLabel = profile.role === 'admin' ? 'Administrador' : profile.role === 'rh' ? 'Recursos Humanos' : 'Vendedor'
+    const getAreaNames = () => {
+        const rawAreas = details?.area_ids ?? details?.areas_ids ?? details?.areas
+        const areaIds = new Set<string>()
+
+        if (Array.isArray(rawAreas)) {
+            rawAreas.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) areaIds.add(item.trim())
+                if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) areaIds.add(item.id.trim())
+            })
+        } else if (typeof rawAreas === 'string' && rawAreas.trim()) {
+            rawAreas.split(',').map((v: string) => v.trim()).filter(Boolean).forEach((v: string) => areaIds.add(v))
+        }
+
+        if (typeof details?.area_id === 'string' && details.area_id.trim()) areaIds.add(details.area_id.trim())
+
+        const names = Array.from(areaIds).map(id => resolve('areas', id)).filter(v => v && v !== '-')
+        return names.length > 0 ? names.join(', ') : '-'
+    }
+
+    const roleMeta = getRoleMeta(profile.role)
 
     return (
         <div className='max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500'>
@@ -58,17 +77,14 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex items-center gap-8 relative overflow-hidden'>
                 <div className='absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#2048FF]/10 to-transparent rounded-bl-full -mr-16 -mt-16 pointer-events-none' />
 
-                <div className='w-24 h-24 rounded-2xl bg-gradient-to-br from-[#2048FF] to-[#0A1635] flex items-center justify-center text-5xl font-bold text-white shadow-xl shadow-blue-900/20 z-10'>
-                    {profile.full_name?.charAt(0).toUpperCase() || '?'}
+                <div className='w-24 h-24 rounded-2xl border-2 flex items-center justify-center shadow-xl z-10' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                    <User size={42} strokeWidth={1.9} style={{ color: roleMeta.textColor }} />
                 </div>
 
                 <div className='flex-1 z-10'>
                     <h1 className='text-3xl font-black text-[#0A1635] mb-2 tracking-tight'>{profile.full_name}</h1>
                     <div className='flex flex-wrap items-center gap-4 text-sm font-medium'>
-                        <span className={`px-3 py-1 rounded-full ${roleColor} flex items-center gap-2`}>
-                            {profile.role === 'admin' ? <Award size={14} /> : <Briefcase size={14} />}
-                            {roleLabel}
-                        </span>
+                        <RoleBadge role={profile.role} />
                         <span className='flex items-center gap-1.5 text-gray-500 bg-gray-50 px-3 py-1 rounded-full border border-gray-100'>
                             <Mail size={14} />
                             {profile.username?.includes('@') ? profile.username : `${profile.username}@airhive.mx`}
@@ -105,7 +121,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         </h3>
                         <div className='space-y-4'>
                             <InfoRow label="Puesto" value={resolve('job_positions', details.job_position_id)} />
-                            <InfoRow label="Área" value={resolve('areas', details.area_id)} />
+                            <InfoRow label="Área" value={getAreaNames()} />
                             <InfoRow label="Seniority" value={resolve('seniority_levels', details.seniority_id)} highlight />
                         </div>
                     </div>

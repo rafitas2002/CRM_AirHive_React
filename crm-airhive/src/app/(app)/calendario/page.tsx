@@ -245,7 +245,9 @@ export default function CalendarioPage() {
                     <div className='max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0'>
                         {meetings.length === 0 ? (
                             <div className='flex-1 flex flex-col items-center justify-center rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <div className='w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center text-4xl mb-6'>📅</div>
+                                <div className='w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-6'>
+                                    <CalendarDays size={42} strokeWidth={2} className='text-[#2048FF]' />
+                                </div>
                                 <h3 className='text-3xl font-black mb-3' style={{ color: 'var(--text-primary)' }}>No hay juntas programadas</h3>
                                 <p className='mb-8 font-medium max-w-sm' style={{ color: 'var(--text-secondary)' }}>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>
                                 <a href='/clientes' className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform hover:-translate-y-1'>
@@ -317,12 +319,16 @@ export default function CalendarioPage() {
                                                                     </h3>
                                                                     <div className='space-y-2'>
                                                                         <div className='flex items-center gap-3'>
-                                                                            <div className='w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-xs'>🏢</div>
+                                                                            <div className='w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center'>
+                                                                                <Building2 size={12} strokeWidth={2.2} className='text-[#2048FF]' />
+                                                                            </div>
                                                                             <p className='text-xs font-black uppercase tracking-tight truncate' style={{ color: 'var(--text-secondary)' }}>{meeting.empresa}</p>
                                                                         </div>
                                                                         {meeting.seller_name && (
                                                                             <div className='flex items-center gap-3'>
-                                                                                <div className='w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-[10px]'>👤</div>
+                                                                                <div className='w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center'>
+                                                                                    <UserCircle2 size={12} strokeWidth={2.2} className='text-emerald-600' />
+                                                                                </div>
                                                                                 <p className='text-[10px] font-bold opacity-60 uppercase tracking-widest truncate' style={{ color: 'var(--text-secondary)' }}>{meeting.seller_name}</p>
                                                                             </div>
                                                                         )}

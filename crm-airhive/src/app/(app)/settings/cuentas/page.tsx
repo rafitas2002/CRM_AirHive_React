@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getGoogleAuthUrl, getGoogleConnectionStatus, disconnectGoogle } from '@/app/actions/google-integration'
-import { Link2, CalendarDays, Mail, Bell } from 'lucide-react'
+import { Link2, CalendarDays, Mail, Bell, Chrome, CheckCircle2, Circle } from 'lucide-react'
 
 type ConnectionStatus = {
     connected: boolean
@@ -111,8 +111,8 @@ export default function CuentasPage() {
                 >
                     <div className='flex items-start justify-between mb-4'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-14 h-14 rounded-full bg-white flex items-center justify-center text-3xl shadow-md'>
-                                🔵
+                            <div className='w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-md'>
+                                <Chrome size={28} strokeWidth={2} className='text-[#2048FF]' />
                             </div>
                             <div>
                                 <h3 className='text-xl font-bold' style={{ color: 'var(--text-primary)' }}>
@@ -125,12 +125,14 @@ export default function CuentasPage() {
                         </div>
 
                         {status.connected ? (
-                            <span className='px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-300'>
-                                ✓ Conectado
+                            <span className='px-4 py-2 rounded-full text-sm font-semibold bg-green-100 text-green-700 border border-green-300 inline-flex items-center gap-1.5'>
+                                <CheckCircle2 size={15} strokeWidth={2.2} />
+                                Conectado
                             </span>
                         ) : (
-                            <span className='px-4 py-2 rounded-full text-sm font-semibold bg-gray-100 text-gray-600 border border-gray-300'>
-                                ○ Desconectado
+                            <span className='px-4 py-2 rounded-full text-sm font-semibold bg-gray-100 text-gray-600 border border-gray-300 inline-flex items-center gap-1.5'>
+                                <Circle size={14} strokeWidth={2.2} />
+                                Desconectado
                             </span>
                         )}
                     </div>

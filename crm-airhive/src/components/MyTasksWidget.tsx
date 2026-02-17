@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { CheckCircle2, Circle, Clock, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Circle, Clock, AlertCircle, Building2, Sparkles } from 'lucide-react'
 
 interface Task {
     id: number
@@ -82,7 +82,10 @@ export default function MyTasksWidget() {
         return (
             <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
-                    ✅ Mis Tareas
+                    <span className='inline-flex items-center gap-2'>
+                        <CheckCircle2 size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
+                        Mis Tareas
+                    </span>
                 </h2>
                 <p className='text-sm animate-pulse' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Cargando...</p>
             </div>
@@ -93,7 +96,10 @@ export default function MyTasksWidget() {
         <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex items-center justify-between mb-4'>
                 <h2 className='text-lg font-bold' style={{ color: 'var(--text-primary)' }}>
-                    ✅ Mis Tareas
+                    <span className='inline-flex items-center gap-2'>
+                        <CheckCircle2 size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
+                        Mis Tareas
+                    </span>
                 </h2>
                 <span className='px-2 py-0.5 bg-purple-500/10 text-purple-600 rounded-full text-[10px] font-black uppercase'>
                     {tasks.length} Pendientes
@@ -102,7 +108,10 @@ export default function MyTasksWidget() {
 
             {tasks.length === 0 ? (
                 <div className='text-center py-6 rounded-xl border border-dashed' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                    <p className='text-sm mb-1' style={{ color: 'var(--text-secondary)' }}>¡Todo al día! ✨</p>
+                    <p className='text-sm mb-1 inline-flex items-center gap-1.5' style={{ color: 'var(--text-secondary)' }}>
+                        ¡Todo al día!
+                        <Sparkles size={14} strokeWidth={2.2} className='text-[#2048FF]' />
+                    </p>
                     <p className='text-[10px] font-medium opacity-60' style={{ color: 'var(--text-secondary)' }}>No tienes tareas para hoy</p>
                 </div>
             ) : (
@@ -133,7 +142,10 @@ export default function MyTasksWidget() {
                                             {task.titulo}
                                         </p>
                                         <p className='text-[10px] font-medium truncate' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
-                                            🏢 {task.clientes?.empresa || 'Empresa desconocida'}
+                                            <span className='inline-flex items-center gap-1.5'>
+                                                <Building2 size={11} strokeWidth={2} />
+                                                {task.clientes?.empresa || 'Empresa desconocida'}
+                                            </span>
                                         </p>
                                         <div className='flex items-center gap-2 mt-2'>
                                             <span className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-tighter ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>
