@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { cookies } from 'next/headers'
 
 const CATALOG_TABLES = [
@@ -62,6 +63,7 @@ export async function createCatalogItem(table: string, name: string) {
 
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
+        const supabaseAdmin = createAdminClient()
 
         // Verify permissions (Admin or RH only)
         const { data: { user } } = await supabase.auth.getUser()
@@ -80,7 +82,7 @@ export async function createCatalogItem(table: string, name: string) {
         // trim and capitalize?
         const formattedName = name.trim()
 
-        const { data, error } = await (supabase
+        const { data, error } = await (supabaseAdmin
             .from(table) as any)
             .insert({ name: formattedName, is_active: true })
             .select('id, name')

@@ -1,12 +1,54 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Briefcase, Filter, Users } from 'lucide-react'
+import { Search, Briefcase, Filter, Users, User, Building2 } from 'lucide-react'
 import DetailedUserModal from '@/components/DetailedUserModal'
+import RoleBadge from '@/components/RoleBadge'
 import { getCatalogs } from '@/app/actions/catalogs'
+import { getRoleMeta } from '@/lib/roleUtils'
 
 interface UsersClientProps {
     initialUsers: any[]
+}
+
+interface AreaColorMeta {
+    bg: string
+    border: string
+    text: string
+}
+
+function getUserAreaIds(user: any): string[] {
+    const detailAreas = user?.details?.area_ids ?? user?.details?.areas_ids ?? user?.details?.areas
+    const normalized = new Set<string>()
+
+    if (Array.isArray(detailAreas)) {
+        detailAreas.forEach(area => {
+            if (typeof area === 'string' && area.trim()) normalized.add(area.trim())
+            if (area && typeof area === 'object' && typeof area.id === 'string' && area.id.trim()) normalized.add(area.id.trim())
+        })
+    } else if (typeof detailAreas === 'string' && detailAreas.trim()) {
+        detailAreas.split(',').map(v => v.trim()).filter(Boolean).forEach(v => normalized.add(v))
+    }
+
+    const fallbackAreaId = user?.details?.area_id
+    if (typeof fallbackAreaId === 'string' && fallbackAreaId.trim()) normalized.add(fallbackAreaId.trim())
+
+    return Array.from(normalized)
+}
+
+function getUniqueAreaColor(index: number): AreaColorMeta {
+    // Golden-angle distribution over hue wheel gives visually distinct colors.
+    const hue = (index * 137.508) % 360
+    return {
+        bg: `hsl(${hue} 92% 96%)`,
+        border: `hsl(${hue} 70% 78%)`,
+        text: `hsl(${hue} 75% 32%)`
+    }
+}
+
+function fallbackAreaColor(seed: string): AreaColorMeta {
+    const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    return getUniqueAreaColor(hash)
 }
 
 export default function UsersClient({ initialUsers }: UsersClientProps) {
@@ -30,11 +72,12 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         const searchLower = search.toLowerCase()
         const fullName = (user.full_name || '').toLowerCase()
         const role = (user.role || '').toLowerCase()
-        const department = (user.details?.area_id ? resolve('areas', user.details.area_id) : '').toLowerCase()
+        const areaNames = getUserAreaIds(user).map(id => resolve('areas', id)).filter(Boolean)
+        const department = areaNames.join(' ').toLowerCase()
         const position = (user.details?.job_position_id ? resolve('job_positions', user.details.job_position_id) : '').toLowerCase()
 
         const matchesSearch = fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower) || position.includes(searchLower)
-        const matchesArea = !selectedArea || user.details?.area_id === selectedArea
+        const matchesArea = !selectedArea || getUserAreaIds(user).includes(selectedArea)
         const matchesPosition = !selectedPosition || user.details?.job_position_id === selectedPosition
 
         return matchesSearch && matchesArea && matchesPosition
@@ -46,6 +89,12 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         const item = list.find(i => i.id === id)
         return item ? item.name : ''
     }
+
+    const areaColorMap: Record<string, AreaColorMeta> = ((catalogs.areas || []) as { id: string }[])
+        .reduce((acc: Record<string, AreaColorMeta>, area, index) => {
+            if (area?.id) acc[area.id] = getUniqueAreaColor(index)
+            return acc
+        }, {})
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -138,52 +187,83 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
 
             {/* Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredUsers.map(user => (
-                    <div
-                        key={user.id}
-                        onClick={() => {
-                            setSelectedUser(user)
-                            setIsModalOpen(true)
-                        }}
-                        className="group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 hover:border-[#2048FF] transition-all cursor-pointer hover:shadow-2xl hover:shadow-blue-500/5 relative overflow-hidden active:scale-[0.98]"
-                    >
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+                {filteredUsers.map(user => {
+                    const roleMeta = getRoleMeta(user.role)
+                    const areaIds = getUserAreaIds(user)
+                    const areaItems = areaIds
+                        .map(areaId => {
+                            const name = resolve('areas', areaId)
+                            return name ? { id: areaId, name } : null
+                        })
+                        .filter(Boolean) as { id: string, name: string }[]
 
-                        <div className="flex flex-col items-center text-center space-y-4">
-                            <div className="w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] group-hover:border-[#2048FF] overflow-hidden transition-colors shadow-lg">
-                                {user.avatar_url ? (
-                                    <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div
-                                        className="w-full h-full flex items-center justify-center text-2xl font-black"
-                                        style={{ background: 'var(--hover-bg)', color: 'var(--text-primary)' }}
-                                    >
-                                        {user.full_name?.charAt(0) || '👤'}
-                                    </div>
-                                )}
-                            </div>
+                    return (
+                        <div
+                            key={user.id}
+                            onClick={() => {
+                                setSelectedUser(user)
+                                setIsModalOpen(true)
+                            }}
+                            className="group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 hover:border-[#2048FF] transition-all cursor-pointer hover:shadow-2xl hover:shadow-blue-500/5 relative overflow-hidden active:scale-[0.98]"
+                        >
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
 
-                            <div>
-                                <h3 className="text-lg font-black text-[var(--text-primary)] group-hover:text-[#2048FF] transition-colors line-clamp-1">
-                                    {user.full_name}
-                                </h3>
-                                <p className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mt-1">
-                                    {resolve('job_positions', user.details?.job_position_id) || (user.role === 'admin' ? 'Administrador' : 'Vendedor')}
-                                </p>
-                            </div>
+                            <div className="flex flex-col items-center text-center space-y-4">
+                                <div className="w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] group-hover:border-[#2048FF] overflow-hidden transition-colors shadow-lg">
+                                    {user.avatar_url ? (
+                                        <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div
+                                            className="w-full h-full flex items-center justify-center"
+                                            style={{ background: 'var(--hover-bg)' }}
+                                        >
+                                            <User size={32} strokeWidth={1.9} style={{ color: roleMeta.textColor }} />
+                                        </div>
+                                    )}
+                                </div>
 
-                            <div className="w-full pt-4 border-t border-[var(--card-border)] flex flex-col gap-2">
-                                <span className="px-3 py-1.5 bg-[var(--hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-2 justify-center">
-                                    <Briefcase size={12} className="text-[#2048FF]" />
-                                    {resolve('areas', user.details?.area_id) || 'Sin Área'}
-                                </span>
-                                <span className="text-[10px] font-bold text-[var(--text-secondary)] opacity-60">
-                                    {user.username || user.email || ''}
-                                </span>
+                                <div>
+                                    <h3 className="text-lg font-black text-[var(--text-primary)] group-hover:text-[#2048FF] transition-colors line-clamp-1">
+                                        {user.full_name}
+                                    </h3>
+                                    <p className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mt-1">
+                                        {resolve('job_positions', user.details?.job_position_id) || roleMeta.label}
+                                    </p>
+                                    <RoleBadge role={user.role} className='mt-2' compact />
+                                </div>
+
+                                <div className="w-full pt-4 border-t border-[var(--card-border)] flex flex-col gap-2">
+                                    {areaItems.length > 0 ? (
+                                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                            {areaItems.map(area => {
+                                                const colorMeta = areaColorMap[area.id] || fallbackAreaColor(area.id || area.name)
+                                                return (
+                                                    <span
+                                                        key={`${user.id}-${area.id}`}
+                                                        title={area.name}
+                                                        className='px-2.5 py-1 rounded-xl border text-[9px] font-black uppercase tracking-[0.12em] inline-flex items-center gap-1.5'
+                                                        style={{ background: colorMeta.bg, borderColor: colorMeta.border, color: colorMeta.text }}
+                                                    >
+                                                        <Building2 size={11} strokeWidth={1.9} style={{ color: colorMeta.text }} />
+                                                        {area.name}
+                                                    </span>
+                                                )
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <span className="px-3 py-1.5 bg-[var(--hover-bg)] rounded-xl text-[10px] font-bold text-[var(--text-secondary)] flex items-center gap-2 justify-center">
+                                            <Briefcase size={12} className="text-[#2048FF]" />
+                                            Sin Área
+                                        </span>
+                                    )}
+                                    <span className="text-[10px] font-bold text-[var(--text-secondary)] opacity-60">
+                                        {user.username || user.email || ''}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
 
                 {filteredUsers.length === 0 && (
                     <div className="col-span-full py-20 text-center space-y-4 border-2 border-dashed border-[var(--card-border)] rounded-[40px] opacity-50">

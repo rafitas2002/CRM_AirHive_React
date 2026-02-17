@@ -35,6 +35,7 @@ export default function CatalogSelect({
 
     // Find selected name for display
     const selectedOption = options.find(o => o.id === value)
+    const addOptionLabel = tableName === 'areas' ? 'Agregar área nueva' : 'Agregar nueva opción'
 
     const handleCreate = async () => {
         if (!newItemName.trim()) return
@@ -110,7 +111,7 @@ export default function CatalogSelect({
                                         className='w-full flex items-center gap-2 px-3 py-2 text-sm text-[#2048FF] font-semibold hover:bg-[#2048FF]/10 rounded-lg transition-colors'
                                     >
                                         <Plus size={14} />
-                                        Agregar nueva opción
+                                        {addOptionLabel}
                                     </button>
                                 </div>
                             </>
