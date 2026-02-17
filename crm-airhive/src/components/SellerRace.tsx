@@ -23,7 +23,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     const sortedSellers = [...sellers].sort((a, b) => b.value - a.value)
 
     return (
-        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex justify-between items-end'>
                 <div>
                     <div className='flex items-center gap-3'>

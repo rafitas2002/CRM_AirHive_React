@@ -69,32 +69,30 @@ export default function AdminCompanyDetailView({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-50 bg-[var(--background)] flex flex-col animate-in fade-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-x-0 bottom-0 top-[70px] z-[130] bg-[var(--background)] flex flex-col animate-in fade-in slide-in-from-bottom duration-300'>
             {/* Header */}
             <div className='bg-[#0A1635] px-8 py-6 flex items-center justify-between shadow-xl shrink-0 border-b border-[var(--card-border)]'>
-                <div className='flex items-center gap-6'>
-                    <button
-                        onClick={onClose}
-                        className='p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all'
-                        title='Cerrar'
-                    >
-                        <span className='text-2xl'>✕</span>
-                    </button>
-                    <div className='h-8 w-[1px] bg-white/20' />
-                    <div className='flex items-center gap-4'>
-                        {company.logo_url && (
-                            <img src={company.logo_url} alt={company.nombre} className='h-10 w-10 object-cover bg-white rounded-lg' />
-                        )}
-                        <h1 className='text-2xl font-black text-white tracking-tight'>
-                            {company.nombre}
-                        </h1>
-                    </div>
+                <div className='flex items-center gap-4'>
+                    {company.logo_url && (
+                        <img src={company.logo_url} alt={company.nombre} className='h-10 w-10 object-cover bg-white rounded-lg' />
+                    )}
+                    <h1 className='text-2xl font-black text-white tracking-tight'>
+                        {company.nombre}
+                    </h1>
                 </div>
 
                 <div className='flex items-center gap-3'>
                     <span className='px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-100 text-xs font-bold border border-blue-500/30 uppercase tracking-widest'>
                         Empresa Certificada
                     </span>
+                    <button
+                        onClick={onClose}
+                        className='h-10 px-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95'
+                        style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                        title='Regresar'
+                    >
+                        Regresar
+                    </button>
                 </div>
             </div>
 

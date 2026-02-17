@@ -202,16 +202,16 @@ export default function CompanyModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-[60] flex items-start justify-center pt-16 pb-8 px-4 bg-black/60 backdrop-blur-sm transition-opacity overflow-y-auto'>
-            <div className='w-full max-w-2xl bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col max-h-[85vh]'>
+        <div className='ah-modal-overlay transition-opacity'>
+            <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
                 {/* Header */}
-                <div className='bg-[#0A1635] px-6 py-4 flex items-center justify-between shrink-0 border-b border-[var(--card-border)]'>
-                    <h2 className='text-xl font-bold text-white'>
+                <div className='ah-modal-header'>
+                    <h2 className='ah-modal-title'>
                         Detalles de la Empresa
                     </h2>
                     <button
                         onClick={onClose}
-                        className='text-white/70 hover:text-white transition-colors'
+                        className='ah-modal-close'
                     >
                         ✕
                     </button>

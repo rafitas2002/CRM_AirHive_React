@@ -165,7 +165,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
     return (
         <div className='space-y-3'>
-            {meetings.map((meeting) => {
+            {meetings.filter(m => m.status !== 'cancelled').map((meeting) => {
                 const snapshot = getSnapshotForMeeting(meeting.id)
                 const startTime = new Date(meeting.start_time)
                 const isUpcoming = startTime > new Date()
@@ -302,4 +302,5 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
             />
         </div>
     )
+
 }

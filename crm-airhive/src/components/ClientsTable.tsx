@@ -1,6 +1,7 @@
 'use client'
 
 import { Database } from '@/lib/supabase'
+import { Mail, MessageCircle } from 'lucide-react'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
@@ -24,9 +25,9 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
     }
 
     return (
-        <div className='w-full overflow-x-auto custom-scrollbar'>
-            <table className='w-full text-left border-collapse'>
-                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+        <div className='ah-table-scroll custom-scrollbar'>
+            <table className='ah-table'>
+                <thead>
                     <tr>
                         {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
                         <th className='px-8 py-5 whitespace-nowrap'>Vendedor</th>
@@ -45,7 +46,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                         )}
                     </tr>
                 </thead>
-                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                <tbody>
                     {clientes.map((cliente) => (
                         <tr
                             key={cliente.id}
@@ -97,8 +98,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             {/* Email */}
                             <td className='px-8 py-5'>
                                 {cliente.email ? (
-                                    <div className='flex items-center gap-2'>
-                                        <span className='font-bold text-xs truncate max-w-[150px]' style={{ color: 'var(--text-secondary)' }}>{cliente.email}</span>
+                                    <div className='ah-cell-icon-text'>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -107,11 +107,9 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                             className='text-blue-500 hover:text-blue-600 transition-colors'
                                             title='Redactar en CRM'
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                                <polyline points="22,6 12,13 2,6" />
-                                            </svg>
+                                            <Mail className='ah-cell-icon' />
                                         </button>
+                                        <span className='font-bold text-xs truncate max-w-[150px]' style={{ color: 'var(--text-secondary)' }}>{cliente.email}</span>
                                     </div>
                                 ) : '-'}
                             </td>
@@ -119,8 +117,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             {/* Teléfono */}
                             <td className='px-8 py-5'>
                                 {cliente.telefono ? (
-                                    <div className='flex items-center gap-2 whitespace-nowrap'>
-                                        <span className='font-black text-xs tabular-nums' style={{ color: 'var(--text-secondary)' }}>{cliente.telefono}</span>
+                                    <div className='ah-cell-icon-text whitespace-nowrap'>
                                         <a
                                             href={`https://wa.me/${cliente.telefono.replace(/\D/g, '')}`}
                                             target='_blank'
@@ -129,10 +126,9 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                             className='text-emerald-500 hover:text-emerald-600 transition-colors'
                                             title='Abrir WhatsApp'
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                            </svg>
+                                            <MessageCircle className='ah-cell-icon' />
                                         </a>
+                                        <span className='font-black text-xs tabular-nums' style={{ color: 'var(--text-secondary)' }}>{cliente.telefono}</span>
                                     </div>
                                 ) : '-'}
                             </td>
@@ -147,13 +143,19 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             {/* Probabilidad */}
                             <td className='px-8 py-5'>
                                 <div className='flex flex-col items-center gap-1 min-w-[60px]'>
-                                    <span className={`text-[10px] font-black ${(cliente as any).probabilidad >= 70 ? 'text-emerald-600' : (cliente as any).probabilidad >= 40 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                    <span
+                                        className='text-[10px] font-black'
+                                        style={{ color: getForecastColor((cliente as any).probabilidad || 0) }}
+                                    >
                                         {(cliente as any).probabilidad || 0}%
                                     </span>
                                     <div className='w-full h-1.5 bg-gray-100 dark:bg-black/20 rounded-full overflow-hidden'>
                                         <div
-                                            className={`h-full transition-all duration-500 ${(cliente as any).probabilidad >= 70 ? 'bg-emerald-500' : (cliente as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
-                                            style={{ width: `${(cliente as any).probabilidad || 0}%` }}
+                                            className='h-full transition-all duration-500'
+                                            style={{
+                                                width: `${(cliente as any).probabilidad || 0}%`,
+                                                backgroundColor: getForecastColor((cliente as any).probabilidad || 0)
+                                            }}
                                         />
                                     </div>
                                 </div>
@@ -239,4 +241,11 @@ function renderStars(rating: number) {
         )
     }
     return stars
+}
+
+function getForecastColor(probability: number) {
+    const clamped = Math.max(0, Math.min(100, probability))
+    // 0 -> red (0deg), 100 -> green (120deg), with orange/yellow in between.
+    const hue = (clamped / 100) * 120
+    return `hsl(${hue} 92% 45%)`
 }

@@ -33,6 +33,8 @@ export default function TareasPage() {
     const [currentTask, setCurrentTask] = useState<Task | null>(null)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [deleteId, setDeleteId] = useState<number | null>(null)
+    const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
+    const [taskToToggle, setTaskToToggle] = useState<Task | null>(null)
     const [search, setSearch] = useState('')
 
     const fetchTasks = async () => {
@@ -95,23 +97,40 @@ export default function TareasPage() {
     const handleDelete = async () => {
         if (!deleteId) return
         try {
-            const { error } = await supabase.from('tareas').delete().eq('id', deleteId)
-            if (error) throw error
+            // Optimistic UI update - remove immediately
+            setTasks(prev => prev.filter(t => t.id !== deleteId))
             setIsDeleteModalOpen(false)
-            fetchTasks()
+            const taskIdToDelete = deleteId
+            setDeleteId(null)
+
+            // Delete from database
+            const { error } = await supabase.from('tareas').delete().eq('id', taskIdToDelete)
+            if (error) {
+                // If error, revert by fetching fresh data
+                await fetchTasks()
+                throw error
+            }
         } catch (error: any) {
             alert('Error al eliminar: ' + error.message)
         }
     }
 
-    const toggleStatus = async (task: Task) => {
-        const newStatus = task.estado === 'completada' ? 'pendiente' : 'completada'
+    const handleToggleStatusClick = (task: Task) => {
+        setTaskToToggle(task)
+        setIsStatusModalOpen(true)
+    }
+
+    const confirmToggleStatus = async () => {
+        if (!taskToToggle) return
+        const newStatus = taskToToggle.estado === 'completada' ? 'pendiente' : 'completada'
         try {
             const { error } = await (supabase
                 .from('tareas') as any)
                 .update({ estado: newStatus })
-                .eq('id', task.id)
+                .eq('id', taskToToggle.id)
             if (error) throw error
+            setIsStatusModalOpen(false)
+            setTaskToToggle(null)
             fetchTasks()
         } catch (error: any) {
             alert('Error al actualizar estado: ' + error.message)
@@ -227,13 +246,17 @@ export default function TareasPage() {
                             <div key={groupName} className='space-y-6'>
                                 <div className='flex items-center justify-between'>
                                     <div className='flex items-center gap-4'>
-                                        <div className={`px-5 py-2 rounded-[20px] shadow-sm border-2 flex items-center gap-2 ${groupName === 'Atrasadas' ? 'bg-rose-50 border-rose-100 text-rose-600' :
-                                            groupName === 'Hoy' ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' :
-                                                groupName === 'Completadas' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                                                    'bg-white border-gray-100 text-gray-800'}`}
-                                            style={groupName === 'Próximamente' ? {
-                                                background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)'
-                                            } : {}}
+                                        <div
+                                            className={`px-5 py-2 rounded-[20px] shadow-sm border-2 flex items-center gap-2 ${groupName === 'Hoy' ? 'shadow-lg shadow-blue-500/20' : ''}`}
+                                            style={
+                                                groupName === 'Atrasadas'
+                                                    ? { background: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.35)', color: 'var(--text-primary)' }
+                                                    : groupName === 'Hoy'
+                                                        ? { background: 'var(--accent-secondary)', borderColor: 'var(--accent-secondary)', color: '#fff' }
+                                                        : groupName === 'Completadas'
+                                                            ? { background: 'rgba(16, 185, 129, 0.14)', borderColor: 'rgba(16, 185, 129, 0.35)', color: 'var(--text-primary)' }
+                                                            : { background: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }
+                                            }
                                         >
                                             {groupName === 'Atrasadas' && <AlertCircle size={14} />}
                                             {groupName === 'Hoy' && <Clock size={14} />}
@@ -260,23 +283,30 @@ export default function TareasPage() {
                                                 key={task.id}
                                                 className={`group p-8 rounded-[40px] border-2 transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] relative cursor-pointer ${task.estado === 'completada' ? 'opacity-80' : ''}`}
                                                 style={{
-                                                    background: 'var(--card-bg)',
-                                                    borderColor: task.estado === 'completada' ? 'var(--card-border)' :
-                                                        groupName === 'Atrasadas' ? '#fee2e2' : 'var(--card-border)'
+                                                    background: groupName === 'Atrasadas' && task.estado !== 'completada'
+                                                        ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.10) 0%, rgba(239, 68, 68, 0.04) 28%, var(--card-bg) 100%)'
+                                                        : 'var(--card-bg)',
+                                                    borderColor: 'var(--card-border)'
                                                 }}
                                                 onClick={() => { setModalMode('edit'); setCurrentTask(task); setIsModalOpen(true); }}
                                             >
                                                 {/* Priority Indicator */}
-                                                <div className={`absolute top-8 right-8 px-3 py-1.2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 shadow-sm ${task.prioridad === 'alta' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                    task.prioridad === 'media' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                        'bg-gray-50 text-gray-400 border-gray-100'
-                                                    }`}>
+                                                <div
+                                                    className='absolute top-8 right-8 px-3 py-1.2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 shadow-sm'
+                                                    style={
+                                                        task.prioridad === 'alta'
+                                                            ? { background: 'rgba(239, 68, 68, 0.13)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.35)' }
+                                                            : task.prioridad === 'media'
+                                                                ? { background: 'rgba(245, 158, 11, 0.14)', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.35)' }
+                                                                : { background: 'var(--hover-bg)', color: 'var(--text-secondary)', borderColor: 'var(--card-border)' }
+                                                    }
+                                                >
                                                     {task.prioridad}
                                                 </div>
 
                                                 <div className='flex gap-5 items-start mb-8'>
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); toggleStatus(task); }}
+                                                        onClick={(e) => { e.stopPropagation(); handleToggleStatusClick(task); }}
                                                         className={`w-10 h-10 rounded-[14px] border-2 flex items-center justify-center transition-all flex-shrink-0 shadow-sm ${task.estado === 'completada'
                                                             ? 'bg-emerald-500 border-emerald-500 text-white rotate-[360deg]'
                                                             : 'bg-white border-gray-200 hover:border-blue-500 group-hover:scale-110'}`}
@@ -291,15 +321,15 @@ export default function TareasPage() {
                                                         </h3>
                                                         <div className='flex flex-wrap items-center gap-x-3 gap-y-1 mt-2'>
                                                             <div className='flex items-center gap-1.5'>
-                                                                <User size={10} className='text-[#2048FF]' />
-                                                                <p className='text-[10px] font-black text-[#2048FF] uppercase tracking-wider truncate max-w-[120px]'>
+                                                                <User size={10} style={{ color: 'var(--accent-secondary)' }} />
+                                                                <p className='text-[10px] font-black uppercase tracking-wider truncate max-w-[120px]' style={{ color: 'var(--accent-secondary)' }}>
                                                                     {task.cliente_nombre}
                                                                 </p>
                                                             </div>
                                                             <div className='w-1 h-1 rounded-full bg-gray-300' />
                                                             <div className='flex items-center gap-1.5'>
-                                                                <Building2 size={10} className='text-gray-400' />
-                                                                <p className='text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate max-w-[120px]'>
+                                                                <Building2 size={10} style={{ color: 'var(--text-secondary)' }} />
+                                                                <p className='text-[10px] font-bold uppercase tracking-wider truncate max-w-[120px]' style={{ color: 'var(--text-secondary)', opacity: 0.85 }}>
                                                                     {task.cliente_empresa}
                                                                 </p>
                                                             </div>
@@ -369,6 +399,16 @@ export default function TareasPage() {
                 title="Eliminar Tarea"
                 message="¿Estás seguro de que deseas eliminar esta tarea? Esta acción no se puede deshacer."
                 isDestructive
+            />
+            <ConfirmModal
+                isOpen={isStatusModalOpen}
+                onClose={() => setIsStatusModalOpen(false)}
+                onConfirm={confirmToggleStatus}
+                title={taskToToggle?.estado === 'completada' ? 'Revertir a Pendiente' : 'Marcar como Completada'}
+                message={taskToToggle?.estado === 'completada'
+                    ? '¿Deseas marcar esta tarea como pendiente nuevamente?'
+                    : '¿Deseas marcar esta tarea como completada?'}
+                isDestructive={false}
             />
         </div>
     )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     X,
@@ -21,7 +21,6 @@ import {
     Trophy,
     CheckCircle2,
     ListTodo,
-    AlertCircle,
     BarChart3,
     Timer,
     Zap
@@ -42,19 +41,12 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
     const [activityData, setActivityData] = useState<any>(null)
     const [loadingActivity, setLoadingActivity] = useState(false)
 
-    if (!user) return null
-
-    const isSelf = currentUser?.id === user.id
-    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'rh'
+    const isSelf = currentUser?.id === user?.id
+    const isAdmin = currentUser?.role === 'admin'
     const canSeeAll = isSelf || isAdmin
 
-    useEffect(() => {
-        if (isOpen && isAdmin && user.id) {
-            fetchActivity()
-        }
-    }, [isOpen, user.id, isAdmin])
-
-    const fetchActivity = async () => {
+    async function fetchActivity() {
+        if (!user?.id) return
         setLoadingActivity(true)
         const res = await getUserActivitySummary(user.id)
         if (res.success) {
@@ -62,6 +54,14 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         }
         setLoadingActivity(false)
     }
+
+    useEffect(() => {
+        if (isOpen && isAdmin && user?.id) {
+            fetchActivity()
+        }
+    }, [isOpen, user?.id, isAdmin])
+
+    const visibleTab = isAdmin ? activeTab : 'profile'
 
     // Helper to resolve IDs
     const resolve = (table: string, id: string) => {
@@ -97,17 +97,19 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         return partsArr.length > 0 ? partsArr.join(' y ') : 'Menos de un mes'
     }
 
+    if (!user) return null
+
     const details = user.details || {}
 
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                <div className="ah-modal-overlay">
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="bg-[#0A0C10] border border-white/10 rounded-[32px] w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+                        className="ah-modal-panel w-full max-w-5xl"
                     >
                         {/* Header Section */}
                         <div className="relative h-48 bg-gradient-to-br from-[#2048FF] to-[#1700AC] shrink-0">
@@ -130,9 +132,12 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                     )}
                                 </div>
                                 <div className="mb-4">
-                                    <h2 className="text-3xl font-black text-white tracking-tight">{user.full_name}</h2>
+                                    <h2 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{user.full_name}</h2>
                                     <div className="flex items-center gap-3 mt-1">
-                                        <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-white/80 border border-white/10">
+                                        <span
+                                            className="px-3 py-1 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border"
+                                            style={{ background: 'var(--card-bg)', color: 'var(--text-secondary)', borderColor: 'var(--card-border)' }}
+                                        >
                                             {user.role === 'admin' ? 'Administrador' : user.role === 'rh' ? 'Recursos Humanos' : 'Vendedor'}
                                         </span>
                                         <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
@@ -145,17 +150,19 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         </div>
 
                         {/* Tabs Navigation */}
-                        <div className="mt-20 px-12 pb-2 border-b border-white/5 flex gap-8">
+                        <div className="mt-20 px-12 pb-2 border-b flex gap-8" style={{ borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={() => setActiveTab('profile')}
-                                className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${activeTab === 'profile' ? 'text-blue-500 border-blue-500' : 'text-white/40 border-transparent hover:text-white/60'}`}
+                                className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'profile' ? 'text-blue-500 border-blue-500' : 'border-transparent hover:text-[#2048FF]'}`}
+                                style={visibleTab === 'profile' ? undefined : { color: 'var(--text-secondary)' }}
                             >
                                 Perfil Profesional
                             </button>
                             {isAdmin && (
                                 <button
                                     onClick={() => setActiveTab('performance')}
-                                    className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${activeTab === 'performance' ? 'text-blue-500 border-blue-500' : 'text-white/40 border-transparent hover:text-white/60'}`}
+                                    className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'performance' ? 'text-blue-500 border-blue-500' : 'border-transparent hover:text-[#2048FF]'}`}
+                                    style={visibleTab === 'performance' ? undefined : { color: 'var(--text-secondary)' }}
                                 >
                                     Desempeño & Actividad
                                 </button>
@@ -164,7 +171,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 
                         {/* Content Area */}
                         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                            {activeTab === 'profile' ? (
+                            {visibleTab === 'profile' ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
                                     {/* Info Laboral */}
@@ -197,9 +204,9 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                 <InfoItem icon={Globe} label="Ubicación" value={`${resolve('cities', details.city_id)}, ${resolve('countries', details.country_id)}`} />
                                             </div>
                                         ) : (
-                                            <div className="p-8 rounded-3xl bg-white/5 border border-white/5 flex flex-col items-center justify-center text-center gap-4">
-                                                <Shield size={32} className="text-white/20" />
-                                                <p className="text-xs font-bold text-white/40 leading-relaxed">
+                                            <div className="p-8 rounded-3xl border flex flex-col items-center justify-center text-center gap-4" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                                <Shield size={32} style={{ color: 'var(--text-secondary)', opacity: 0.35 }} />
+                                                <p className="text-xs font-bold leading-relaxed" style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
                                                     La información personal es <span className="text-purple-400">confidencial</span> y solo <br /> es visible para administración.
                                                 </p>
                                             </div>
@@ -267,17 +274,17 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                             <ListTodo size={14} /> Registro de Actividades
                                         </h3>
 
-                                        <div className="rounded-[32px] border border-white/5 overflow-hidden bg-white/5">
+                                        <div className="rounded-[32px] border overflow-hidden" style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                                             <table className="w-full text-left">
                                                 <thead>
-                                                    <tr className="bg-white/5 text-[10px] font-black uppercase tracking-widest text-white/40">
+                                                    <tr className="text-[10px] font-black uppercase tracking-widest" style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
                                                         <th className="px-6 py-4">Tipo</th>
                                                         <th className="px-6 py-4">Título</th>
                                                         <th className="px-6 py-4">Estado</th>
                                                         <th className="px-6 py-4">Fecha</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-white/5">
+                                                <tbody className="divide-y" style={{ borderColor: 'var(--card-border)' }}>
                                                     {loadingActivity ? (
                                                         <tr>
                                                             <td colSpan={4} className="px-6 py-12 text-center">
@@ -286,7 +293,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                         </tr>
                                                     ) : activityData?.activities?.length > 0 ? (
                                                         activityData.activities.map((act: any) => (
-                                                            <tr key={act.id} className="hover:bg-white/5 transition-colors group">
+                                                            <tr key={act.id} className="transition-colors group hover:bg-black/5">
                                                                 <td className="px-6 py-4">
                                                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${act.type === 'meeting' ? 'bg-purple-500/10 text-purple-400' :
                                                                         act.type === 'task' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
@@ -295,8 +302,8 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <p className="text-sm font-bold text-white/80">{act.title}</p>
-                                                                    <p className="text-[10px] text-white/40 truncate max-w-xs">{act.description}</p>
+                                                                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{act.title}</p>
+                                                                    <p className="text-[10px] truncate max-w-xs" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>{act.description}</p>
                                                                 </td>
                                                                 <td className="px-6 py-4">
                                                                     <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${act.status === 'completada' || act.status === 'held' || act.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' :
@@ -306,13 +313,13 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <p className="text-xs font-bold text-white/60">{new Date(act.date).toLocaleDateString()}</p>
+                                                                    <p className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>{new Date(act.date).toLocaleDateString()}</p>
                                                                 </td>
                                                             </tr>
                                                         ))
                                                     ) : (
                                                         <tr>
-                                                            <td colSpan={4} className="px-6 py-12 text-center text-white/20 font-bold text-sm">
+                                                            <td colSpan={4} className="px-6 py-12 text-center font-bold text-sm" style={{ color: 'var(--text-secondary)' }}>
                                                                 No hay actividad registrada
                                                             </td>
                                                         </tr>
@@ -325,30 +332,30 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                             )}
 
                             {/* System Info (Always at bottom) */}
-                            <section className="mt-12 pt-8 border-t border-white/5 flex flex-wrap gap-8 items-center justify-between">
+                            <section className="mt-12 pt-8 border-t flex flex-wrap gap-8 items-center justify-between" style={{ borderColor: 'var(--card-border)' }}>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--hover-bg)', color: 'var(--text-secondary)' }}>
                                         <Clock size={18} />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Miembro desde</p>
-                                        <p className="text-sm font-bold text-white/60">{new Date(user.created_at).toLocaleDateString()}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Miembro desde</p>
+                                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{new Date(user.created_at).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--hover-bg)', color: 'var(--text-secondary)' }}>
                                         <Shield size={18} />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">ID de Sistema</p>
-                                        <p className="text-xs font-mono text-white/40">{user.id}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>ID de Sistema</p>
+                                        <p className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>{user.id}</p>
                                     </div>
                                 </div>
                             </section>
                         </div>
 
                         {/* Footer / Actions */}
-                        <div className="p-8 bg-[#0D0F14] border-t border-white/5 flex justify-end">
+                        <div className="p-8 border-t flex justify-end" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={onClose}
                                 className="px-8 py-3 bg-[#2048FF] hover:bg-[#1700AC] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20"
@@ -387,13 +394,13 @@ function MetricCard({ icon: Icon, label, value, subtext, color }: { icon: any, l
 
 function InfoItem({ icon: Icon, label, value, highlight }: { icon: any, label: string, value: string, highlight?: boolean }) {
     return (
-        <div className="group flex items-center gap-4 p-4 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
-            <div className="w-10 h-10 rounded-xl bg-[#1C1F26] flex items-center justify-center text-white/40 group-hover:text-blue-400 transition-colors">
+        <div className="group flex items-center gap-4 p-4 rounded-2xl transition-all border border-transparent" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--card-bg)', color: 'var(--text-secondary)' }}>
                 <Icon size={18} />
             </div>
             <div>
-                <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">{label}</p>
-                <p className={`text-sm font-bold ${highlight ? 'text-blue-400' : 'text-white/80'}`}>{value || '-'}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>{label}</p>
+                <p className={`text-sm font-bold ${highlight ? 'text-blue-500' : ''}`} style={highlight ? undefined : { color: 'var(--text-primary)' }}>{value || '-'}</p>
             </div>
         </div>
     )

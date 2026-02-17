@@ -61,7 +61,7 @@ export default function UpcomingMeetingsWidget() {
 
     if (loading) {
         return (
-            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas
                 </h2>
@@ -72,7 +72,7 @@ export default function UpcomingMeetingsWidget() {
 
     if (meetings.length === 0) {
         return (
-            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas
                 </h2>
@@ -85,7 +85,7 @@ export default function UpcomingMeetingsWidget() {
     }
 
     return (
-        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex items-center justify-between mb-4'>
                 <h2 className='text-lg font-bold' style={{ color: 'var(--text-primary)' }}>
                     📅 Próximas Juntas

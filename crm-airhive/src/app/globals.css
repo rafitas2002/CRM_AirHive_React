@@ -30,6 +30,27 @@
   --accent-primary: #1700AC;
   /* Bolder blue */
   --accent-secondary: #2048FF;
+  --table-count-chip-bg: linear-gradient(135deg, rgb(37 99 235 / 0.14), rgb(67 56 202 / 0.12));
+  --table-count-chip-border: rgb(37 99 235 / 0.24);
+  --table-count-chip-number: #1d4ed8;
+  --table-count-chip-label: #1e293b;
+  --home-hero-bg: linear-gradient(135deg, #0d2450 0%, #12387c 52%, #1d4ed8 100%);
+  --home-hero-border: rgba(96, 165, 250, 0.45);
+  --home-hero-glow: rgba(59, 130, 246, 0.55);
+  --home-hero-text: #f8fbff;
+  --home-hero-muted: rgba(226, 239, 255, 0.82);
+  --home-hero-chip-bg: rgba(8, 20, 55, 0.35);
+  --home-hero-chip-border: rgba(255, 255, 255, 0.2);
+  --home-hero-chip-text: #dbeafe;
+  --home-hero-panel-bg: rgba(8, 14, 30, 0.78);
+  --home-hero-panel-border: rgba(147, 197, 253, 0.28);
+  --home-audit-bg: linear-gradient(135deg, #fff7e6 0%, #ffefcf 55%, #ffe5bc 100%);
+  --home-audit-border: rgba(217, 119, 6, 0.34);
+  --home-audit-title: #9a3412;
+  --home-audit-text: #7c2d12;
+  --home-audit-button-bg: rgba(154, 52, 18, 0.1);
+  --home-audit-button-border: rgba(154, 52, 18, 0.3);
+  --home-audit-button-text: #7c2d12;
 
   /* Tier colors for size badges (Light) */
   --tier-1-bg: rgba(16, 185, 129, 0.15);
@@ -53,7 +74,7 @@
   --card-border: #6b7280;
   --input-bg: #6b7280;
   --input-border: #9ca3af;
-  --input-focus: #60a5fa;
+  --input-focus: #1e3a8a;
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
   --hover-bg: #6b7280;
@@ -61,10 +82,31 @@
 
   /* Contrast adjustments for Gray Mode */
   --project-count-empty: rgba(255, 255, 255, 0.2);
-  --website-badge-bg: rgba(32, 72, 255, 0.25);
-  --website-badge-text: #60A5FA;
-  --accent-primary: #60A5FA;
-  --accent-secondary: #3B82F6;
+  --website-badge-bg: rgba(30, 58, 138, 0.38);
+  --website-badge-text: #1e3a8a;
+  --accent-primary: #1e3a8a;
+  --accent-secondary: #1e40af;
+  --table-count-chip-bg: linear-gradient(135deg, rgb(30 58 138 / 0.38), rgb(30 64 175 / 0.34));
+  --table-count-chip-border: rgb(37 99 235 / 0.5);
+  --table-count-chip-number: #1e40af;
+  --table-count-chip-label: #e5e7eb;
+  --home-hero-bg: linear-gradient(135deg, #18263f 0%, #19366f 52%, #1e40af 100%);
+  --home-hero-border: rgba(96, 165, 250, 0.38);
+  --home-hero-glow: rgba(30, 64, 175, 0.55);
+  --home-hero-text: #f9fbff;
+  --home-hero-muted: rgba(222, 234, 255, 0.82);
+  --home-hero-chip-bg: rgba(12, 18, 35, 0.42);
+  --home-hero-chip-border: rgba(191, 219, 254, 0.28);
+  --home-hero-chip-text: #dbeafe;
+  --home-hero-panel-bg: rgba(9, 12, 24, 0.8);
+  --home-hero-panel-border: rgba(96, 165, 250, 0.32);
+  --home-audit-bg: linear-gradient(135deg, #463e2a 0%, #534429 58%, #624c2a 100%);
+  --home-audit-border: rgba(245, 158, 11, 0.34);
+  --home-audit-title: #fde68a;
+  --home-audit-text: #fef3c7;
+  --home-audit-button-bg: rgba(30, 41, 59, 0.38);
+  --home-audit-button-border: rgba(245, 158, 11, 0.35);
+  --home-audit-button-text: #fef3c7;
 
   /* Tier colors for size badges (Gray/Dark) */
   --tier-1-bg: rgba(16, 185, 129, 0.25);
@@ -97,6 +139,27 @@
   --project-count-empty: rgba(255, 255, 255, 0.2);
   --website-badge-bg: rgba(32, 72, 255, 0.25);
   --website-badge-text: #a3b8ff;
+  --table-count-chip-bg: linear-gradient(135deg, rgb(37 99 235 / 0.24), rgb(67 56 202 / 0.2));
+  --table-count-chip-border: rgb(59 130 246 / 0.34);
+  --table-count-chip-number: #60a5fa;
+  --table-count-chip-label: #e5e7eb;
+  --home-hero-bg: linear-gradient(135deg, #081329 0%, #102754 52%, #173c87 100%);
+  --home-hero-border: rgba(59, 130, 246, 0.38);
+  --home-hero-glow: rgba(37, 99, 235, 0.48);
+  --home-hero-text: #f8faff;
+  --home-hero-muted: rgba(220, 232, 255, 0.8);
+  --home-hero-chip-bg: rgba(5, 10, 24, 0.55);
+  --home-hero-chip-border: rgba(147, 197, 253, 0.22);
+  --home-hero-chip-text: #dbeafe;
+  --home-hero-panel-bg: rgba(6, 10, 20, 0.84);
+  --home-hero-panel-border: rgba(96, 165, 250, 0.28);
+  --home-audit-bg: linear-gradient(135deg, #2b2417 0%, #382e1a 58%, #463720 100%);
+  --home-audit-border: rgba(245, 158, 11, 0.3);
+  --home-audit-title: #fcd34d;
+  --home-audit-text: #fef3c7;
+  --home-audit-button-bg: rgba(251, 191, 36, 0.1);
+  --home-audit-button-border: rgba(251, 191, 36, 0.32);
+  --home-audit-button-text: #fef3c7;
 
   /* Tier colors for size badges (Gray/Dark) */
   --tier-1-bg: rgba(16, 185, 129, 0.25);
@@ -123,4 +186,320 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.ah-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: calc(70px + 16px) 16px 16px;
+  background: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+
+.ah-modal-panel {
+  width: 100%;
+  border-radius: 28px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 70px - 32px);
+}
+
+.ah-modal-header {
+  background: #0a1635;
+  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ah-modal-title {
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ah-modal-subtitle {
+  color: #93c5fd;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.ah-modal-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(255 255 255 / 0.85);
+  background: rgb(255 255 255 / 0.12);
+  transition: background-color 0.2s ease;
+}
+
+.ah-modal-close:hover {
+  background: rgb(255 255 255 / 0.22);
+}
+
+@media (max-width: 767px) {
+  .ah-modal-overlay {
+    padding: calc(70px + 12px) 12px 12px;
+  }
+
+  .ah-modal-panel {
+    border-radius: 22px;
+    max-height: calc(100dvh - 70px - 24px);
+  }
+
+  .ah-modal-header {
+    padding: 14px 18px;
+  }
+
+  .ah-modal-title {
+    font-size: 1.1rem;
+  }
+}
+
+/* Unified Table Controls */
+.ah-table-toolbar {
+  display: flex;
+  width: 100%;
+}
+
+.ah-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.ah-search-control {
+  position: relative;
+  flex: 1 1 520px;
+  min-width: 280px;
+}
+
+.ah-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.ah-search-input {
+  width: 100%;
+  height: 56px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  padding: 0 14px 0 48px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  outline: none;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.2) inset;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-search-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.55;
+}
+
+.ah-search-input:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 4px rgb(32 72 255 / 0.12);
+}
+
+.ah-select-control {
+  min-width: 190px;
+  height: 56px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  padding: 0 14px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ah-select-control:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 4px rgb(32 72 255 / 0.12);
+}
+
+.ah-select-control-order {
+  background: rgb(32 72 255 / 0.07);
+  border-color: rgb(32 72 255 / 0.28);
+  color: var(--input-focus);
+}
+
+.ah-reset-filter-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgb(244 63 94 / 0.3);
+  background: rgb(244 63 94 / 0.08);
+  color: #f43f5e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.ah-reset-filter-btn:hover {
+  background: rgb(244 63 94 / 0.15);
+}
+
+/* Unified table count chip */
+.ah-count-chip {
+  padding: 8px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--table-count-chip-border);
+  background: var(--table-count-chip-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+.ah-count-chip-number {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--table-count-chip-number);
+}
+
+.ah-count-chip-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.ah-count-chip-title {
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--table-count-chip-label);
+}
+
+.ah-count-chip-subtitle {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  opacity: 0.62;
+}
+
+/* Unified Table Shell */
+.ah-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.ah-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.ah-table thead {
+  background: var(--table-header-bg);
+  color: var(--text-secondary);
+}
+
+.ah-table th {
+  padding: 20px 32px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.ah-table td {
+  padding: 20px 32px;
+  vertical-align: middle;
+}
+
+.ah-table tbody {
+  border-top: 1px solid var(--card-border);
+}
+
+.ah-table tbody tr {
+  border-bottom: 1.5px solid var(--table-row-divider);
+  transition: background-color 0.2s ease;
+}
+
+.ah-table tbody tr:hover {
+  background: rgb(15 23 42 / 0.04);
+}
+
+.ah-cell-icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ah-cell-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.theme-claro {
+  --table-row-divider: #455a85;
+}
+
+.theme-gris {
+  --table-row-divider: #7f8fb0;
+}
+
+.theme-oscuro {
+  --table-row-divider: #4b5f8f;
+}
+
+/* Gray mode: darken blue accents globally */
+.theme-gris .text-blue-400,
+.theme-gris .text-blue-500 {
+  color: #1e40af !important;
+}
+
+.theme-gris .text-blue-600 {
+  color: #1e3a8a !important;
+}
+
+.theme-gris .border-blue-500,
+.theme-gris .border-blue-500\/20,
+.theme-gris .border-blue-500\/30 {
+  border-color: rgb(30 64 175 / 0.7) !important;
+}
+
+.theme-gris .bg-blue-500\/10 {
+  background-color: rgb(30 64 175 / 0.24) !important;
 }

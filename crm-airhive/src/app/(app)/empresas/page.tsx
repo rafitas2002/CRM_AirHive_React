@@ -164,6 +164,17 @@ export default function EmpresasPage() {
     const handleRowClick = (company: CompanyWithProjects) => {
         setSelectedCompany(company)
         setIsDetailOpen(true)
+        if (typeof window !== 'undefined') {
+            window.history.pushState({ ahOverlay: 'company-detail' }, '')
+        }
+    }
+
+    const handleCloseDetail = () => {
+        if (typeof window !== 'undefined' && window.history.state?.ahOverlay === 'company-detail') {
+            window.history.replaceState(null, '')
+        }
+        setIsDetailOpen(false)
+        setSelectedCompany(null)
     }
 
     const handleEditClick = (company: CompanyWithProjects) => {
@@ -232,6 +243,15 @@ export default function EmpresasPage() {
         setIsCompanyModalOpen(false)
         await fetchCompanies()
     }
+
+    useEffect(() => {
+        const onPopState = () => {
+            setIsDetailOpen(false)
+            setSelectedCompany(null)
+        }
+        window.addEventListener('popstate', onPopState)
+        return () => window.removeEventListener('popstate', onPopState)
+    }, [])
 
     // Only show blocking spinner if we are loading session AND not logged in
     // OR if we are loading companies AND we don't have any data yet
@@ -340,35 +360,32 @@ export default function EmpresasPage() {
                             </div>
 
                             <div className='flex items-center gap-3'>
-                                <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter text-blue-600 dark:text-blue-400'>{filteredCompanies.length}</span>
-                                    <div className='flex flex-col'>
-                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
-                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Encontrados</span>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{filteredCompanies.length}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Registros</span>
+                                        <span className='ah-count-chip-subtitle'>Encontrados</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className='flex flex-col lg:flex-row items-center gap-4'>
-                            <div className='relative flex-1 w-full'>
-                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
-                                <input
-                                    type='text'
-                                    placeholder='Buscar por nombre, ubicación, etiquetas...'
-                                    value={filterSearch}
-                                    onChange={(e) => setFilterSearch(e.target.value)}
-                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                                    style={{ color: 'var(--text-primary)' }}
-                                />
-                            </div>
-
-                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
-                                <div className='flex flex-1 lg:flex-none gap-2'>
+                        <div className='ah-table-toolbar'>
+                            <div className='ah-table-controls'>
+                                <div className='ah-search-control'>
+                                    <Search className='ah-search-icon' size={18} />
+                                    <input
+                                        type='text'
+                                        placeholder='Buscar por nombre, ubicación, etiquetas...'
+                                        value={filterSearch}
+                                        onChange={(e) => setFilterSearch(e.target.value)}
+                                        className='ah-search-input'
+                                    />
+                                </div>
                                     <select
                                         value={filterIndustry}
                                         onChange={(e) => setFilterIndustry(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='ah-select-control'
                                     >
                                         <option value="All">Industria: Todas</option>
                                         {uniqueIndustries.map(ind => (
@@ -379,20 +396,17 @@ export default function EmpresasPage() {
                                     <select
                                         value={filterLocation}
                                         onChange={(e) => setFilterLocation(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='ah-select-control'
                                     >
                                         <option value="All">Ubicación: Todas</option>
                                         {uniqueLocations.map(loc => (
                                             <option key={loc} value={loc}>{loc}</option>
                                         ))}
                                     </select>
-                                </div>
-
-                                <div className='flex flex-1 lg:flex-none gap-2'>
                                     <select
                                         value={filterSize}
                                         onChange={(e) => setFilterSize(e.target.value)}
-                                        className='flex-1 lg:min-w-[140px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='ah-select-control'
                                     >
                                         <option value="All">Tamaño: Todo</option>
                                         <option value="1">Micro</option>
@@ -405,13 +419,12 @@ export default function EmpresasPage() {
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
-                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
+                                        className='ah-select-control ah-select-control-order'
                                     >
                                         <option value="alphabetical">Orden: Nombre</option>
                                         <option value="antiquity">Orden: Antigüedad</option>
                                         <option value="projectAntiquity">Orden: Proyectos</option>
                                     </select>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -443,7 +456,7 @@ export default function EmpresasPage() {
             {selectedCompany && (
                 <AdminCompanyDetailView
                     isOpen={isDetailOpen}
-                    onClose={() => setIsDetailOpen(false)}
+                    onClose={handleCloseDetail}
                     company={selectedCompany}
                     currentUserProfile={auth.profile}
                 />

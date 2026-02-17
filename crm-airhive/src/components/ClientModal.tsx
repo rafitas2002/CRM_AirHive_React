@@ -229,25 +229,23 @@ export default function ClientModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-[100] flex items-start justify-center pt-16 pb-8 px-4 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300 overflow-y-auto'>
+        <div className='ah-modal-overlay transition-all animate-in fade-in duration-300'>
             <div
-                className='rounded-[32px] w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300 border'
-                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                className='ah-modal-panel w-full max-w-2xl animate-in zoom-in-95 duration-300'
             >
                 {/* Header Style match with Pre-Lead */}
-                <div className='p-8 shrink-0 flex items-center justify-between border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='ah-modal-header'>
                     <div>
-                        <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                        <h2 className='ah-modal-title'>
                             {mode === 'create' ? 'Nuevo Lead' : mode === 'convert' ? '🚀 Ascender a Lead' : 'Editar Lead'}
                         </h2>
-                        <p className='text-blue-500 text-xs font-bold uppercase tracking-widest mt-1'>
+                        <p className='ah-modal-subtitle'>
                             {mode === 'convert' ? 'Finalizando conversión de prospecto' : 'Información del Prospecto'}
                         </p>
                     </div>
                     <button
                         onClick={onClose}
-                        className='w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/5 transition-all font-bold'
-                        style={{ color: 'var(--text-secondary)' }}
+                        className='ah-modal-close'
                     >
                         ✕
                     </button>

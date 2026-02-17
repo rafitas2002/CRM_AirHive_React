@@ -153,22 +153,14 @@ export default function ClientDetailView({
     if (!isOpen || !client) return null
 
     return (
-        <div className='fixed inset-0 z-40 bg-[var(--background)] flex flex-col animate-in slide-in-from-bottom duration-300'>
+        <div className='fixed inset-x-0 bottom-0 top-[70px] z-[130] bg-[var(--background)] flex flex-col animate-in slide-in-from-bottom duration-300'>
             {/* Header */}
             <div className='bg-[#0A1635] px-8 py-5 flex items-center justify-between shadow-xl shrink-0 border-b border-white/5'>
-                <div className='flex items-center gap-6'>
-                    <button
-                        onClick={onClose}
-                        className='w-10 h-10 flex items-center justify-center rounded-2xl bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-all font-bold group'
-                    >
-                        <span className='group-hover:-translate-x-0.5 transition-transform'>←</span>
-                    </button>
-                    <div className='space-y-0.5'>
-                        <h1 className='text-2xl font-black text-white tracking-tight leading-none'>
-                            {client.nombre}
-                        </h1>
-                        <p className='text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]'>Ficha Detallada del Lead</p>
-                    </div>
+                <div className='space-y-0.5'>
+                    <h1 className='text-2xl font-black text-white tracking-tight leading-none'>
+                        {client.nombre}
+                    </h1>
+                    <p className='text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]'>Ficha Detallada del Lead</p>
                 </div>
                 <div className='flex gap-4'>
                     <button
@@ -185,6 +177,14 @@ export default function ClientDetailView({
                             <span>🏢</span> Catálogo
                         </button>
                     )}
+                    <button
+                        onClick={onClose}
+                        className='h-11 px-6 rounded-2xl font-black transition-all border uppercase text-[10px] tracking-widest hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95'
+                        style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                        title='Regresar'
+                    >
+                        Regresar
+                    </button>
                 </div>
             </div>
 
@@ -285,14 +285,20 @@ export default function ClientDetailView({
                                 <div className='space-y-3 pt-4 border-t border-gray-50'>
                                     <div className='flex justify-between items-end'>
                                         <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Confianza de Cierre</label>
-                                        <span className={`text-xl font-black ${(client as any).probabilidad >= 70 ? 'text-emerald-500' : (client as any).probabilidad >= 40 ? 'text-amber-500' : 'text-slate-400'}`}>
+                                        <span
+                                            className='text-xl font-black'
+                                            style={{ color: getForecastColor((client as any).probabilidad || 0) }}
+                                        >
                                             {(client as any).probabilidad || 0}%
                                         </span>
                                     </div>
                                     <div className='h-3 bg-gray-100 rounded-full overflow-hidden p-0.5 border border-gray-50 shadow-inner'>
                                         <div
-                                            className={`h-full rounded-full transition-all duration-1000 ${(client as any).probabilidad >= 70 ? 'bg-emerald-500' : (client as any).probabilidad >= 40 ? 'bg-amber-500' : 'bg-slate-400'}`}
-                                            style={{ width: `${(client as any).probabilidad || 0}%` }}
+                                            className='h-full rounded-full transition-all duration-1000'
+                                            style={{
+                                                width: `${(client as any).probabilidad || 0}%`,
+                                                backgroundColor: getForecastColor((client as any).probabilidad || 0)
+                                            }}
                                         />
                                     </div>
                                 </div>
@@ -531,4 +537,11 @@ export default function ClientDetailView({
             />
         </div>
     )
+}
+
+function getForecastColor(probability: number) {
+    const clamped = Math.max(0, Math.min(100, probability))
+    // 0 -> red, 100 -> green, with orange/yellow in between.
+    const hue = (clamped / 100) * 120
+    return `hsl(${hue} 92% 45%)`
 }
