@@ -5,6 +5,55 @@ import { createClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 
+function normalizeAreaIds(details: any): string[] {
+    const raw = details?.area_ids ?? details?.areas_ids ?? details?.areas
+    const normalized = new Set<string>()
+
+    if (Array.isArray(raw)) {
+        raw.forEach((item: any) => {
+            if (typeof item === 'string' && item.trim()) normalized.add(item.trim())
+            if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) normalized.add(item.id.trim())
+        })
+    } else if (typeof raw === 'string' && raw.trim()) {
+        raw.split(',').map((v: string) => v.trim()).filter(Boolean).forEach((v: string) => normalized.add(v))
+    }
+
+    if (typeof details?.area_id === 'string' && details.area_id.trim()) {
+        normalized.add(details.area_id.trim())
+    }
+
+    return Array.from(normalized)
+}
+
+function buildDetailsPayload(userId: string, details: any) {
+    const areaIds = normalizeAreaIds(details)
+    const payload = {
+        user_id: userId,
+        ...details,
+        area_ids: areaIds,
+        area_id: areaIds[0] || null,
+        birth_date: details?.birth_date || null,
+        start_date: details?.start_date || null
+    }
+
+    return payload
+}
+
+async function hasAreaIdsColumn(supabaseAdmin: any): Promise<boolean> {
+    const { error } = await (supabaseAdmin
+        .from('employee_profiles') as any)
+        .select('area_ids')
+        .limit(1)
+
+    if (!error) return true
+
+    const message = (error.message || '').toLowerCase()
+    const code = (error.code || '').toString()
+    if (code === '42703' || message.includes('column') && message.includes('area_ids')) return false
+
+    return true
+}
+
 export async function createEmployee(data: any) {
     try {
         const supabaseAdmin = createAdminClient()
@@ -52,16 +101,31 @@ export async function createEmployee(data: any) {
         }
 
         // 3. Insert into Employee Profiles
-        const detailsPayload = {
-            user_id: newUser.user.id,
-            ...data.details,
-            birth_date: data.details?.birth_date || null,
-            start_date: data.details?.start_date || null
-        }
+        const detailsPayload = buildDetailsPayload(newUser.user.id, data.details || {})
 
-        const { error: detailsError } = await (supabaseAdmin
+        let { error: detailsError } = await (supabaseAdmin
             .from('employee_profiles') as any)
             .insert(detailsPayload)
+
+        if (detailsError && detailsError.message?.includes('area_ids')) {
+            const requestedAreaIds = normalizeAreaIds(data.details || {})
+            if (requestedAreaIds.length > 1) {
+                const supportsAreaIds = await hasAreaIdsColumn(supabaseAdmin)
+                if (!supportsAreaIds) {
+                    throw new Error('Tu base de datos aún no soporta múltiples áreas por empleado. Ejecuta la migración 012_ensure_multi_area_and_design_area.sql y vuelve a intentar.')
+                }
+                throw new Error('Error al guardar múltiples áreas: ' + detailsError.message)
+            }
+
+            const fallbackPayload = { ...detailsPayload }
+            delete (fallbackPayload as any).area_ids
+
+            const fallbackInsert = await (supabaseAdmin
+                .from('employee_profiles') as any)
+                .insert(fallbackPayload)
+
+            detailsError = fallbackInsert.error
+        }
 
         if (detailsError) {
             console.error('Error creating profile details:', detailsError)
@@ -125,7 +189,7 @@ export async function updateEmployee(id: string, data: any) {
         // Update Details
         if (data.details) {
             // Sanitize nullable fields (Dates & UUIDs) to handle empty strings
-            const detailsPayload = { ...data.details }
+            const detailsPayload = buildDetailsPayload(id, data.details)
             const nullableFields = [
                 'birth_date', 'start_date',
                 'job_position_id', 'area_id', 'seniority_id', 'gender_id',
@@ -137,13 +201,35 @@ export async function updateEmployee(id: string, data: any) {
                 if (detailsPayload[field] === '') detailsPayload[field] = null
             })
 
-            const { error: detailsError } = await (supabaseAdmin
+            let { error: detailsError } = await (supabaseAdmin
                 .from('employee_profiles') as any)
                 .upsert({
-                    user_id: id,
                     ...detailsPayload,
                     updated_at: new Date().toISOString()
                 })
+
+            if (detailsError && detailsError.message?.includes('area_ids')) {
+                const requestedAreaIds = normalizeAreaIds(data.details || {})
+                if (requestedAreaIds.length > 1) {
+                    const supportsAreaIds = await hasAreaIdsColumn(supabaseAdmin)
+                    if (!supportsAreaIds) {
+                        throw new Error('Tu base de datos aún no soporta múltiples áreas por empleado. Ejecuta la migración 012_ensure_multi_area_and_design_area.sql y vuelve a intentar.')
+                    }
+                    throw new Error('Error al guardar múltiples áreas: ' + detailsError.message)
+                }
+
+                const fallbackPayload = { ...detailsPayload }
+                delete (fallbackPayload as any).area_ids
+
+                const fallbackUpdate = await (supabaseAdmin
+                    .from('employee_profiles') as any)
+                    .upsert({
+                        ...fallbackPayload,
+                        updated_at: new Date().toISOString()
+                    })
+
+                detailsError = fallbackUpdate.error
+            }
 
             if (detailsError) throw detailsError
         }

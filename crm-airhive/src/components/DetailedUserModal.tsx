@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { getUserActivitySummary } from '@/app/actions/admin'
+import RoleBadge from '@/components/RoleBadge'
+import { getRoleMeta } from '@/lib/roleUtils'
 
 interface DetailedUserModalProps {
     isOpen: boolean
@@ -71,6 +73,25 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         return item ? item.name : '-'
     }
 
+    const getAreaNames = () => {
+        const rawAreas = details?.area_ids ?? details?.areas_ids ?? details?.areas
+        const areaIds = new Set<string>()
+
+        if (Array.isArray(rawAreas)) {
+            rawAreas.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) areaIds.add(item.trim())
+                if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) areaIds.add(item.id.trim())
+            })
+        } else if (typeof rawAreas === 'string' && rawAreas.trim()) {
+            rawAreas.split(',').map((v: string) => v.trim()).filter(Boolean).forEach((v: string) => areaIds.add(v))
+        }
+
+        if (typeof details?.area_id === 'string' && details.area_id.trim()) areaIds.add(details.area_id.trim())
+
+        const names = Array.from(areaIds).map(id => resolve('areas', id)).filter(v => v && v !== '-')
+        return names.length > 0 ? names.join(', ') : '-'
+    }
+
     const calculateAge = (dateString: string) => {
         if (!dateString) return '-'
         const parts = dateString.split('-')
@@ -100,6 +121,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
     if (!user) return null
 
     const details = user.details || {}
+    const roleMeta = getRoleMeta(user.role)
 
     return (
         <AnimatePresence>
@@ -126,20 +148,15 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                     {user.avatar_url ? (
                                         <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 text-white/40">
-                                            {user.full_name?.charAt(0) || '👤'}
+                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/10 to-white/5">
+                                            <User size={42} strokeWidth={1.9} style={{ color: roleMeta.textColor }} />
                                         </div>
                                     )}
                                 </div>
                                 <div className="mb-4">
                                     <h2 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{user.full_name}</h2>
                                     <div className="flex items-center gap-3 mt-1">
-                                        <span
-                                            className="px-3 py-1 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border"
-                                            style={{ background: 'var(--card-bg)', color: 'var(--text-secondary)', borderColor: 'var(--card-border)' }}
-                                        >
-                                            {user.role === 'admin' ? 'Administrador' : user.role === 'rh' ? 'Recursos Humanos' : 'Vendedor'}
-                                        </span>
+                                        <RoleBadge role={user.role} />
                                         <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                             Activo
@@ -181,7 +198,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                         </h3>
                                         <div className="grid grid-cols-1 gap-4">
                                             <InfoItem icon={Building2} label="Puesto" value={resolve('job_positions', details.job_position_id)} />
-                                            <InfoItem icon={Users} label="Área" value={resolve('areas', details.area_id)} />
+                                            <InfoItem icon={Users} label="Área" value={getAreaNames()} />
                                             <InfoItem icon={Shield} label="Seniority" value={resolve('seniority_levels', details.seniority_id)} />
                                             <InfoItem icon={Activity} label="Modalidad" value={resolve('work_modalities', details.work_modality_id)} />
                                             <InfoItem icon={Calendar} label="Fecha de Ingreso" value={details.start_date ? new Date(details.start_date).toLocaleDateString('es-MX', { dateStyle: 'long' }) : '-'} />

@@ -1,14 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { UserPlus, Search, Edit2, Ban, CheckCircle, MoreHorizontal, Eye, ShieldCheck, ListFilter, RotateCw, Pencil } from 'lucide-react'
+import { UserPlus, Search, Edit2, Ban, Eye, ShieldCheck, ListFilter, RotateCw, User, Users } from 'lucide-react'
 import EmployeeModal from '@/components/EmployeeModal'
+import RoleBadge from '@/components/RoleBadge'
 import { createEmployee, updateEmployee, toggleEmployeeStatus } from '@/app/actions/employees'
 import { useRouter } from 'next/navigation'
+import { getRoleMeta } from '@/lib/roleUtils'
 
 interface EmployeesClientProps {
     initialEmployees: any[]
     currentUserRole: string
+}
+
+function getRoleIconColor(role?: string) {
+    return getRoleMeta(role).textColor
 }
 
 export default function EmployeesClient({ initialEmployees, currentUserRole }: EmployeesClientProps) {
@@ -68,8 +74,11 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
             <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                 <div className='flex items-center gap-8'>
                     <div className='flex items-center gap-6'>
-                        <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                            <ShieldCheck size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                        <div
+                            className='w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0'
+                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                        >
+                            <ShieldCheck size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
                         </div>
                         <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -177,8 +186,11 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                 >
                                     <td className='px-8 py-5'>
                                         <div className='flex items-center gap-4'>
-                                            <div className='w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center text-sm font-black shadow-inner' style={{ color: 'var(--text-primary)' }}>
-                                                {emp.full_name ? emp.full_name.charAt(0).toUpperCase() : '?'}
+                                            <div
+                                                className='w-12 h-12 rounded-2xl border-2 flex items-center justify-center shadow-sm'
+                                                style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+                                            >
+                                                <User size={20} strokeWidth={1.9} style={{ color: getRoleIconColor(emp.role) }} />
                                             </div>
                                             <div>
                                                 <p className='text-sm font-black truncate max-w-[200px]' style={{ color: 'var(--text-primary)' }}>{emp.full_name || 'Sin Nombre'}</p>
@@ -187,14 +199,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                         </div>
                                     </td>
                                     <td className='px-8 py-5'>
-                                        <span className={`inline-flex items-center px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border-2
-                                            ${emp.role === 'admin' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                                emp.role === 'rh' ? 'bg-pink-50 text-pink-600 border-pink-100' :
-                                                    'bg-blue-50 text-blue-600 border-blue-100'
-                                            }`}
-                                        >
-                                            {emp.role || 'Sin rol'}
-                                        </span>
+                                        <RoleBadge role={emp.role} />
                                     </td>
                                     <td className='px-8 py-5'>
                                         <span className='inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border-2 border-emerald-100'>
@@ -240,7 +245,9 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
 
                     {filteredEmployees.length === 0 && (
                         <div className='p-20 text-center flex flex-col items-center gap-4'>
-                            <div className='w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-3xl mb-2'>👥</div>
+                            <div className='w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-2'>
+                                <Users size={30} strokeWidth={2} className='text-[var(--text-secondary)] opacity-70' />
+                            </div>
                             <p className='text-sm font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>No se encontraron colaboradores</p>
                             <button onClick={() => setSearchTerm('')} className='text-xs font-bold text-[#2048FF] border-b-2 border-transparent hover:border-[#2048FF] transition-all'>Limpiar búsqueda</button>
                         </div>

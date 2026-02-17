@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getUpcomingMeetings, getUrgencyColor, calculateMeetingUrgency, type MeetingWithUrgency } from '@/lib/confirmationService'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import { CalendarDays, Video, Phone, Building2, AlertTriangle } from 'lucide-react'
 
 export default function UpcomingMeetingsWidget() {
     const [meetings, setMeetings] = useState<MeetingWithUrgency[]>([])
@@ -63,7 +64,10 @@ export default function UpcomingMeetingsWidget() {
         return (
             <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
-                    📅 Próximas Juntas
+                    <span className='inline-flex items-center gap-2'>
+                        <CalendarDays size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
+                        Próximas Juntas
+                    </span>
                 </h2>
                 <p className='text-sm animate-pulse' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Cargando...</p>
             </div>
@@ -74,7 +78,10 @@ export default function UpcomingMeetingsWidget() {
         return (
             <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
-                    📅 Próximas Juntas
+                    <span className='inline-flex items-center gap-2'>
+                        <CalendarDays size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
+                        Próximas Juntas
+                    </span>
                 </h2>
                 <div className='text-center py-6'>
                     <p className='text-sm mb-2' style={{ color: 'var(--text-secondary)' }}>No tienes juntas próximas</p>
@@ -88,7 +95,10 @@ export default function UpcomingMeetingsWidget() {
         <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex items-center justify-between mb-4'>
                 <h2 className='text-lg font-bold' style={{ color: 'var(--text-primary)' }}>
-                    📅 Próximas Juntas
+                    <span className='inline-flex items-center gap-2'>
+                        <CalendarDays size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
+                        Próximas Juntas
+                    </span>
                 </h2>
                 <Link
                     href='/calendario'
@@ -116,9 +126,9 @@ export default function UpcomingMeetingsWidget() {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-black ${urgency.bg} ${urgency.text} border ${urgency.border}`}>
                                             {urgency.label}
                                         </span>
-                                        {meeting.meeting_type === 'video' && <span>🎥</span>}
-                                        {meeting.meeting_type === 'llamada' && <span>📞</span>}
-                                        {meeting.meeting_type === 'presencial' && <span>🏢</span>}
+                                        {meeting.meeting_type === 'video' && <Video size={14} className='text-[#2048FF]' />}
+                                        {meeting.meeting_type === 'llamada' && <Phone size={14} className='text-[#2048FF]' />}
+                                        {meeting.meeting_type === 'presencial' && <Building2 size={14} className='text-[#2048FF]' />}
                                     </div>
                                     <p className='font-bold text-sm truncate' style={{ color: 'var(--text-primary)' }}>
                                         {meeting.title}
@@ -152,7 +162,7 @@ export default function UpcomingMeetingsWidget() {
                                                         onClick={(e) => e.stopPropagation()}
                                                         className='inline-flex items-center gap-1.5 px-3 py-1 bg-[#2048FF] text-white text-[9px] font-black uppercase tracking-wider rounded-lg hover:bg-[#1700AC] transition-all'
                                                     >
-                                                        <span>🎥</span> Unirse
+                                                        <Video size={12} /> Unirse
                                                     </a>
                                                 );
                                             })()}
@@ -186,7 +196,10 @@ export default function UpcomingMeetingsWidget() {
                     </span>
                     {meetings.some(m => m.urgencyLevel === 'urgent' || m.urgencyLevel === 'overdue') && (
                         <span className='text-red-600 font-bold animate-pulse'>
-                            ⚠️ Tienes juntas urgentes
+                            <span className='inline-flex items-center gap-1.5'>
+                                <AlertTriangle size={13} />
+                                Tienes juntas urgentes
+                            </span>
                         </span>
                     )}
                 </div>

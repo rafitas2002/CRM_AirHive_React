@@ -1,7 +1,7 @@
 'use client'
 
 import { useTheme, Theme } from '@/lib/ThemeContext'
-import { Palette, Lightbulb } from 'lucide-react'
+import { Palette, Lightbulb, Check } from 'lucide-react'
 
 const themes: Array<{ id: Theme; name: string; description: string; preview: { bg: string; text: string } }> = [
     {
@@ -72,7 +72,7 @@ export default function PersonalizacionPage() {
                                 {/* Theme Name */}
                                 <h3 className='text-lg font-bold mb-1' style={{ color: 'var(--text-primary)' }}>
                                     {t.name}
-                                    {isActive && <span className='ml-2'>✓</span>}
+                                    {isActive && <Check size={16} strokeWidth={2.5} className='inline-block ml-2 text-[#2048FF]' />}
                                 </h3>
 
                                 {/* Theme Description */}
