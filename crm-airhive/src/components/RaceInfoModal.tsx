@@ -64,26 +64,26 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
 
     return (
         <AnimatePresence>
-            <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm'>
+            <div className='ah-modal-overlay'>
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className='bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] relative'
+                    className='ah-modal-panel w-full max-w-4xl relative'
                 >
                     {/* Header */}
-                    <div className='px-8 py-6 border-b flex justify-between items-center bg-gray-50/50 flex-shrink-0'>
+                    <div className='ah-modal-header px-8 py-6'>
                         <div className='flex items-center gap-3'>
                             <div className='w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center'>
                                 <Trophy className='w-5 h-5 text-amber-600' />
                             </div>
                             <div>
-                                <h2 className='text-xl font-black text-[#0A1635] tracking-tight'>Detalles de la Carrera</h2>
-                                <p className='text-xs text-gray-500 font-medium uppercase tracking-wider'>Estadísticas y Leyendas</p>
+                                <h2 className='ah-modal-title'>Detalles de la Carrera</h2>
+                                <p className='ah-modal-subtitle'>Estadísticas y Leyendas</p>
                             </div>
                         </div>
-                        <button onClick={onClose} className='p-2 hover:bg-gray-100 rounded-full transition-colors'>
-                            <X className='w-5 h-5 text-gray-400' />
+                        <button onClick={onClose} className='ah-modal-close'>
+                            <X className='w-5 h-5 text-white' />
                         </button>
                     </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, User, Briefcase, Mail, Filter, Users } from 'lucide-react'
+import { Search, Briefcase, Filter, Users } from 'lucide-react'
 import DetailedUserModal from '@/components/DetailedUserModal'
 import { getCatalogs } from '@/app/actions/catalogs'
 
@@ -10,9 +10,10 @@ interface UsersClientProps {
 }
 
 export default function UsersClient({ initialUsers }: UsersClientProps) {
-    const [users, setUsers] = useState(initialUsers)
+    const [users] = useState(initialUsers)
     const [search, setSearch] = useState('')
     const [selectedArea, setSelectedArea] = useState<string | null>(null)
+    const [selectedPosition, setSelectedPosition] = useState<string | null>(null)
     const [selectedUser, setSelectedUser] = useState<any>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [catalogs, setCatalogs] = useState<Record<string, any[]>>({})
@@ -30,11 +31,13 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         const fullName = (user.full_name || '').toLowerCase()
         const role = (user.role || '').toLowerCase()
         const department = (user.details?.area_id ? resolve('areas', user.details.area_id) : '').toLowerCase()
+        const position = (user.details?.job_position_id ? resolve('job_positions', user.details.job_position_id) : '').toLowerCase()
 
-        const matchesSearch = fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower)
+        const matchesSearch = fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower) || position.includes(searchLower)
         const matchesArea = !selectedArea || user.details?.area_id === selectedArea
+        const matchesPosition = !selectedPosition || user.details?.job_position_id === selectedPosition
 
-        return matchesSearch && matchesArea
+        return matchesSearch && matchesArea && matchesPosition
     })
 
     function resolve(table: string, id: string) {
@@ -48,14 +51,19 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         <div className="space-y-8 animate-in fade-in duration-700">
             {/* Header & Search */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                    <h1 className="text-4xl font-black text-[var(--text-primary)] tracking-tight flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-[#2048FF] flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-                            <Users size={24} />
-                        </div>
-                        Directorio de Equipo
-                    </h1>
-                    <p className="text-[var(--text-secondary)] mt-2 font-medium">Conoce a todos los integrantes de la organización</p>
+                <div className="flex items-center gap-6">
+                    <div
+                        className="w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0"
+                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                    >
+                        <Users size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                    </div>
+                    <div>
+                        <h1 className="text-4xl font-black text-[var(--text-primary)] tracking-tight">
+                            Directorio de Equipo
+                        </h1>
+                        <p className="text-[var(--text-secondary)] mt-2 font-medium">Conoce a todos los integrantes de la organización</p>
+                    </div>
                 </div>
 
                 <div className="relative max-w-md w-full">
@@ -70,29 +78,62 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                 </div>
             </div>
 
-            {/* Area Filters Chips */}
-            <div className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 -mx-2 px-2 no-scrollbar">
-                <button
-                    onClick={() => setSelectedArea(null)}
-                    className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${!selectedArea
-                        ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
-                        : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
-                        }`}
-                >
-                    Todos
-                </button>
-                {(catalogs.areas || []).map(area => (
+            {/* Filters */}
+            <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]">Área:</span>
                     <button
-                        key={area.id}
-                        onClick={() => setSelectedArea(area.id)}
-                        className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${selectedArea === area.id
+                        onClick={() => setSelectedArea(null)}
+                        className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${!selectedArea
                             ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
                             : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
                             }`}
                     >
-                        {area.name}
+                        Todas
                     </button>
-                ))}
+                    {(catalogs.areas || []).map(area => (
+                        <button
+                            key={area.id}
+                            onClick={() => setSelectedArea(area.id)}
+                            className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${selectedArea === area.id
+                                ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
+                                : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
+                                }`}
+                        >
+                            {area.name}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
+                    <div className="relative w-full">
+                        <Filter className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] opacity-70" size={16} />
+                        <select
+                            value={selectedPosition || ''}
+                            onChange={(e) => setSelectedPosition(e.target.value || null)}
+                            className="w-full h-12 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] pl-14 pr-4 appearance-none text-[11px] font-black uppercase tracking-[0.08em] text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[#2048FF]/20 focus:border-[#2048FF]"
+                        >
+                            <option value="">Puesto: Todos</option>
+                            {(catalogs.job_positions || []).map(position => (
+                                <option key={position.id} value={position.id}>{position.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            setSelectedArea(null)
+                            setSelectedPosition(null)
+                        }}
+                        className={`h-12 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${!selectedArea
+                            && !selectedPosition
+                            ? 'bg-[#1700AC] border-[#1700AC] text-white shadow-lg shadow-indigo-500/20'
+                            : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
+                            }`}
+                    >
+                        Limpiar Filtros
+                    </button>
+                </div>
             </div>
 
             {/* Grid */}
@@ -113,7 +154,10 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                 {user.avatar_url ? (
                                     <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full bg-[#1C1F26] flex items-center justify-center text-2xl">
+                                    <div
+                                        className="w-full h-full flex items-center justify-center text-2xl font-black"
+                                        style={{ background: 'var(--hover-bg)', color: 'var(--text-primary)' }}
+                                    >
                                         {user.full_name?.charAt(0) || '👤'}
                                     </div>
                                 )}

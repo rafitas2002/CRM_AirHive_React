@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Mail, MessageCircle } from 'lucide-react'
 
 export interface PreLead {
     id: number
@@ -42,9 +43,9 @@ export default function PreLeadsTable({
     }
 
     return (
-        <div className='w-full overflow-x-auto custom-scrollbar'>
-            <table className='w-full text-left border-collapse'>
-                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+        <div className='ah-table-scroll custom-scrollbar'>
+            <table className='ah-table'>
+                <thead>
                     <tr>
                         {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
                         <th className='px-8 py-5 whitespace-nowrap w-[15%]'>Vendedor</th>
@@ -56,7 +57,7 @@ export default function PreLeadsTable({
                         {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>}
                     </tr>
                 </thead>
-                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                <tbody>
                     {preLeads.map((pl) => (
                         <tr
                             key={pl.id}
@@ -104,8 +105,7 @@ export default function PreLeadsTable({
                                 <div className='flex flex-col gap-2'>
                                     {pl.correos.length > 0 ? (
                                         pl.correos.slice(0, 1).map((c, i) => (
-                                            <div key={i} className='flex items-center gap-2 group/email'>
-                                                <span className='text-[10px] font-bold truncate max-w-[120px]' style={{ color: 'var(--text-secondary)' }}>{c}</span>
+                                            <div key={i} className='ah-cell-icon-text group/email'>
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -114,11 +114,9 @@ export default function PreLeadsTable({
                                                     className='text-blue-500 hover:text-blue-600 transition-colors flex-shrink-0'
                                                     title='Redactar en CRM'
                                                 >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                                        <polyline points="22,6 12,13 2,6" />
-                                                    </svg>
+                                                    <Mail className='ah-cell-icon' />
                                                 </button>
+                                                <span className='text-[10px] font-bold truncate max-w-[120px]' style={{ color: 'var(--text-secondary)' }}>{c}</span>
                                             </div>
                                         ))
                                     ) : (
@@ -130,8 +128,7 @@ export default function PreLeadsTable({
                                 <div className='flex flex-col gap-2'>
                                     {pl.telefonos.length > 0 ? (
                                         pl.telefonos.slice(0, 1).map((t, i) => (
-                                            <div key={i} className='flex items-center gap-2 group/phone whitespace-nowrap'>
-                                                <span className='text-[10px] font-black tabular-nums' style={{ color: 'var(--text-secondary)' }}>{t}</span>
+                                            <div key={i} className='ah-cell-icon-text group/phone whitespace-nowrap'>
                                                 <a
                                                     href={`https://wa.me/${t.replace(/\D/g, '')}`}
                                                     target='_blank'
@@ -139,10 +136,9 @@ export default function PreLeadsTable({
                                                     onClick={(e) => e.stopPropagation()}
                                                     className='text-emerald-500 hover:text-emerald-600 transition-colors flex-shrink-0'
                                                 >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                                    </svg>
+                                                    <MessageCircle className='ah-cell-icon' />
                                                 </a>
+                                                <span className='text-[10px] font-black tabular-nums' style={{ color: 'var(--text-secondary)' }}>{t}</span>
                                             </div>
                                         ))
                                     ) : (

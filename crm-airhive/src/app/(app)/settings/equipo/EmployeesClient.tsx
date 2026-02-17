@@ -122,11 +122,11 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                         </div>
 
                         <div className='flex items-center gap-3'>
-                            <div className='px-5 py-2 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                <span className='text-2xl font-black tracking-tighter text-blue-600 dark:text-blue-400'>{filteredEmployees.length}</span>
-                                <div className='flex flex-col'>
-                                    <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Usuarios</span>
-                                    <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Activos</span>
+                            <div className='ah-count-chip'>
+                                <span className='ah-count-chip-number'>{filteredEmployees.length}</span>
+                                <div className='ah-count-chip-meta'>
+                                    <span className='ah-count-chip-title'>Usuarios</span>
+                                    <span className='ah-count-chip-subtitle'>Activos</span>
                                 </div>
                             </div>
                         </div>

@@ -8,14 +8,13 @@ export async function getAdminCorrelationData() {
     try {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
-        const supabaseAdmin = createAdminClient()
 
         // 0. Verify Auth
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return { success: false, error: 'No autenticado' }
 
-        // 1. Verify Role using Admin Client (to bypass RLS for checking others if needed, though here it is self)
-        const { data: profile, error: roleError } = await (supabaseAdmin
+        // 1. Verify Role with regular server client
+        const { data: profile, error: roleError } = await (supabase
             .from('profiles') as any)
             .select('role')
             .eq('id', user.id)
@@ -28,6 +27,13 @@ export async function getAdminCorrelationData() {
 
         if (profile.role !== 'admin' && profile.role !== 'rh') {
             return { success: false, error: 'No tienes permisos para acceder a estos datos' }
+        }
+
+        let dbClient: any = supabase
+        try {
+            dbClient = createAdminClient()
+        } catch (envError: any) {
+            console.warn('[AdminCorrelation] Admin env vars missing; using server client fallback:', envError?.message)
         }
 
         // 2. Fetch tables with ADMIN client
@@ -44,16 +50,16 @@ export async function getAdminCorrelationData() {
             { data: taskHistory, error: taskError },
             { data: preLeads, error: preError }
         ] = await Promise.all([
-            supabaseAdmin.from('profiles').select('id, full_name') as any,
-            supabaseAdmin.from('employee_profiles').select('*') as any,
-            supabaseAdmin.from('genders').select('id, name') as any,
-            supabaseAdmin.from('race_results').select('*').order('period', { ascending: true }) as any,
-            supabaseAdmin.from('meetings').select('*') as any,
-            supabaseAdmin.from('clientes').select('*') as any,
-            supabaseAdmin.from('industrias').select('*') as any,
-            supabaseAdmin.from('empresas').select('*') as any,
-            supabaseAdmin.from('historial_tareas').select('user_id') as any,
-            supabaseAdmin.from('pre_leads').select('*') as any
+            dbClient.from('profiles').select('id, full_name') as any,
+            dbClient.from('employee_profiles').select('*') as any,
+            dbClient.from('genders').select('id, name') as any,
+            dbClient.from('race_results').select('*').order('period', { ascending: true }) as any,
+            dbClient.from('meetings').select('*') as any,
+            dbClient.from('clientes').select('*') as any,
+            dbClient.from('industrias').select('*') as any,
+            dbClient.from('empresas').select('*') as any,
+            dbClient.from('historial_tareas').select('user_id') as any,
+            dbClient.from('pre_leads').select('*') as any
         ])
 
         if (profError) throw profError
@@ -86,6 +92,31 @@ export async function getAdminCorrelationData() {
             if (res.medal === 'silver') p.medals.silver++
             if (res.medal === 'bronze') p.medals.bronze++
         })
+
+        const DAY_MS = 24 * 60 * 60 * 1000
+        const monthDiff = (start: Date, end: Date) =>
+            (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+
+        const computeAveragesBySpan = (dates: Date[]) => {
+            if (dates.length === 0) {
+                return { perDay: 0, perMonth: 0 }
+            }
+
+            const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime())
+            const first = sorted[0]
+            const last = sorted[sorted.length - 1]
+            const spanDays = Math.max(1, Math.ceil((last.getTime() - first.getTime()) / DAY_MS) + 1)
+            const spanMonths = Math.max(1, monthDiff(first, last))
+
+            return {
+                perDay: dates.length / spanDays,
+                perMonth: dates.length / spanMonths
+            }
+        }
+
+        const preLeadById = new Map<number, any>(
+            (preLeads || []).map((pl: any) => [pl.id, pl])
+        )
 
         // 4. Combine Data - Iteramos sobre PROFILES para asegurar que todos aparezcan
         const masterData = (profiles || []).map((p: any) => {
@@ -183,11 +214,46 @@ export async function getAdminCorrelationData() {
             // New Metrics: Pre-Leads & Conversions
             const userPreLeads = (preLeads || []).filter((pl: any) => pl.vendedor_id === p.id)
             const preLeadsCount = userPreLeads.length
-            const convertedPreLeads = userPreLeads.filter((pl: any) => pl.is_converted).length
-            const preLeadConversionRate = preLeadsCount > 0 ? (convertedPreLeads / preLeadsCount) * 100 : 0
-            const companiesCreated = (companies || []).filter((comp: any) => comp.owner_id === p.id).length
+            const preLeadDates = userPreLeads
+                .map((pl: any) => pl.created_at ? new Date(pl.created_at) : null)
+                .filter((d: Date | null): d is Date => !!d)
+            const preLeadAvg = computeAveragesBySpan(preLeadDates)
 
-            const avgPreLeadsPerMonth = tenureMonths > 0 ? preLeadsCount / tenureMonths : preLeadsCount
+            const conversions = (clients || []).filter((c: any) =>
+                !!c.original_pre_lead_id &&
+                c.original_vendedor_id === p.id &&
+                !!c.converted_at
+            )
+            const convertedFromPreLeadTable = userPreLeads.filter((pl: any) => pl.is_converted)
+            const convertedPreLeads = Math.max(conversions.length, convertedFromPreLeadTable.length)
+            const preLeadConversionRate = preLeadsCount > 0 ? (convertedPreLeads / preLeadsCount) * 100 : 0
+            const conversionDates = [
+                ...conversions.map((c: any) => c.converted_at ? new Date(c.converted_at) : null),
+                ...convertedFromPreLeadTable.map((pl: any) => pl.converted_at ? new Date(pl.converted_at) : null)
+            ]
+                .filter((d: Date | null): d is Date => !!d)
+            const conversionAvg = computeAveragesBySpan(conversionDates)
+
+            const conversionLagDaysList = conversions
+                .map((c: any) => {
+                    const source = preLeadById.get(c.original_pre_lead_id)
+                    if (!source?.created_at || !c.converted_at) return null
+                    const lag = (new Date(c.converted_at).getTime() - new Date(source.created_at).getTime()) / DAY_MS
+                    return lag >= 0 ? lag : null
+                })
+                .filter((n: number | null): n is number => n !== null)
+            const avgConversionLagDays = conversionLagDaysList.length > 0
+                ? conversionLagDaysList.reduce((a: number, b: number) => a + b, 0) / conversionLagDaysList.length
+                : 0
+
+            const userCompanies = (companies || []).filter((comp: any) => comp.owner_id === p.id)
+            const companiesCreated = userCompanies.length
+            const companyDates = userCompanies
+                .map((comp: any) => comp.created_at ? new Date(comp.created_at) : null)
+                .filter((d: Date | null): d is Date => !!d)
+            const companyAvg = computeAveragesBySpan(companyDates)
+            const lastCompanyCreatedAt = userCompanies
+                .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at || null
 
             return {
                 userId: p.id,
@@ -210,12 +276,42 @@ export async function getAdminCorrelationData() {
                 lastRaceAmount: perf.salesHistory.length > 0 ? perf.salesHistory[perf.salesHistory.length - 1].amount : 0,
                 preLeadsCount,
                 preLeadConversionRate,
+                convertedPreLeadsCount: convertedPreLeads,
+                avgPreLeadsPerDay: preLeadAvg.perDay,
+                avgPreLeadsPerMonth: preLeadAvg.perMonth,
+                avgConvertedPreLeadsPerDay: conversionAvg.perDay,
+                avgConvertedPreLeadsPerMonth: conversionAvg.perMonth,
+                avgConversionLagDays,
                 companiesCreated,
-                avgPreLeadsPerMonth
+                avgCompaniesPerDay: companyAvg.perDay,
+                avgCompaniesPerMonth: companyAvg.perMonth,
+                lastCompanyCreatedAt
             }
         })
 
-        return { success: true, data: masterData }
+        const profileNameById = new Map<string, string>(
+            (profiles || []).map((p: any) => [p.id, p.full_name || 'Desconocido'])
+        )
+
+        const companyRegistry = (companies || [])
+            .map((company: any) => ({
+                id: company.id,
+                nombre: company.nombre,
+                ownerId: company.owner_id || null,
+                ownerName: company.owner_id ? profileNameById.get(company.owner_id) || 'Desconocido' : 'Sin asignar',
+                createdAt: company.created_at,
+                industria: company.industria || 'Sin clasificar',
+                ubicacion: company.ubicacion || 'N/A'
+            }))
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+        return {
+            success: true,
+            data: {
+                users: masterData,
+                companyRegistry
+            }
+        }
     } catch (error: any) {
         console.error('[AdminCorrelation] General Exception:', error)
         return { success: false, error: error.message }
@@ -226,15 +322,21 @@ export async function getUserActivitySummary(targetUserId: string) {
     try {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
-        const supabaseAdmin = createAdminClient()
 
         // 1. Verify Auth & Role
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return { success: false, error: 'No autenticado' }
 
-        const { data: profile } = await (supabaseAdmin.from('profiles') as any).select('role').eq('id', user.id).single()
+        const { data: profile } = await (supabase.from('profiles') as any).select('role').eq('id', user.id).single()
         if (profile?.role !== 'admin' && profile?.role !== 'rh') {
             return { success: false, error: 'Acceso denegado' }
+        }
+
+        let dbClient: any = supabase
+        try {
+            dbClient = createAdminClient()
+        } catch (envError: any) {
+            console.warn('[UserActivitySummary] Admin env vars missing; using server client fallback:', envError?.message)
         }
 
         // 2. Fetch Data
@@ -247,13 +349,13 @@ export async function getUserActivitySummary(targetUserId: string) {
             { data: industries },
             { data: companies }
         ] = await Promise.all([
-            supabaseAdmin.from('race_results').select('*').eq('user_id', targetUserId).order('period', { ascending: true }) as any,
-            supabaseAdmin.from('meetings').select('*').eq('seller_id', targetUserId).order('start_time', { ascending: false }) as any,
-            supabaseAdmin.from('clientes').select('*').eq('owner_id', targetUserId) as any,
-            supabaseAdmin.from('tareas').select('*').eq('vendedor_id', targetUserId).order('fecha_vencimiento', { ascending: false }) as any,
-            supabaseAdmin.from('historial_tareas').select('*').eq('user_id', targetUserId).order('fecha_completado', { ascending: false }) as any,
-            supabaseAdmin.from('industrias').select('*') as any,
-            supabaseAdmin.from('empresas').select('*') as any
+            dbClient.from('race_results').select('*').eq('user_id', targetUserId).order('period', { ascending: true }) as any,
+            dbClient.from('meetings').select('*').eq('seller_id', targetUserId).order('start_time', { ascending: false }) as any,
+            dbClient.from('clientes').select('*').eq('owner_id', targetUserId) as any,
+            dbClient.from('tareas').select('*').eq('vendedor_id', targetUserId).order('fecha_vencimiento', { ascending: false }) as any,
+            dbClient.from('historial_tareas').select('*').eq('user_id', targetUserId).order('fecha_completado', { ascending: false }) as any,
+            dbClient.from('industrias').select('*') as any,
+            dbClient.from('empresas').select('*') as any
         ])
 
         // 3. Performance Aggregation

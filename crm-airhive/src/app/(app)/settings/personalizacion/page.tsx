@@ -1,6 +1,7 @@
 'use client'
 
 import { useTheme, Theme } from '@/lib/ThemeContext'
+import { Palette, Lightbulb } from 'lucide-react'
 
 const themes: Array<{ id: Theme; name: string; description: string; preview: { bg: string; text: string } }> = [
     {
@@ -29,8 +30,9 @@ export default function PersonalizacionPage() {
     return (
         <div className='p-8 max-w-5xl'>
             <div className='mb-8'>
-                <h1 className='text-3xl font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
-                    🎨 Personalización
+                <h1 className='text-3xl font-bold mb-2 flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
+                    <Palette size={26} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                    Personalización
                 </h1>
                 <p className='text-base' style={{ color: 'var(--text-secondary)' }}>
                     Personaliza la apariencia de tu CRM según tus preferencias
@@ -97,7 +99,7 @@ export default function PersonalizacionPage() {
                 }}
             >
                 <p className='text-sm flex items-start gap-2' style={{ color: 'var(--text-secondary)' }}>
-                    <span className='text-base'>💡</span>
+                    <Lightbulb size={16} strokeWidth={2.2} className='mt-0.5 shrink-0' style={{ color: 'var(--accent-secondary)' }} />
                     <span>
                         El tema seleccionado se aplicará automáticamente a todas las páginas del CRM y se guardará para tus próximas sesiones.
                     </span>

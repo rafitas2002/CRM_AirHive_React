@@ -39,12 +39,12 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ imageSrc, onCropComplete, o
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="relative w-full max-w-lg bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] md:h-auto md:aspect-square">
+        <div className="ah-modal-overlay">
+            <div className="ah-modal-panel relative w-full max-w-lg md:h-auto md:aspect-square">
                 {/* Header */}
-                <div className="px-6 py-4 bg-[#1700AC] flex justify-between items-center text-white shrink-0">
-                    <h3 className="font-bold text-lg">Ajustar Logotipo</h3>
-                    <button onClick={onCancel} className="hover:text-gray-300 transition-colors">✕</button>
+                <div className="ah-modal-header">
+                    <h3 className="ah-modal-title text-lg">Ajustar Logotipo</h3>
+                    <button onClick={onCancel} className="ah-modal-close">✕</button>
                 </div>
 
                 {/* Cropper Area */}

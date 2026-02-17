@@ -366,6 +366,17 @@ export default function LeadsPage() {
     const handleRowClick = (lead: Lead) => {
         setSelectedLead(lead)
         setIsDetailViewOpen(true)
+        if (typeof window !== 'undefined') {
+            window.history.pushState({ ahOverlay: 'lead-detail' }, '')
+        }
+    }
+
+    const handleCloseDetailView = () => {
+        if (typeof window !== 'undefined' && window.history.state?.ahOverlay === 'lead-detail') {
+            window.history.replaceState(null, '')
+        }
+        setIsDetailViewOpen(false)
+        setSelectedLead(null)
     }
 
     const handleEditLeadFromDetail = (lead: Lead) => {
@@ -419,6 +430,15 @@ export default function LeadsPage() {
         setCurrentLead(lead)
         setIsModalOpen(true)
     }
+
+    useEffect(() => {
+        const onPopState = () => {
+            setIsDetailViewOpen(false)
+            setSelectedLead(null)
+        }
+        window.addEventListener('popstate', onPopState)
+        return () => window.removeEventListener('popstate', onPopState)
+    }, [])
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
@@ -505,69 +525,61 @@ export default function LeadsPage() {
                             </div>
 
                             <div className='flex items-center gap-3'>
-                                <div className='px-5 py-2 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-2xl border border-blue-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter text-[#2048FF]'>{sortedAndFilteredLeads.length}</span>
-                                    <div className='flex flex-col'>
-                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Prospectos</span>
-                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Filtrados</span>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{sortedAndFilteredLeads.length}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Prospectos</span>
+                                        <span className='ah-count-chip-subtitle'>Filtrados</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className='flex flex-col lg:flex-row items-center gap-4'>
-                            <div className='relative flex-1 w-full'>
-                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
-                                <input
-                                    type='text'
-                                    placeholder='Buscar por nombre, empresa, correo...'
-                                    value={filterSearch}
-                                    onChange={(e) => setFilterSearch(e.target.value)}
-                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                                    style={{ color: 'var(--text-primary)' }}
-                                />
-                            </div>
-
-                            <div className='flex flex-wrap items-center gap-3 w-full lg:w-auto'>
-                                <div className='flex flex-1 lg:flex-none gap-2'>
-                                    <select
-                                        value={filterStage}
-                                        onChange={(e) => setFilterStage(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
-                                    >
-                                        <option value="All">Etapa: Todas</option>
-                                        <option value="Prospección">Prospección</option>
-                                        <option value="Negociación">Negociación</option>
-                                        <option value="Cerrado Ganado">Cerrado Ganado</option>
-                                        <option value="Cerrado Perdido">Cerrado Perdido</option>
-                                    </select>
-
-                                    <select
-                                        value={filterOwner}
-                                        onChange={(e) => setFilterOwner(e.target.value)}
-                                        className='flex-1 lg:min-w-[160px] bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
-                                    >
-                                        <option value="All">Vendedor: Todos</option>
-                                        {uniqueOwners.map(owner => (
-                                            <option key={owner} value={owner!}>{owner}</option>
-                                        ))}
-                                    </select>
+                        <div className='ah-table-toolbar'>
+                            <div className='ah-table-controls'>
+                                <div className='ah-search-control'>
+                                    <Search className='ah-search-icon' size={18} />
+                                    <input
+                                        type='text'
+                                        placeholder='Buscar por nombre, empresa, correo...'
+                                        value={filterSearch}
+                                        onChange={(e) => setFilterSearch(e.target.value)}
+                                        className='ah-search-input'
+                                    />
                                 </div>
+                                <select
+                                    value={filterStage}
+                                    onChange={(e) => setFilterStage(e.target.value)}
+                                    className='ah-select-control'
+                                >
+                                    <option value="All">Etapa: Todas</option>
+                                    <option value="Prospección">Prospección</option>
+                                    <option value="Negociación">Negociación</option>
+                                    <option value="Cerrado Ganado">Cerrado Ganado</option>
+                                    <option value="Cerrado Perdido">Cerrado Perdido</option>
+                                </select>
 
-                                <div className='flex flex-1 lg:flex-none gap-2'>
-                                    <select
-                                        value={sortBy}
-                                        onChange={(e) => setSortBy(e.target.value)}
-                                        className='flex-1 lg:min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95'
-                                    >
-                                        <option value="fecha_registro-desc">Orden: Reciente</option>
-                                        <option value="fecha_registro-asc">Orden: Antiguo</option>
-                                        <option value="valor_estimado-desc">Orden: $$$</option>
-                                        <option value="calificacion-desc">Orden: Estrellas</option>
-                                        <option value="probabilidad-desc">Orden: Prob.</option>
-                                    </select>
-                                </div>
-
+                                <select
+                                    value={filterOwner}
+                                    onChange={(e) => setFilterOwner(e.target.value)}
+                                    className='ah-select-control'
+                                >
+                                    <option value="All">Vendedor: Todos</option>
+                                    {uniqueOwners.map(owner => (
+                                        <option key={owner} value={owner!}>{owner}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className='ah-select-control ah-select-control-order'
+                                >
+                                    <option value="fecha_registro-desc">Orden: Reciente</option>
+                                    <option value="fecha_registro-asc">Orden: Antiguo</option>
+                                    <option value="valor_estimado-desc">Orden: $$$</option>
+                                    <option value="calificacion-desc">Orden: Estrellas</option>
+                                    <option value="probabilidad-desc">Orden: Prob.</option>
+                                </select>
                                 {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
                                     <button
                                         onClick={() => {
@@ -576,7 +588,7 @@ export default function LeadsPage() {
                                             setFilterOwner('All')
                                             setSortBy('fecha_registro-desc')
                                         }}
-                                        className='p-2.5 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors shadow-sm'
+                                        className='ah-reset-filter-btn'
                                         title='Limpiar Filtros'
                                     >
                                         <RotateCw size={18} />
@@ -626,7 +638,7 @@ export default function LeadsPage() {
             <ClientDetailView
                 client={selectedLead as any}
                 isOpen={isDetailViewOpen}
-                onClose={() => setIsDetailViewOpen(false)}
+                onClose={handleCloseDetailView}
                 onEditClient={(lead) => handleEditLeadFromDetail(lead as any)}
                 onEditCompany={handleEditCompanyFromDetail}
                 onEmailClick={handleEmailClick}

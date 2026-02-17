@@ -193,15 +193,15 @@ export default function TaskModal({
     const currentActivity = activityTypes.find(a => a.id === formData.tipo_actividad) || activityTypes[0]
 
     return (
-        <div className='fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm'>
-            <div className='bg-[var(--card-bg)] rounded-[32px] w-full max-w-lg max-h-[85vh] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col border border-[var(--card-border)]'>
+        <div className='ah-modal-overlay'>
+            <div className='ah-modal-panel w-full max-w-lg animate-in zoom-in-95 duration-200'>
                 {/* Header */}
-                <div className='bg-[#0A1635] p-6 shrink-0 flex items-center justify-between text-white border-b border-white/10'>
+                <div className='ah-modal-header'>
                     <div>
-                        <h2 className='text-xl font-black tracking-tight'>
+                        <h2 className='ah-modal-title'>
                             {mode === 'create' ? 'Nueva Tarea' : (isModificationMode ? 'Editar Tarea' : 'Detalles de Tarea')}
                         </h2>
-                        <p className='text-blue-300 text-[10px] font-black uppercase tracking-widest mt-0.5'>Follow-up & Actividades</p>
+                        <p className='ah-modal-subtitle'>Follow-up & Actividades</p>
                     </div>
                     <div className='flex items-center gap-2'>
                         {mode === 'edit' && !isModificationMode && (
@@ -213,7 +213,7 @@ export default function TaskModal({
                                 <Pencil size={16} />
                             </button>
                         )}
-                        <button onClick={onClose} className='w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-all'>
+                        <button onClick={onClose} className='ah-modal-close w-8 h-8'>
                             <X size={18} />
                         </button>
                     </div>
