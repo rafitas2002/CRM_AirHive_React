@@ -200,23 +200,23 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee }: Emp
 
     return (
         <AnimatePresence>
-            <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm'>
+            <div className='ah-modal-overlay'>
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
-                    className='bg-white rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]'
+                    className='ah-modal-panel w-full max-w-4xl'
                 >
                     {/* Header */}
-                    <div className='px-6 py-4 border-b flex justify-between items-center bg-gray-50 flex-shrink-0'>
+                    <div className='ah-modal-header'>
                         <div>
-                            <h3 className='text-lg font-bold text-[#0A1635]'>
+                            <h3 className='ah-modal-title text-lg'>
                                 {employee ? 'Ficha de Empleado' : 'Nuevo Empleado'}
                             </h3>
-                            <p className='text-xs text-gray-500'>Personal ID v2.0</p>
+                            <p className='ah-modal-subtitle'>Personal ID v2.0</p>
                         </div>
-                        <button onClick={onClose} className='p-2 hover:bg-gray-200 rounded-full transition-colors'>
-                            <X className='w-5 h-5 text-gray-500' />
+                        <button onClick={onClose} className='ah-modal-close'>
+                            <X className='w-5 h-5 text-white' />
                         </button>
                     </div>
 

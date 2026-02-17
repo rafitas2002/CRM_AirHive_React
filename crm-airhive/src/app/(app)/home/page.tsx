@@ -117,40 +117,75 @@ function AdminDashboardView({ username }: { username: string }) {
     if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
+    const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
+    const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-10'>
-                {/* Dynamic Welcome Header - Hive Wave Aesthetic */}
-                <div className='relative overflow-hidden bg-gradient-to-br from-[#0A1635] via-[#2048FF] to-[#1700AC] p-10 rounded-[40px] shadow-2xl shadow-blue-900/40 text-white group'>
-                    <div className='absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full -mr-48 -mt-48 blur-3xl transition-all duration-700 group-hover:scale-110'></div>
-                    <div className='absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full -ml-32 -mb-32 blur-2xl'></div>
+                {/* Welcome Header - Unified CRM Design */}
+                <div className='relative overflow-hidden p-8 md:p-10 rounded-[40px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                    <div className='absolute -top-24 -right-16 w-80 h-80 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
+                    <div className='absolute -bottom-24 -left-20 w-72 h-72 rounded-full blur-3xl opacity-15 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
+                    <div className='absolute inset-0 pointer-events-none opacity-55' style={{ background: 'linear-gradient(125deg, transparent 0%, rgba(255,255,255,0.1) 38%, transparent 75%)' }} />
 
-                    {/* Decorative SVG Wave - Twisted Tube feel */}
-                    <svg viewBox="0 0 1000 1000" className="absolute right-[-10%] top-[-20%] w-[60%] h-auto opacity-20 transition-transform duration-1000 group-hover:rotate-12 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M1000 500C1000 800 600 1000 400 800C200 600 -100 400 100 200C300 0 1000 200 1000 500Z" fill="white" fillOpacity="0.1" />
-                    </svg>
-
-                    <div className='relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                        <div className='space-y-4'>
-                            <div className='inline-flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20'>
-                                <span className='relative flex h-3 w-3'>
-                                    <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75'></span>
-                                    <span className='relative inline-flex rounded-full h-3 w-3 bg-blue-500'></span>
+                    <div className='relative z-10 grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-8 items-center'>
+                        <div className='space-y-5'>
+                            <div className='inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl border shadow-sm' style={{ background: 'var(--home-hero-chip-bg)', borderColor: 'var(--home-hero-chip-border)' }}>
+                                <LayoutDashboard size={14} style={{ color: 'var(--home-hero-chip-text)' }} />
+                                <span className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--home-hero-chip-text)' }}>
+                                    Panel de Control AirHive
                                 </span>
-                                <span className='text-[10px] font-black uppercase tracking-[0.2em] text-blue-100'>Sistema Operativo AirHive</span>
                             </div>
-                            <h1 className='text-6xl font-black tracking-tighter flex items-center gap-4'>
-                                ¡Hola, {username}! 🚀
-                            </h1>
-                            <p className='text-blue-100/90 text-xl font-medium max-w-xl leading-relaxed'>
-                                Tu centro de comando inteligente está listo. Gestiona el pulso de tus relaciones corporativas hoy.
-                            </p>
+
+                            <div className='space-y-3'>
+                                <h1 className='text-4xl md:text-6xl font-black tracking-tight leading-none' style={{ color: 'var(--home-hero-text)' }}>
+                                    Bienvenido, {username}
+                                </h1>
+                                <p className='text-base md:text-2xl font-semibold max-w-3xl leading-relaxed' style={{ color: 'var(--home-hero-muted)' }}>
+                                    Vista ejecutiva de operación comercial con enfoque en pipeline, calidad de datos y ritmo de cierre.
+                                </p>
+                            </div>
+
+                            <div className='flex flex-wrap items-center gap-3 pt-1'>
+                                <div className='px-4 py-2 rounded-xl border backdrop-blur-sm' style={{ background: 'var(--home-hero-chip-bg)', borderColor: 'var(--home-hero-chip-border)' }}>
+                                    <p className='text-[9px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--home-hero-muted)' }}>Leads Activos</p>
+                                    <p className='text-xl font-black tabular-nums' style={{ color: 'var(--home-hero-text)' }}>{stats.activeCount}</p>
+                                </div>
+                                <div className='px-4 py-2 rounded-xl border backdrop-blur-sm' style={{ background: 'var(--home-hero-chip-bg)', borderColor: 'var(--home-hero-chip-border)' }}>
+                                    <p className='text-[9px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--home-hero-muted)' }}>Sin Valor</p>
+                                    <p className='text-xl font-black tabular-nums' style={{ color: 'var(--home-hero-text)' }}>{stats.dataWarnings}</p>
+                                </div>
+                            </div>
                         </div>
-                        <div className='flex gap-3'>
-                            <div className='bg-black/20 backdrop-blur-xl px-8 py-6 rounded-3xl border border-white/10 shadow-inner'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.2em] text-blue-300 mb-2'>Pipeline Estratégico</p>
-                                <p className='text-4xl font-black tracking-tighter'>${stats.totalPipeline.toLocaleString()}</p>
+
+                        <div className='relative w-full xl:w-[380px] rounded-[30px] border p-5 md:p-6 shadow-lg overflow-hidden' style={{ background: 'var(--home-hero-panel-bg)', borderColor: 'var(--home-hero-panel-border)' }}>
+                            <div className='absolute inset-x-0 top-0 h-px opacity-60' style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)' }} />
+                            <div className='flex items-center justify-between mb-4'>
+                                <p className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--home-hero-muted)' }}>
+                                    Pipeline Estratégico
+                                </p>
+                                <TrendingUp size={17} style={{ color: 'var(--home-hero-text)' }} />
+                            </div>
+                            <p className='text-4xl md:text-5xl font-black tracking-tight tabular-nums mb-5' style={{ color: 'var(--home-hero-text)' }}>
+                                ${stats.totalPipeline.toLocaleString('es-MX')}
+                            </p>
+
+                            <div className='space-y-2'>
+                                <div className='flex items-center justify-between'>
+                                    <span className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--home-hero-muted)' }}>
+                                        Avance del forecast
+                                    </span>
+                                    <span className='text-sm font-black tabular-nums' style={{ color: 'var(--home-hero-text)' }}>
+                                        {goalProgress.toFixed(0)}%
+                                    </span>
+                                </div>
+                                <div className='h-2.5 rounded-full overflow-hidden' style={{ background: 'rgba(15, 23, 42, 0.65)' }}>
+                                    <div
+                                        className='h-full rounded-full transition-all duration-700'
+                                        style={{ width: `${goalProgress}%`, background: 'linear-gradient(90deg, #60a5fa 0%, #22d3ee 100%)' }}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -158,7 +193,7 @@ function AdminDashboardView({ username }: { username: string }) {
 
                 {/* KPI Bar */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Forecast Real (Adjusted)</label>
                             <Zap className='w-5 h-5 text-purple-500 group-hover:animate-pulse' />
@@ -169,7 +204,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Ponderado por score histórico</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Calidad de Datos</label>
                             <AlertCircle className='w-5 h-5 text-amber-500 group-hover:shake' />
@@ -178,17 +213,17 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Leads sin valor estimado</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Progreso Semanal</label>
                             <Target className='w-5 h-5 text-emerald-500' />
                         </div>
                         <div className='flex items-end gap-2'>
-                            <p className='text-4xl font-black' style={{ color: 'var(--text-primary)' }}>{(stats.adjustedForecast / teamGoal * 100).toFixed(0)}%</p>
+                            <p className='text-4xl font-black' style={{ color: 'var(--text-primary)' }}>{goalProgress.toFixed(0)}%</p>
                             <p className='text-xs font-bold text-emerald-600 mb-2'>de la meta</p>
                         </div>
                         <div className='w-full h-2 rounded-full mt-3 overflow-hidden' style={{ background: 'var(--hover-bg)' }}>
-                            <div className='h-full bg-emerald-500' style={{ width: `${Math.min(100, (stats.adjustedForecast / teamGoal * 100))}%` }} />
+                            <div className='h-full bg-emerald-500' style={{ width: `${goalProgress}%` }} />
                         </div>
                     </div>
                 </div>
@@ -214,7 +249,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         />
 
                         {/* Top Performance Table Redesigned */}
-                        <div className='rounded-[40px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[40px] border shadow-xl overflow-hidden cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex justify-between items-center px-8 py-5 border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
                                 <h3 className='font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
                                     🏆 Ranking de Confiabilidad
@@ -257,13 +292,23 @@ function AdminDashboardView({ username }: { username: string }) {
                         <PipelineVisualizer data={stats.funnel} />
 
                         {/* Audit Recommendation Card */}
-                        <div className='bg-gradient-to-br from-[#0F2A44] to-[#0A1635] p-8 rounded-[40px] text-white overflow-hidden relative'>
-                            <div className='absolute -right-4 -bottom-4 w-24 h-24 bg-white/5 rounded-full'></div>
-                            <h4 className='text-xs font-black uppercase tracking-[0.2em] mb-4 text-blue-300'>💡 Tip de Auditoría</h4>
-                            <p className='text-sm font-medium leading-relaxed opacity-90'>
-                                Hay <strong>{stats.dataWarnings} leads</strong> sin valor estimado. Pedir a los vendedores que actualicen estos montos mejorará la precisión del forecast en un <strong>{(stats.dataWarnings / leads.length * 100).toFixed(0)}%</strong>.
+                        <div className='p-8 rounded-[40px] overflow-hidden relative border shadow-sm cursor-pointer' style={{ background: 'var(--home-audit-bg)', borderColor: 'var(--home-audit-border)' }}>
+                            <div className='absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-20' style={{ background: 'var(--home-audit-title)' }}></div>
+                            <h4 className='text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2' style={{ color: 'var(--home-audit-title)' }}>
+                                <AlertCircle size={14} />
+                                Tip de Auditoría
+                            </h4>
+                            <p className='text-sm font-medium leading-relaxed' style={{ color: 'var(--home-audit-text)' }}>
+                                Hay <strong>{stats.dataWarnings} leads</strong> sin valor estimado. Pedir a los vendedores que actualicen estos montos mejorará la precisión del forecast en un <strong>{auditImpact.toFixed(0)}%</strong>.
                             </p>
-                            <button className='mt-6 w-full py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all'>
+                            <button
+                                className='mt-6 w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all hover:brightness-110'
+                                style={{
+                                    background: 'var(--home-audit-button-bg)',
+                                    border: '1px solid var(--home-audit-button-border)',
+                                    color: 'var(--home-audit-button-text)'
+                                }}
+                            >
                                 Notificar a Equipo
                             </button>
                         </div>
@@ -317,30 +362,55 @@ function SellerHomeView({ username }: { username: string }) {
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Welcome Header */}
-                <div className='bg-gradient-to-r from-[#1700AC] to-[#2048FF] p-8 rounded-3xl shadow-xl text-white'>
-                    <h1 className='text-4xl font-black mb-2'>
-                        ¡Bienvenido, {username}! 🚀
-                    </h1>
-                    <p className='text-white/80 text-lg'>
-                        Aquí está tu resumen del día
-                    </p>
+                <div className='relative overflow-hidden p-8 rounded-[34px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                    <div className='absolute -top-20 -right-12 w-64 h-64 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
+                    <div className='absolute inset-0 pointer-events-none opacity-40' style={{ background: 'linear-gradient(120deg, transparent 0%, rgba(32,72,255,0.08) 45%, transparent 80%)' }} />
+
+                    <div className='relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6'>
+                        <div className='space-y-3'>
+                            <div className='inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <LayoutDashboard size={14} style={{ color: 'var(--accent-secondary)' }} />
+                                <span className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>
+                                    Resumen de operación
+                                </span>
+                            </div>
+
+                            <h1 className='text-4xl font-black tracking-tight leading-none' style={{ color: 'var(--text-primary)' }}>
+                                Bienvenido, {username}
+                            </h1>
+                            <p className='text-lg font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                Aquí tienes tu estado comercial del día.
+                            </p>
+                        </div>
+
+                        <div className='grid grid-cols-2 gap-3 min-w-[300px]'>
+                            <div className='rounded-2xl border px-4 py-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <p className='text-[9px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Activos</p>
+                                <p className='text-2xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>{stats.activeLeads}</p>
+                            </div>
+                            <div className='rounded-2xl border px-4 py-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <p className='text-[9px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Negociación</p>
+                                <p className='text-2xl font-black tabular-nums' style={{ color: 'var(--accent-secondary)' }}>{stats.negotiationLeads}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Stats Cards */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Leads Activos</label>
                         <p className='text-4xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{stats.activeLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>En tu pipeline</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>En Negociación</label>
                         <p className='text-4xl font-black text-amber-600 mt-2'>{stats.negotiationLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Requieren seguimiento</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Forecast Ponderado</label>
                         <p className='text-4xl font-black text-emerald-600 mt-2'>
                             ${stats.totalValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
@@ -358,7 +428,7 @@ function SellerHomeView({ username }: { username: string }) {
 
                     {/* Right Column - Quick Actions */}
                     <div className='lg:col-span-2 space-y-6'>
-                        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                                 🎯 Acciones Rápidas
                             </h2>
@@ -388,17 +458,17 @@ function SellerHomeView({ username }: { username: string }) {
                                     <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Gestionar cuentas</p>
                                 </a>
                                 <a
-                                    href='/admin/forecast'
+                                    href='/tareas'
                                     className='p-4 rounded-xl transition-all border-2 hover:scale-105'
                                     style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >
-                                    <p className='font-bold mb-1 text-amber-600'>🎯 Mi Score</p>
-                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Ver confiabilidad</p>
+                                    <p className='font-bold mb-1 text-amber-600'>✅ Tareas</p>
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>Seguimiento diario</p>
                                 </a>
                             </div>
                         </div>
 
-                        <div className='p-6 rounded-2xl border-2' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl border-2 cursor-pointer' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <h3 className='text-lg font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
                                 💡 Tip del Día
                             </h3>
@@ -416,12 +486,12 @@ function SellerHomeView({ username }: { username: string }) {
 
 export default function HomePage() {
     const auth = useAuth()
-    const isAdminOrRH = auth.profile?.role === 'admin' || auth.profile?.role === 'rh'
+    const isAdmin = auth.profile?.role === 'admin'
 
     // Only block if we are loading AND don't have a session
     if (auth.loading && !auth.loggedIn) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
-    if (isAdminOrRH) {
+    if (isAdmin) {
         return <AdminDashboardView username={auth.username} />
     }
 

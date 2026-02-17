@@ -183,20 +183,19 @@ export default function PreLeadModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-[100] flex items-start justify-center pt-16 pb-8 px-4 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300 overflow-y-auto'>
+        <div className='ah-modal-overlay transition-all animate-in fade-in duration-300'>
             <div
-                className='rounded-[32px] w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-300 border'
-                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                className='ah-modal-panel w-full max-w-2xl animate-in zoom-in-95 duration-300'
             >
                 {/* Header - Unified Blue */}
                 {/* Header - Unified Blue */}
-                <div className='bg-[#0A1635] px-6 py-4 flex items-center justify-between shrink-0 border-b border-[var(--card-border)]'>
-                    <h2 className='text-xl font-bold text-white'>
+                <div className='ah-modal-header'>
+                    <h2 className='ah-modal-title'>
                         {mode === 'create' ? 'Nuevo Pre-Lead' : 'Editar Pre-Lead'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className='text-white/70 hover:text-white transition-colors'
+                        className='ah-modal-close'
                     >
                         ✕
                     </button>

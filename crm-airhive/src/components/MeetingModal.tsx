@@ -168,16 +168,16 @@ export default function MeetingModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm'>
-            <div className='w-full max-w-2xl bg-white rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col max-h-[90vh]'>
+        <div className='ah-modal-overlay'>
+            <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
                 {/* Header */}
-                <div className='bg-[#0F2A44] px-6 py-4 flex items-center justify-between shrink-0'>
-                    <h2 className='text-xl font-bold text-white'>
+                <div className='ah-modal-header'>
+                    <h2 className='ah-modal-title'>
                         {mode === 'create' ? '📅 Nueva Reunión' : '✏️ Editar Reunión'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className='text-white/70 hover:text-white transition-colors text-2xl'
+                        className='ah-modal-close text-xl'
                     >
                         ✕
                     </button>

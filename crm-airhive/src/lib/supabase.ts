@@ -133,6 +133,13 @@ export type Database = {
                     created_at: string
                     updated_at: string
                     is_converted: boolean
+                    empresa_id: string | null
+                    industria_id: string | null
+                    tamano: number | null
+                    website: string | null
+                    logo_url: string | null
+                    converted_at: string | null
+                    converted_by: string | null
                 }
                 Insert: {
                     id?: number
@@ -146,6 +153,13 @@ export type Database = {
                     vendedor_name?: string | null
                     notas?: string | null
                     is_converted?: boolean
+                    empresa_id?: string | null
+                    industria_id?: string | null
+                    tamano?: number | null
+                    website?: string | null
+                    logo_url?: string | null
+                    converted_at?: string | null
+                    converted_by?: string | null
                 }
                 Update: {
                     id?: number
@@ -160,6 +174,14 @@ export type Database = {
                     notas?: string | null
                     created_at?: string
                     updated_at?: string
+                    is_converted?: boolean
+                    empresa_id?: string | null
+                    industria_id?: string | null
+                    tamano?: number | null
+                    website?: string | null
+                    logo_url?: string | null
+                    converted_at?: string | null
+                    converted_by?: string | null
                 }
             }
             tareas: {

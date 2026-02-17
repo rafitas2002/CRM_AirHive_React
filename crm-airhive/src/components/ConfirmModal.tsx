@@ -20,16 +20,16 @@ export default function ConfirmModal({
     if (!isOpen) return null
 
     return (
-        <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity'>
-            <div className='w-full max-w-sm bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl shadow-2xl transform transition-all overflow-hidden flex flex-col'>
+        <div className='ah-modal-overlay transition-opacity'>
+            <div className='ah-modal-panel w-full max-w-sm transform transition-all'>
                 {/* Header */}
-                <div className='bg-[#0A1635] px-6 py-4 flex items-center justify-between shrink-0 border-b border-[var(--card-border)]'>
-                    <h2 className='text-lg font-bold text-white'>
+                <div className='ah-modal-header'>
+                    <h2 className='ah-modal-title text-lg'>
                         {title}
                     </h2>
                     <button
                         onClick={onClose}
-                        className='text-white/70 hover:text-white transition-colors'
+                        className='ah-modal-close'
                     >
                         ✕
                     </button>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getGoogleAuthUrl, getGoogleConnectionStatus, disconnectGoogle } from '@/app/actions/google-integration'
+import { Link2, CalendarDays, Mail, Bell } from 'lucide-react'
 
 type ConnectionStatus = {
     connected: boolean
@@ -90,8 +91,9 @@ export default function CuentasPage() {
     return (
         <div className='p-8 max-w-5xl'>
             <div className='mb-8'>
-                <h1 className='text-3xl font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
-                    🔗 Conectar Cuentas
+                <h1 className='text-3xl font-bold mb-2 flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
+                    <Link2 size={26} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                    Conectar Cuentas
                 </h1>
                 <p className='text-base' style={{ color: 'var(--text-secondary)' }}>
                     Conecta tus cuentas externas para sincronizar calendarios, correos y más
@@ -139,15 +141,15 @@ export default function CuentasPage() {
                         </h4>
                         <ul className='space-y-1 text-sm' style={{ color: 'var(--text-secondary)' }}>
                             <li className='flex items-center gap-2'>
-                                <span>📅</span>
+                                <CalendarDays size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
                                 Sincronización automática con Google Calendar
                             </li>
                             <li className='flex items-center gap-2'>
-                                <span>📧</span>
+                                <Mail size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
                                 Envío de invitaciones por Gmail
                             </li>
                             <li className='flex items-center gap-2'>
-                                <span>🔔</span>
+                                <Bell size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
                                 Notificaciones de eventos
                             </li>
                         </ul>

@@ -34,10 +34,16 @@ export default function MeetingConfirmationModal({
     }
 
     return (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4'>
-            <div className='bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl transform transition-all'>
-                {/* Header */}
-                <div className='text-center mb-6'>
+        <div className='ah-modal-overlay'>
+            <div className='ah-modal-panel max-w-md w-full transform transition-all'>
+                <div className='ah-modal-header'>
+                    <h2 className='ah-modal-title text-lg'>Confirmación de Junta</h2>
+                    <button onClick={onClose} className='ah-modal-close'>✕</button>
+                </div>
+
+                <div className='p-6'>
+                    {/* Header */}
+                    <div className='text-center mb-6'>
                     <div className='w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4'>
                         <span className='text-3xl'>📅</span>
                     </div>
@@ -47,10 +53,10 @@ export default function MeetingConfirmationModal({
                     <p className='text-sm text-gray-600'>
                         Confirma si la reunión se realizó para registrar el snapshot del pronóstico
                     </p>
-                </div>
+                    </div>
 
-                {/* Meeting Info */}
-                <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl mb-4 border-2 border-blue-200'>
+                    {/* Meeting Info */}
+                    <div className='bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl mb-4 border-2 border-blue-200'>
                     <p className='text-sm font-bold text-blue-900 mb-1'>
                         {meeting.title}
                     </p>
@@ -76,10 +82,10 @@ export default function MeetingConfirmationModal({
                             Este valor se registrará en el snapshot si la junta se realizó
                         </p>
                     </div>
-                </div>
+                    </div>
 
-                {/* Notes */}
-                <div className='mb-6'>
+                    {/* Notes */}
+                    <div className='mb-6'>
                     <label className='block text-sm font-bold text-[#0F2A44] mb-2'>
                         Notas de la junta (opcional)
                     </label>
@@ -91,10 +97,10 @@ export default function MeetingConfirmationModal({
                         rows={3}
                         disabled={isSubmitting}
                     />
-                </div>
+                    </div>
 
-                {/* Actions */}
-                <div className='flex gap-3'>
+                    {/* Actions */}
+                    <div className='flex gap-3'>
                     <button
                         onClick={() => handleConfirm(true)}
                         disabled={isSubmitting}
@@ -111,13 +117,14 @@ export default function MeetingConfirmationModal({
                         <span className='text-xl'>❌</span>
                         <span>No se realizó</span>
                     </button>
-                </div>
+                    </div>
 
-                {/* Info Footer */}
-                <div className='mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200'>
+                    {/* Info Footer */}
+                    <div className='mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200'>
                     <p className='text-xs text-gray-600 text-center'>
                         <span className='font-bold'>Importante:</span> El snapshot solo se creará si confirmas que la junta se realizó
                     </p>
+                    </div>
                 </div>
             </div>
         </div>

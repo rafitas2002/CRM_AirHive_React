@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
-import Link from 'next/link'
 import { TrendingUp, RotateCw, Filter, LayoutDashboard, AlertCircle, Info } from 'lucide-react'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
@@ -35,7 +34,7 @@ export default function ForecastDashboard() {
             router.push('/home')
             return
         }
-        if (auth.profile && auth.profile.role !== 'admin' && auth.profile.role !== 'rh') {
+        if (auth.profile && auth.profile.role !== 'admin') {
             router.push('/home')
             return
         }
@@ -251,17 +250,12 @@ export default function ForecastDashboard() {
                 {/* Header Pattern consistent with Empresas */}
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
-                        <Link
-                            href='/clientes'
-                            className='w-14 h-14 flex items-center justify-center border-2 rounded-[22px] transition-all hover:scale-105 active:scale-95 shadow-lg hover:shadow-blue-500/10'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                            title='Volver a Leads'
-                        >
-                            <span className='text-2xl' style={{ color: 'var(--text-primary)' }}>←</span>
-                        </Link>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 bg-[#2c313c] rounded-[22px] flex items-center justify-center border border-white/20 shadow-lg overflow-hidden transition-all hover:scale-105'>
-                                <TrendingUp size={36} color="white" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div
+                                className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden shrink-0'
+                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            >
+                                <TrendingUp size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>

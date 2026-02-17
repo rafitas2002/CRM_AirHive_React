@@ -25,7 +25,7 @@ export default function PreLeadDetailView({
 
     return (
         <div
-            className={`fixed inset-0 z-[100] flex items-center justify-center p-4 transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            className={`ah-modal-overlay transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         >
             {/* Backdrop */}
             <div
@@ -51,10 +51,11 @@ export default function PreLeadDetailView({
                     </div>
                     <button
                         onClick={onClose}
-                        className='w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/5 transition-all font-bold'
-                        style={{ color: 'var(--text-secondary)' }}
+                        className='h-10 px-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95'
+                        style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                        title='Regresar'
                     >
-                        ✕
+                        Regresar
                     </button>
                 </div>
 

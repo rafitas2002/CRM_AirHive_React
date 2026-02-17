@@ -3,6 +3,7 @@
 import { CompanyData } from './CompanyModal'
 import { CompanyWithProjects } from '../app/(app)/empresas/page'
 import Image from 'next/image'
+import { Globe, MapPin } from 'lucide-react'
 
 interface CompaniesTableProps {
     companies: CompanyWithProjects[]
@@ -30,9 +31,9 @@ export default function CompaniesTable({
     }
 
     return (
-        <div className='overflow-x-auto'>
-            <table className='w-full text-left border-collapse'>
-                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
+        <div className='ah-table-scroll custom-scrollbar'>
+            <table className='ah-table'>
+                <thead>
                     <tr>
                         {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
                         <th className='px-8 py-5'>Logo</th>
@@ -49,7 +50,7 @@ export default function CompaniesTable({
                         )}
                     </tr>
                 </thead>
-                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                <tbody>
                     {companies.map((company) => (
                         <tr
                             key={company.id}
@@ -115,16 +116,8 @@ export default function CompaniesTable({
 
                             {/* Ubicación */}
                             <td className='px-8 py-5'>
-                                <div className='flex items-center gap-2'>
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 24">
-                                        <defs>
-                                            <mask id="pinMask">
-                                                <rect width="16" height="24" fill="white" />
-                                                <circle cx="8" cy="7" r="2.5" fill="black" />
-                                            </mask>
-                                        </defs>
-                                        <path d="M8 2C5.2 2 3 4.2 3 7c0 4.5 5 13 5 13s5-8.5 5-13c0-2.8-2.2-5-5-5z" fill="#ef4444" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" mask="url(#pinMask)" />
-                                    </svg>
+                                <div className='ah-cell-icon-text'>
+                                    <MapPin className='ah-cell-icon text-rose-500' />
                                     <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
                                         {company.ubicacion || 'No especificada'}
                                     </span>
@@ -209,12 +202,8 @@ export default function CompaniesTable({
                                         }}
                                         onClick={(e) => e.stopPropagation()}
                                     >
+                                        <Globe className='ah-cell-icon' />
                                         {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                            <polyline points="15 3 21 3 21 9" />
-                                            <line x1="10" y1="14" x2="21" y2="3" />
-                                        </svg>
                                     </a>
                                 ) : (
                                     <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>-</span>

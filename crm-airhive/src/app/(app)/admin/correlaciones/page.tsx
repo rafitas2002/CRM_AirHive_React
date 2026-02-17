@@ -34,6 +34,7 @@ export default function CorrelacionesPage() {
     const auth = useAuth()
     const router = useRouter()
     const [data, setData] = useState<any[]>([])
+    const [companyRegistry, setCompanyRegistry] = useState<any[]>([])
     const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(false)
@@ -48,7 +49,7 @@ export default function CorrelacionesPage() {
             router.push('/home')
             return
         }
-        if (auth.profile && auth.profile.role !== 'admin' && auth.profile.role !== 'rh') {
+        if (auth.profile && auth.profile.role !== 'admin') {
             router.push('/home')
             return
         }
@@ -66,7 +67,14 @@ export default function CorrelacionesPage() {
             ])
 
             if (corrRes.success && corrRes.data) {
-                setData(corrRes.data)
+                // Backward compatible parsing
+                if (Array.isArray(corrRes.data)) {
+                    setData(corrRes.data)
+                    setCompanyRegistry([])
+                } else {
+                    setData(corrRes.data.users || [])
+                    setCompanyRegistry(corrRes.data.companyRegistry || [])
+                }
             } else {
                 setError(corrRes.error || 'Error al cargar correlaciones')
             }
@@ -113,6 +121,9 @@ export default function CorrelacionesPage() {
             if (sortBy === 'gold') return b.medals.gold - a.medals.gold
             if (sortBy === 'silver') return b.medals.silver - a.medals.silver
             if (sortBy === 'bronze') return b.medals.bronze - a.medals.bronze
+            if (sortBy === 'preLeadsDay') return b.avgPreLeadsPerDay - a.avgPreLeadsPerDay
+            if (sortBy === 'convertedMonth') return b.avgConvertedPreLeadsPerMonth - a.avgConvertedPreLeadsPerMonth
+            if (sortBy === 'companyMonth') return b.avgCompaniesPerMonth - a.avgCompaniesPerMonth
             if (sortBy === 'tenure') return b.tenureMonths - a.tenureMonths
             if (sortBy === 'age') return (b.age || 0) - (a.age || 0)
             if (sortBy === 'growth') return b.growth - a.growth
@@ -160,6 +171,9 @@ export default function CorrelacionesPage() {
         const avgMeetingsPerClose = data.reduce((acc, d) => acc + d.meetingsPerClose, 0) / (data.length || 1)
         const avgForecastAccuracy = data.reduce((acc, d) => acc + d.forecastAccuracy, 0) / (data.length || 1)
         const avgResponseTime = data.reduce((acc, d) => acc + d.avgResponseTimeHours, 0) / (data.length || 1)
+        const avgPreLeadsPerDayTeam = data.reduce((acc, d) => acc + (d.avgPreLeadsPerDay || 0), 0) / (data.length || 1)
+        const avgConvertedPerMonthTeam = data.reduce((acc, d) => acc + (d.avgConvertedPreLeadsPerMonth || 0), 0) / (data.length || 1)
+        const avgConversionLagTeam = data.reduce((acc, d) => acc + (d.avgConversionLagDays || 0), 0) / (data.length || 1)
 
         // Industry aggregate
         const indMap: Record<string, number> = {}
@@ -204,6 +218,24 @@ export default function CorrelacionesPage() {
                 desc: `Casi el ${(data.reduce((acc, d) => acc + d.physicalCloseRate, 0) / (data.length || 1)).toFixed(1)}% de cierres exitosos tuvieron presencia física.`,
                 icon: MapPin,
                 color: 'blue'
+            },
+            {
+                title: 'Cadencia de Prospección',
+                desc: `El equipo registra en promedio ${avgPreLeadsPerDayTeam.toFixed(2)} pre-leads por día por vendedor.`,
+                icon: Calendar,
+                color: 'purple'
+            },
+            {
+                title: 'Conversión Operativa',
+                desc: `Promedio de ${avgConvertedPerMonthTeam.toFixed(2)} conversiones de pre-lead a lead por mes por vendedor.`,
+                icon: CheckCircle,
+                color: 'emerald'
+            },
+            {
+                title: 'Velocidad de Conversión',
+                desc: `Tiempo promedio de conversión pre-lead → lead: ${avgConversionLagTeam.toFixed(1)} días.`,
+                icon: Hash,
+                color: 'amber'
             }
         ]
     }, [data])
@@ -226,9 +258,17 @@ export default function CorrelacionesPage() {
 
                     {/* Header */}
                     <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
-                        <div>
+                        <div className='flex items-center gap-6'>
+                            <div
+                                className='w-16 h-16 rounded-[22px] border shadow-lg flex items-center justify-center shrink-0'
+                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            >
+                                <BarChart3 size={34} strokeWidth={1.9} style={{ color: 'var(--accent-secondary)' }} />
+                            </div>
+                            <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Data & Correlaciones</h1>
                             <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>Análisis profundo de desempeño vs demografía de vendedores.</p>
+                            </div>
                         </div>
                         <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='px-4 py-2 bg-blue-50/10 text-[#2048FF] rounded-xl font-black text-xs uppercase tracking-widest border border-blue-100/20'>
@@ -352,28 +392,30 @@ export default function CorrelacionesPage() {
                                 </div>
                             </div>
 
-                            <div className='flex flex-wrap items-center gap-4 flex-1 justify-end'>
-                                <div className='relative min-w-[200px]'>
-                                    <Search className='absolute left-4 top-1/2 -translate-y-1/2' style={{ color: 'var(--text-secondary)' }} size={16} />
+                            <div className='ah-table-controls'>
+                                <div className='ah-search-control'>
+                                    <Search className='ah-search-icon' size={18} />
                                     <input
                                         type='text'
-                                        placeholder='Search...'
+                                        placeholder='Buscar seller...'
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className='w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-xl text-sm font-bold placeholder:text-gray-500 transition-all focus:ring-2 focus:ring-blue-500'
-                                        style={{ color: 'var(--text-primary)' }}
+                                        className='ah-search-input'
                                     />
                                 </div>
 
                                 <select
                                     value={sortBy}
                                     onChange={(e) => setSortBy(e.target.value)}
-                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                    className='ah-select-control ah-select-control-order'
                                 >
                                     <option value="totalSales">Ordenar por: Ventas</option>
                                     <option value="totalMedals">Ordenar por: Total Medallas</option>
                                     <option value="gold">Ordenar por: Oro</option>
                                     <option value="efficiency">Ordenar por: Eficiencia (Pts/Mes)</option>
+                                    <option value="preLeadsDay">Ordenar por: Pre-Leads / Día</option>
+                                    <option value="convertedMonth">Ordenar por: Conv. PreLead / Mes</option>
+                                    <option value="companyMonth">Ordenar por: Empresas / Mes</option>
                                     <option value="meetings">Ordenar por: Effort (Mtg/Close)</option>
                                     <option value="accuracy">Ordenar por: Forecast Accuracy</option>
                                     <option value="speed">Ordenar por: Response Speed</option>
@@ -384,7 +426,7 @@ export default function CorrelacionesPage() {
                                 <select
                                     value={genderFilter}
                                     onChange={(e) => setGenderFilter(e.target.value)}
-                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                    className='ah-select-control'
                                 >
                                     <option value="all">Filtro: Todo Género</option>
                                     <option value="Masculino">Masculino</option>
@@ -394,7 +436,7 @@ export default function CorrelacionesPage() {
                                 <select
                                     value={ageRange}
                                     onChange={(e) => setAgeRange(e.target.value)}
-                                    className='bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-2 text-xs font-bold text-white focus:ring-2 focus:ring-blue-500 outline-none'
+                                    className='ah-select-control'
                                 >
                                     <option value="all">Filtro: Toda Edad</option>
                                     <option value="30-">Menores de 30</option>
@@ -404,9 +446,9 @@ export default function CorrelacionesPage() {
                             </div>
                         </div>
 
-                        <div className='overflow-x-auto'>
-                            <table className='w-full text-left border-collapse'>
-                                <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                        <div className='ah-table-scroll custom-scrollbar'>
+                            <table className='ah-table'>
+                                <thead>
                                     <tr>
                                         <th className='px-8 py-5'>Vendedor</th>
                                         <th className='px-8 py-5'>Género</th>
@@ -423,7 +465,7 @@ export default function CorrelacionesPage() {
                                         <th className='px-8 py-5 text-center'>Top Ind.</th>
                                     </tr>
                                 </thead>
-                                <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                                <tbody>
                                     {filteredData.map((item, idx) => (
                                         <tr key={item.userId} className='transition-colors group hover:bg-black/5'>
                                             <td className='px-8 py-5'>
@@ -451,15 +493,32 @@ export default function CorrelacionesPage() {
                                                 <div className='flex flex-col'>
                                                     <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>{item.preLeadsCount}</span>
                                                     <span className='text-[10px] font-bold opacity-60' style={{ color: 'var(--text-secondary)' }}>
-                                                        {item.avgPreLeadsPerMonth.toFixed(1)}/mes
+                                                        {item.avgPreLeadsPerDay.toFixed(2)}/día · {item.avgPreLeadsPerMonth.toFixed(1)}/mes
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className='px-8 py-5 text-center font-black text-sm' style={{ color: item.preLeadConversionRate > 20 ? '#10b981' : 'var(--text-primary)' }}>
-                                                {item.preLeadConversionRate.toFixed(1)}%
+                                            <td className='px-8 py-5 text-center'>
+                                                <div className='flex flex-col'>
+                                                    <span className='font-black text-sm' style={{ color: item.preLeadConversionRate > 20 ? '#10b981' : 'var(--text-primary)' }}>
+                                                        {item.preLeadConversionRate.toFixed(1)}%
+                                                    </span>
+                                                    <span className='text-[10px] font-bold opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                                        {item.convertedPreLeadsCount} conv. · {item.avgConvertedPreLeadsPerMonth.toFixed(1)}/mes
+                                                    </span>
+                                                </div>
                                             </td>
-                                            <td className='px-8 py-5 text-center font-black text-sm' style={{ color: 'var(--text-primary)' }}>
-                                                {item.companiesCreated}
+                                            <td className='px-8 py-5 text-center'>
+                                                <div className='flex flex-col'>
+                                                    <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                        {item.companiesCreated}
+                                                    </span>
+                                                    <span className='text-[10px] font-bold opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                                        {item.avgCompaniesPerMonth.toFixed(1)}/mes
+                                                    </span>
+                                                    <span className='text-[9px] font-bold opacity-50' style={{ color: 'var(--text-secondary)' }}>
+                                                        {item.lastCompanyCreatedAt ? new Date(item.lastCompanyCreatedAt).toLocaleDateString('es-MX') : 'sin registro'}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className='px-8 py-5 font-black text-sm' style={{ color: 'var(--text-primary)' }}>
                                                 ${item.totalSales.toLocaleString()}
@@ -518,6 +577,55 @@ export default function CorrelacionesPage() {
                     {/* Past Races History */}
                     <div className='space-y-6'>
                         <div className='flex items-center gap-4'>
+                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-500/10 text-blue-500'>
+                                <Building2 size={24} />
+                            </div>
+                            <div>
+                                <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Registro de Empresas</h2>
+                                <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
+                                    Historial de empresas registradas por usuarios
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className='rounded-[28px] border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                            <div className='overflow-x-auto'>
+                                <table className='w-full text-left border-collapse'>
+                                    <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                        <tr>
+                                            <th className='px-8 py-4'>Fecha Registro</th>
+                                            <th className='px-8 py-4'>Empresa</th>
+                                            <th className='px-8 py-4'>Registrada Por</th>
+                                            <th className='px-8 py-4'>Industria</th>
+                                            <th className='px-8 py-4'>Ubicación</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                                        {companyRegistry.slice(0, 120).map((entry) => (
+                                            <tr key={entry.id} className='hover:bg-black/5 transition-colors'>
+                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleString('es-MX') : 'N/A'}
+                                                </td>
+                                                <td className='px-8 py-4 font-black text-sm' style={{ color: 'var(--text-primary)' }}>{entry.nombre}</td>
+                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.ownerName}</td>
+                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.industria}</td>
+                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.ubicacion}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {companyRegistry.length === 0 && (
+                                <div className='p-8 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                                    Aún no hay registros de empresas para mostrar.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Past Races History */}
+                    <div className='space-y-6'>
+                        <div className='flex items-center gap-4'>
                             <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-yellow-500/10 text-yellow-500'>
                                 <Trophy size={24} />
                             </div>
@@ -534,4 +642,3 @@ export default function CorrelacionesPage() {
         </div>
     )
 }
-

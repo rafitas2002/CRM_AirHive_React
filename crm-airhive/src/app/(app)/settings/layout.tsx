@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { Settings, Palette, Link2, UserRound, Users } from 'lucide-react'
 
 const settingsLinks = [
-    { href: '/settings/personalizacion', label: 'Personalización', icon: '🎨' },
-    { href: '/settings/cuentas', label: 'Conectar Cuentas', icon: '🔗' },
-    { href: '/settings/perfil', label: 'Perfil de Usuario', icon: '👤' }
+    { href: '/settings/personalizacion', label: 'Personalización', icon: Palette },
+    { href: '/settings/cuentas', label: 'Conectar Cuentas', icon: Link2 },
+    { href: '/settings/perfil', label: 'Perfil de Usuario', icon: UserRound }
 ]
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +20,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
     const displayedLinks = [
         ...settingsLinks,
-        ...(isAdminOrRH ? [{ href: '/settings/equipo', label: 'Equipo', icon: '👥' }] : [])
+        ...(isAdminOrRH ? [{ href: '/settings/equipo', label: 'Equipo', icon: Users }] : [])
     ]
 
     return (
@@ -27,13 +28,17 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             {/* Sidebar Navigation */}
             <aside className='w-72 border-r flex flex-col' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                 <div className='p-6 border-b' style={{ borderColor: 'var(--card-border)' }}>
-                    <h1 className='text-2xl font-bold' style={{ color: 'var(--text-primary)' }}>⚙️ Configuración</h1>
+                    <h1 className='text-2xl font-bold flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
+                        <Settings size={22} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                        Configuración
+                    </h1>
                     <p className='text-sm mt-1' style={{ color: 'var(--text-secondary)' }}>Personaliza tu experiencia</p>
                 </div>
 
                 <nav className='flex-1 p-4 space-y-2'>
                     {displayedLinks.map((link) => {
                         const isActive = pathname === link.href
+                        const Icon = link.icon
                         return (
                             <Link
                                 key={link.href}
@@ -44,7 +49,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                                     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)'
                                 }}
                             >
-                                <span className='text-lg'>{link.icon}</span>
+                                <Icon size={18} strokeWidth={2.2} />
                                 {link.label}
                                 {isActive && (
                                     <span

@@ -109,6 +109,10 @@ export default function PreLeadsPage() {
 
     const handleSave = async (data: any) => {
         try {
+            if (!auth.user?.id) {
+                throw new Error('Sesión inválida. Vuelve a iniciar sesión.')
+            }
+
             // Step 1: Find or create company
             const companyResult = await findOrCreateCompany(
                 supabase,
@@ -125,7 +129,7 @@ export default function PreLeadsPage() {
                     website: data.website,
                     logo_url: data.logo_url
                 },
-                auth.user?.id || ''
+                auth.user.id
             )
 
             if (!companyResult) {
@@ -142,6 +146,10 @@ export default function PreLeadsPage() {
                 ubicacion: data.ubicacion,
                 notas: data.notas,
                 giro_empresa: data.industria || data.giro_empresa || 'Sin clasificar',
+                industria_id: data.industria_id || null,
+                tamano: data.tamano || 1,
+                website: data.website || null,
+                logo_url: data.logo_url || null,
                 vendedor_id: auth.user?.id,
                 vendedor_name: auth.profile?.full_name || auth.username,
                 empresa_id: companyResult.id
@@ -203,6 +211,10 @@ export default function PreLeadsPage() {
 
     const handleSaveClient = async (data: any) => {
         try {
+            if (!auth.user?.id) {
+                throw new Error('Sesión inválida. Vuelve a iniciar sesión.')
+            }
+
             // 1. Insert lead in 'clientes' with traceability
             const traceability = clientModalMode === 'convert' ? {
                 original_pre_lead_id: sourcePreLead.id,
@@ -224,7 +236,11 @@ export default function PreLeadsPage() {
             if (clientModalMode === 'convert' && sourcePreLead?.id) {
                 await (supabase
                     .from('pre_leads') as any)
-                    .update({ is_converted: true })
+                    .update({
+                        is_converted: true,
+                        converted_at: new Date().toISOString(),
+                        converted_by: auth.user?.id || null
+                    })
                     .eq('id', sourcePreLead.id)
             }
 
@@ -382,73 +398,62 @@ export default function PreLeadsPage() {
                             </div>
 
                             <div className='flex items-center gap-3'>
-                                <div className='px-5 py-2 bg-gradient-to-br from-violet-500/10 to-blue-500/10 rounded-2xl border border-violet-500/20 flex items-center gap-3 shadow-sm'>
-                                    <span className='text-2xl font-black tracking-tighter text-[#8B5CF6]'>{filteredPreLeads.length}</span>
-                                    <div className='flex flex-col'>
-                                        <span className='text-[9px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Registros</span>
-                                        <span className='text-[8px] font-bold uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>Pre-Calificados</span>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{filteredPreLeads.length}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Registros</span>
+                                        <span className='ah-count-chip-subtitle'>Pre-Calificados</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className='flex flex-col gap-4'>
-                            {/* Row 1: Search Bar (Full Width) */}
-                            <div className='relative flex-1 w-full'>
-                                <Search className='absolute left-4 top-1/2 -translate-y-1/2 opacity-40' style={{ color: 'var(--text-primary)' }} size={18} />
-                                <input
-                                    type='text'
-                                    placeholder='Buscar por empresa, contacto, correos...'
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                                    style={{ color: 'var(--text-primary)' }}
-                                />
-                            </div>
-
-                            {/* Row 2: Filters Grouped */}
-                            <div className='flex flex-wrap items-center justify-between gap-4'>
-                                <div className='flex flex-wrap items-center gap-3'>
-                                    <div className='flex items-center gap-2 p-1.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl shadow-sm'>
+                        <div className='ah-table-toolbar'>
+                            <div className='ah-table-controls'>
+                                <div className='ah-search-control'>
+                                    <Search className='ah-search-icon' size={18} />
+                                    <input
+                                        type='text'
+                                        placeholder='Buscar por empresa, contacto, correos...'
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        className='ah-search-input'
+                                    />
+                                </div>
                                         <select
                                             value={vendedorFilter}
                                             onChange={(e) => setVendedorFilter(e.target.value)}
-                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                            className='ah-select-control'
                                         >
                                             <option value="All">Vendedor: Todos</option>
                                             {uniqueVendedores.map(v => (
                                                 <option key={v as string} value={v as string}>{v as string}</option>
                                             ))}
                                         </select>
-                                        <div className='w-px h-4 bg-[var(--card-border)]' />
                                         <select
                                             value={industryFilter}
                                             onChange={(e) => setIndustryFilter(e.target.value)}
-                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                            className='ah-select-control'
                                         >
                                             <option value="All">Industria: Todas</option>
                                             {uniqueIndustries.map(ind => (
                                                 <option key={ind as string} value={ind as string}>{ind as string}</option>
                                             ))}
                                         </select>
-                                        <div className='w-px h-4 bg-[var(--card-border)]' />
                                         <select
                                             value={locationFilter}
                                             onChange={(e) => setLocationFilter(e.target.value)}
-                                            className='min-w-[160px] bg-transparent border-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] focus:ring-0 outline-none cursor-pointer appearance-none'
+                                            className='ah-select-control'
                                         >
                                             <option value="All">Ubicación: Todas</option>
                                             {uniqueLocations.map(loc => (
                                                 <option key={loc as string} value={loc as string}>{loc as string}</option>
                                             ))}
                                         </select>
-                                    </div>
-
-                                    <div className='flex items-center gap-2'>
                                         <select
                                             value={sortBy}
                                             onChange={(e) => setSortBy(e.target.value)}
-                                            className='min-w-[140px] bg-[#2048FF]/5 border border-[#2048FF]/20 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#2048FF] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none cursor-pointer appearance-none transition-all hover:scale-[1.02] active:scale-95 shadow-sm'
+                                            className='ah-select-control ah-select-control-order'
                                         >
                                             <option value="recent">Orden: Reciente</option>
                                             <option value="name">Orden: Alfabético</option>
@@ -463,14 +468,12 @@ export default function PreLeadsPage() {
                                                     setLocationFilter('All')
                                                     setSortBy('recent')
                                                 }}
-                                                className='p-2.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm group'
+                                                className='ah-reset-filter-btn group'
                                                 title='Limpiar Filtros'
                                             >
                                                 <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
                                             </button>
                                         )}
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>

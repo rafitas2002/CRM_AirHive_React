@@ -166,6 +166,7 @@ export async function getLeadMeetings(leadId: number) {
         .from('meetings')
         .select('*')
         .eq('lead_id', leadId)
+        .neq('meeting_status', 'cancelled')  // Exclude cancelled meetings from display
         .order('start_time', { ascending: true })
 
     if (error) {
@@ -184,6 +185,7 @@ export async function getNextMeeting(leadId: number): Promise<Meeting | null> {
         .select('*')
         .eq('lead_id', leadId)
         .eq('status', 'scheduled')
+        .neq('meeting_status', 'cancelled')  // Explicit filter to exclude cancelled meetings
         .gt('start_time', now)
         .order('start_time', { ascending: true })
         .limit(1)
