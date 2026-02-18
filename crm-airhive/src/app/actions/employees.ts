@@ -154,16 +154,35 @@ export async function createEmployee(data: any) {
         if (!newUser.user) throw new Error('Error al crear usuario')
 
         // 2. Insert into Profiles
-        const { error: profileError } = await (supabaseAdmin
+        const profileBasePayload = {
+            id: newUser.user.id,
+            full_name: data.fullName,
+            role: data.role,
+            avatar_url: data.avatar_url || null,
+            username: data.email.split('@')[0],
+            created_at: new Date().toISOString()
+        }
+
+        let profilePayload: any = { ...profileBasePayload }
+        let { error: profileError } = await (supabaseAdmin
             .from('profiles') as any)
-            .upsert({
-                id: newUser.user.id,
-                full_name: data.fullName,
-                role: data.role,
-                avatar_url: data.avatar_url || null,
-                username: data.email.split('@')[0],
-                created_at: new Date().toISOString()
-            })
+            .upsert(profilePayload)
+
+        if (profileError && isMissingColumn(profileError, 'avatar_url')) {
+            delete profilePayload.avatar_url
+            const retry = await (supabaseAdmin
+                .from('profiles') as any)
+                .upsert(profilePayload)
+            profileError = retry.error
+        }
+
+        if (profileError && isMissingColumn(profileError, 'created_at')) {
+            delete profilePayload.created_at
+            const retry = await (supabaseAdmin
+                .from('profiles') as any)
+                .upsert(profilePayload)
+            profileError = retry.error
+        }
 
         if (profileError) {
             await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
@@ -242,15 +261,37 @@ export async function updateEmployee(id: string, data: any) {
         }
 
         // Update Profile
-        const { error: profileError } = await (supabaseAdmin
+        const profileBasePayload = {
+            full_name: data.fullName,
+            role: data.role,
+            avatar_url: data.avatar_url || null,
+            updated_at: new Date().toISOString()
+        }
+
+        let profilePayload: any = { ...profileBasePayload }
+        let profileUpdate = await (supabaseAdmin
             .from('profiles') as any)
-            .update({
-                full_name: data.fullName,
-                role: data.role,
-                avatar_url: data.avatar_url || null,
-                updated_at: new Date().toISOString()
-            })
+            .update(profilePayload)
             .eq('id', id)
+        let profileError = profileUpdate.error
+
+        if (profileError && isMissingColumn(profileError, 'avatar_url')) {
+            delete profilePayload.avatar_url
+            profileUpdate = await (supabaseAdmin
+                .from('profiles') as any)
+                .update(profilePayload)
+                .eq('id', id)
+            profileError = profileUpdate.error
+        }
+
+        if (profileError && isMissingColumn(profileError, 'updated_at')) {
+            delete profilePayload.updated_at
+            profileUpdate = await (supabaseAdmin
+                .from('profiles') as any)
+                .update(profilePayload)
+                .eq('id', id)
+            profileError = profileUpdate.error
+        }
 
         if (profileError) throw profileError
 
