@@ -35,3 +35,10 @@ export function getRoleMeta(role?: UserRole): RoleMeta {
         borderColor: 'rgba(20, 184, 166, 0.30)'
     }
 }
+
+export function getRoleSilhouetteColor(role?: UserRole): string {
+    const normalizedRole = (role || '').toLowerCase()
+    if (normalizedRole === 'admin') return '#F59E0B'
+    if (normalizedRole === 'rh') return '#C81E8A'
+    return '#0F766E'
+}

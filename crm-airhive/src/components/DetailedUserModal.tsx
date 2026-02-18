@@ -28,8 +28,9 @@ import {
 import { useAuth } from '@/lib/auth'
 import { getUserActivitySummary } from '@/app/actions/admin'
 import RoleBadge from '@/components/RoleBadge'
-import { getRoleMeta } from '@/lib/roleUtils'
+import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { useTheme } from '@/lib/ThemeContext'
 
 interface DetailedUserModalProps {
     isOpen: boolean
@@ -41,6 +42,7 @@ interface DetailedUserModalProps {
 export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: DetailedUserModalProps) {
     useBodyScrollLock(isOpen)
     const { profile: currentUser } = useAuth()
+    const { theme } = useTheme()
     const [activeTab, setActiveTab] = useState('profile')
     const [activityData, setActivityData] = useState<any>(null)
     const [loadingActivity, setLoadingActivity] = useState(false)
@@ -94,6 +96,25 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         return names.length > 0 ? names.join(', ') : '-'
     }
 
+    const getJobPositionNames = () => {
+        const rawPositions = details?.job_position_ids ?? details?.job_positions
+        const jobPositionIds = new Set<string>()
+
+        if (Array.isArray(rawPositions)) {
+            rawPositions.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) jobPositionIds.add(item.trim())
+                if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) jobPositionIds.add(item.id.trim())
+            })
+        } else if (typeof rawPositions === 'string' && rawPositions.trim()) {
+            rawPositions.split(',').map((v: string) => v.trim()).filter(Boolean).forEach((v: string) => jobPositionIds.add(v))
+        }
+
+        if (typeof details?.job_position_id === 'string' && details.job_position_id.trim()) jobPositionIds.add(details.job_position_id.trim())
+
+        const names = Array.from(jobPositionIds).map(id => resolve('job_positions', id)).filter(v => v && v !== '-')
+        return names.length > 0 ? names.join(', ') : '-'
+    }
+
     const calculateAge = (dateString: string) => {
         if (!dateString) return '-'
         const parts = dateString.split('-')
@@ -123,7 +144,43 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
     if (!user) return null
 
     const details = user.details || {}
-    const roleMeta = getRoleMeta(user.role)
+    const silhouetteColor = getRoleSilhouetteColor(user.role)
+    const headerTheme = {
+        claro: {
+            background: 'linear-gradient(135deg, #eef4ff 0%, #dbeafe 45%, #c7d2fe 100%)',
+            overlayOpacity: 0.08,
+            titleColor: 'var(--text-primary)',
+            closeBg: 'rgba(15, 23, 42, 0.08)',
+            closeBorder: 'rgba(15, 23, 42, 0.14)',
+            closeColor: '#0f172a',
+            avatarBorder: 'var(--card-border)',
+            avatarBackground: 'var(--hover-bg)',
+            avatarFallbackBg: 'linear-gradient(135deg, rgba(148,163,184,0.12), rgba(148,163,184,0.04))'
+        },
+        gris: {
+            background: 'linear-gradient(135deg, #111827 0%, #1f2937 55%, #0f172a 100%)',
+            overlayOpacity: 0.12,
+            titleColor: '#F9FAFB',
+            closeBg: 'rgba(255,255,255,0.10)',
+            closeBorder: 'rgba(255,255,255,0.18)',
+            closeColor: '#F9FAFB',
+            avatarBorder: 'var(--card-border)',
+            avatarBackground: 'var(--hover-bg)',
+            avatarFallbackBg: 'linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04))'
+        },
+        oscuro: {
+            background: 'linear-gradient(135deg, #05070D 0%, #0B1220 50%, #111827 100%)',
+            overlayOpacity: 0.08,
+            titleColor: '#FFFFFF',
+            closeBg: 'rgba(255,255,255,0.08)',
+            closeBorder: 'rgba(255,255,255,0.14)',
+            closeColor: '#FFFFFF',
+            avatarBorder: 'var(--card-border)',
+            avatarBackground: 'var(--hover-bg)',
+            avatarFallbackBg: 'linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))'
+        }
+    }[theme]
+    const avatarFrameBorder = `color-mix(in srgb, ${silhouetteColor} 70%, var(--card-border))`
 
     return (
         <AnimatePresence>
@@ -136,30 +193,38 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         className="ah-modal-panel w-full max-w-5xl"
                     >
                         {/* Header Section */}
-                        <div className="relative h-48 bg-gradient-to-br from-[#2048FF] to-[#1700AC] shrink-0">
-                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20" />
+                        <div className="relative h-48 shrink-0" style={{ background: headerTheme.background }}>
+                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" style={{ opacity: headerTheme.overlayOpacity }} />
                             <button
                                 onClick={onClose}
-                                className="absolute top-6 right-6 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-all z-10"
+                                className="absolute top-6 right-6 p-2 rounded-full transition-all z-10 cursor-pointer"
+                                style={{
+                                    background: headerTheme.closeBg,
+                                    border: `1px solid ${headerTheme.closeBorder}`,
+                                    color: headerTheme.closeColor
+                                }}
                             >
                                 <X size={20} />
                             </button>
 
                             <div className="absolute -bottom-16 left-12 flex items-end gap-6">
-                                <div className="w-32 h-32 rounded-3xl border-4 border-[#0A0C10] bg-[#1C1F26] overflow-hidden shadow-2xl">
+                                <div
+                                    className="w-32 h-32 rounded-3xl border-4 overflow-hidden shadow-2xl"
+                                    style={{ borderColor: avatarFrameBorder || headerTheme.avatarBorder, background: headerTheme.avatarBackground }}
+                                >
                                     {user.avatar_url ? (
                                         <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/10 to-white/5">
-                                            <User size={42} strokeWidth={1.9} style={{ color: roleMeta.textColor }} />
+                                        <div className="w-full h-full flex items-center justify-center" style={{ background: headerTheme.avatarFallbackBg }}>
+                                            <User size={42} strokeWidth={1.9} style={{ color: silhouetteColor }} />
                                         </div>
                                     )}
                                 </div>
                                 <div className="mb-4">
-                                    <h2 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{user.full_name}</h2>
+                                    <h2 className="text-3xl font-black tracking-tight" style={{ color: headerTheme.titleColor }}>{user.full_name}</h2>
                                     <div className="flex items-center gap-3 mt-1">
                                         <RoleBadge role={user.role} />
-                                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                             Activo
                                         </span>
@@ -172,7 +237,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         <div className="mt-20 px-12 pb-2 border-b flex gap-8" style={{ borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={() => setActiveTab('profile')}
-                                className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'profile' ? 'text-blue-500 border-blue-500' : 'border-transparent hover:text-[#2048FF]'}`}
+                                className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'profile' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
                                 style={visibleTab === 'profile' ? undefined : { color: 'var(--text-secondary)' }}
                             >
                                 Perfil Profesional
@@ -180,7 +245,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                             {isAdmin && (
                                 <button
                                     onClick={() => setActiveTab('performance')}
-                                    className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'performance' ? 'text-blue-500 border-blue-500' : 'border-transparent hover:text-[#2048FF]'}`}
+                                    className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'performance' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
                                     style={visibleTab === 'performance' ? undefined : { color: 'var(--text-secondary)' }}
                                 >
                                     Desempeño & Actividad
@@ -195,11 +260,11 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 
                                     {/* Info Laboral */}
                                     <section className="space-y-6">
-                                        <h3 className="flex items-center gap-3 text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">
+                                        <h3 className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-[var(--input-focus)]">
                                             <Briefcase size={14} /> Información Laboral
                                         </h3>
                                         <div className="grid grid-cols-1 gap-4">
-                                            <InfoItem icon={Building2} label="Puesto" value={resolve('job_positions', details.job_position_id)} />
+                                            <InfoItem icon={Building2} label="Puesto" value={getJobPositionNames()} />
                                             <InfoItem icon={Users} label="Área" value={getAreaNames()} />
                                             <InfoItem icon={Shield} label="Seniority" value={resolve('seniority_levels', details.seniority_id)} />
                                             <InfoItem icon={Activity} label="Modalidad" value={resolve('work_modalities', details.work_modality_id)} />
@@ -210,7 +275,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 
                                     {/* Info Personal (Restricted) */}
                                     <section className="space-y-6">
-                                        <h3 className="flex items-center gap-3 text-[10px] font-black text-purple-500 uppercase tracking-[0.3em]">
+                                        <h3 className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-[var(--input-focus)]">
                                             <User size={14} /> Información Personal
                                         </h3>
                                         {canSeeAll ? (
@@ -226,7 +291,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                             <div className="p-8 rounded-3xl border flex flex-col items-center justify-center text-center gap-4" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                                                 <Shield size={32} style={{ color: 'var(--text-secondary)', opacity: 0.35 }} />
                                                 <p className="text-xs font-bold leading-relaxed" style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
-                                                    La información personal es <span className="text-purple-400">confidencial</span> y solo <br /> es visible para administración.
+                                                    La información personal es <span style={{ color: 'var(--input-focus)' }}>confidencial</span> y solo <br /> es visible para administración.
                                                 </p>
                                             </div>
                                         )}
@@ -289,7 +354,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 
                                     {/* Activity List */}
                                     <section className="space-y-6">
-                                        <h3 className="flex items-center gap-3 text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">
+                                        <h3 className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-[var(--input-focus)]">
                                             <ListTodo size={14} /> Registro de Actividades
                                         </h3>
 
@@ -307,12 +372,12 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                     {loadingActivity ? (
                                                         <tr>
                                                             <td colSpan={4} className="px-6 py-12 text-center">
-                                                                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                                                                <div className="w-6 h-6 border-2 border-[var(--input-focus)] border-t-transparent rounded-full animate-spin mx-auto" />
                                                             </td>
                                                         </tr>
                                                     ) : activityData?.activities?.length > 0 ? (
                                                         activityData.activities.map((act: any) => (
-                                                            <tr key={act.id} className="transition-colors group hover:bg-black/5">
+                                                            <tr key={act.id} className="transition-colors group hover:bg-[var(--hover-bg)]">
                                                                 <td className="px-6 py-4">
                                                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${act.type === 'meeting' ? 'bg-purple-500/10 text-purple-400' :
                                                                         act.type === 'task' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
@@ -377,7 +442,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         <div className="p-8 border-t flex justify-end" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={onClose}
-                                className="px-8 py-3 bg-[#2048FF] hover:bg-[#1700AC] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20"
+                                className="px-8 py-3 bg-[var(--input-focus)] hover:brightness-95 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20"
                             >
                                 Cerrar Perfil
                             </button>
@@ -390,15 +455,19 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 }
 
 function MetricCard({ icon: Icon, label, value, subtext, color }: { icon: any, label: string, value: string | number, subtext?: string, color: string }) {
-    const colors: Record<string, string> = {
-        blue: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-        yellow: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
-        emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-        purple: 'text-purple-400 bg-purple-500/10 border-purple-500/20'
+    const colors: Record<string, { text: string, bg: string, border: string }> = {
+        blue: { text: '#60a5fa', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.28)' },
+        yellow: { text: '#facc15', bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.28)' },
+        emerald: { text: '#34d399', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.28)' },
+        purple: { text: '#c084fc', bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.28)' },
+        indigo: { text: '#818cf8', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.28)' },
+        amber: { text: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
+        rose: { text: '#fb7185', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.28)' }
     }
+    const palette = colors[color] || colors.blue
 
     return (
-        <div className={`p-6 rounded-3xl border ${colors[color]} space-y-2`}>
+        <div className='p-6 rounded-3xl border space-y-2' style={{ color: palette.text, background: palette.bg, borderColor: palette.border }}>
             <div className="flex items-center justify-between">
                 <Icon size={18} className="opacity-60" />
                 {subtext && <span className="text-[9px] font-black opacity-40 uppercase tracking-widest">{subtext}</span>}
@@ -419,7 +488,7 @@ function InfoItem({ icon: Icon, label, value, highlight }: { icon: any, label: s
             </div>
             <div>
                 <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>{label}</p>
-                <p className={`text-sm font-bold ${highlight ? 'text-blue-500' : ''}`} style={highlight ? undefined : { color: 'var(--text-primary)' }}>{value || '-'}</p>
+                <p className='text-sm font-bold' style={{ color: highlight ? 'var(--input-focus)' : 'var(--text-primary)' }}>{value || '-'}</p>
             </div>
         </div>
     )

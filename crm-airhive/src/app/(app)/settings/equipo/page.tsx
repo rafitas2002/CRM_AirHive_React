@@ -40,11 +40,25 @@ export default async function EmployeesPage() {
         .from('employee_profiles')
         .select('*')
 
+    const { data: rhSyncSettings, error: rhSyncError } = await supabase
+        .from('rh_sync_settings')
+        .select('rh_master_enabled')
+        .eq('id', 1)
+        .maybeSingle()
+
     if (detailsError) {
         // It's possible the table doesn't exist yet if user didn't run SQL.
         // We should handle that gracefully or specific error.
         console.error('Error fetching details:', detailsError)
     }
+    if (rhSyncError) {
+        const isMissingSettingsTable = rhSyncError.code === '42P01' || rhSyncError.code === '42p01'
+        if (!isMissingSettingsTable) {
+            console.error('Error fetching RH sync settings:', rhSyncError)
+        }
+    }
+
+    const rhMasterEnabled = !!(rhSyncSettings as any)?.rh_master_enabled
 
     // Merge details into profiles
     const employees = ((profiles as any[]) || []).map(p => {
@@ -61,6 +75,7 @@ export default async function EmployeesPage() {
                 <EmployeesClient
                     initialEmployees={employees || []}
                     currentUserRole={userProfile?.role}
+                    rhMasterEnabled={rhMasterEnabled}
                 />
             </div>
             <RichardDawkinsFooter />

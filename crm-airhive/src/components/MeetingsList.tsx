@@ -5,6 +5,7 @@ import { Database } from '@/lib/supabase'
 import { getLeadMeetings, getLeadSnapshots, cancelMeeting } from '@/lib/meetingsService'
 import { deleteMeetingAction } from '@/app/actions/meetings'
 import ConfirmModal from './ConfirmModal'
+import { Building2, CalendarDays, Camera, CheckCircle2, Clock3, Hourglass, Phone, Video, Users } from 'lucide-react'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
@@ -115,10 +116,10 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
     const getMeetingIcon = (type: string) => {
         switch (type) {
-            case 'presencial': return '🏢'
-            case 'llamada': return '📞'
-            case 'video': return '🎥'
-            default: return '📅'
+            case 'presencial': return <Building2 size={18} />
+            case 'llamada': return <Phone size={18} />
+            case 'video': return <Video size={18} />
+            default: return <CalendarDays size={18} />
         }
     }
 
@@ -137,9 +138,9 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
         if (now >= startTime) {
             if (snapshot) {
-                return <span className='px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full'>✅ Snapshot capturado</span>
+                return <span className='px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full inline-flex items-center gap-1'><CheckCircle2 size={12} /> Snapshot capturado</span>
             } else {
-                return <span className='px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full'>⏳ Esperando confirmación</span>
+                return <span className='px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full inline-flex items-center gap-1'><Hourglass size={12} /> Esperando confirmación</span>
             }
         }
 
@@ -149,16 +150,16 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     if (loading) {
         return (
             <div className='flex items-center justify-center py-8'>
-                <p className='text-gray-400 animate-pulse'>Cargando reuniones...</p>
+                <p className='animate-pulse' style={{ color: 'var(--text-secondary)' }}>Cargando reuniones...</p>
             </div>
         )
     }
 
     if (meetings.length === 0) {
         return (
-            <div className='text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200'>
-                <p className='text-gray-500 text-sm'>No hay reuniones agendadas</p>
-                <p className='text-gray-400 text-xs mt-1'>Crea una reunión para comenzar el seguimiento de pronósticos</p>
+            <div className='text-center py-8 rounded-lg border-2 border-dashed' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                <p className='text-sm' style={{ color: 'var(--text-primary)' }}>No hay reuniones agendadas</p>
+                <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Crea una reunión para comenzar el seguimiento de pronósticos</p>
             </div>
         )
     }
@@ -174,21 +175,24 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                     <div
                         key={meeting.id}
                         className={`p-4 rounded-lg border-2 transition-all ${isUpcoming && meeting.status === 'scheduled'
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-white border-gray-200'
+                            ? 'border-blue-300/50'
+                            : ''
                             }`}
+                        style={isUpcoming && meeting.status === 'scheduled'
+                            ? { background: 'color-mix(in srgb, #3b82f6 8%, var(--card-bg))' }
+                            : { background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
                     >
                         <div className='flex items-start justify-between gap-3'>
                             <div className='flex-1'>
                                 <div className='flex items-center gap-2 mb-1'>
-                                    <span className='text-2xl'>{getMeetingIcon(meeting.meeting_type)}</span>
-                                    <h3 className='font-bold text-gray-900'>{meeting.title}</h3>
+                                    <span style={{ color: 'var(--input-focus)' }}>{getMeetingIcon(meeting.meeting_type)}</span>
+                                    <h3 className='font-bold' style={{ color: 'var(--text-primary)' }}>{meeting.title}</h3>
                                     {getMeetingStatusBadge(meeting)}
                                 </div>
 
-                                <div className='space-y-1 text-sm text-gray-600'>
+                                <div className='space-y-1 text-sm' style={{ color: 'var(--text-secondary)' }}>
                                     <p className='flex items-center gap-2'>
-                                        <span className='font-semibold'>📅</span>
+                                        <CalendarDays size={14} className='font-semibold' />
                                         {startTime.toLocaleDateString('es-MX', {
                                             weekday: 'long',
                                             year: 'numeric',
@@ -197,7 +201,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                         })}
                                     </p>
                                     <p className='flex items-center gap-2'>
-                                        <span className='font-semibold'>🕐</span>
+                                        <Clock3 size={14} className='font-semibold' />
                                         {startTime.toLocaleTimeString('es-MX', {
                                             hour: '2-digit',
                                             minute: '2-digit'
@@ -207,7 +211,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
                                     {meeting.attendees && meeting.attendees.length > 0 && (
                                         <p className='flex items-center gap-2'>
-                                            <span className='font-semibold'>👥</span>
+                                            <Users size={14} className='font-semibold' />
                                             {meeting.attendees.join(', ')}
                                         </p>
                                     )}
@@ -215,7 +219,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                     {meeting.notes && (
                                         <div className='mt-2'>
                                             <p className='text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1'>Notas de Preparación</p>
-                                            <p className='text-xs text-gray-600 italic bg-gray-50 p-2 rounded-lg border border-gray-100'>
+                                            <p className='text-xs italic p-2 rounded-lg border' style={{ color: 'var(--text-secondary)', background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                                                 {meeting.notes}
                                             </p>
                                         </div>
@@ -235,8 +239,8 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                 {snapshot && (
                                     <div className='mt-3 p-3 bg-purple-50 border border-purple-200 rounded-xl'>
                                         <div className='flex justify-between items-center mb-1'>
-                                            <p className='text-[10px] font-black text-purple-900 uppercase tracking-widest'>
-                                                📸 Snapshot #{snapshot.snapshot_number}
+                                            <p className='text-[10px] font-black text-purple-900 uppercase tracking-widest inline-flex items-center gap-1'>
+                                                <Camera size={12} /> Snapshot #{snapshot.snapshot_number}
                                             </p>
                                             <p className='text-[9px] font-bold text-purple-600'>
                                                 {new Date(snapshot.snapshot_timestamp).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit' })}
