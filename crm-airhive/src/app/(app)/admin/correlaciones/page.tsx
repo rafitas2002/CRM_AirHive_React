@@ -27,6 +27,8 @@ import {
     Hash
 } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import CorrelationScatterWindow from '@/components/insights/CorrelationScatterWindow'
+import PostponeForecastWindow from '@/components/insights/PostponeForecastWindow'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type CorrelationScope = 'team' | 'individual'
@@ -195,6 +197,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
     const [data, setData] = useState<any[]>([])
     const [leadRows, setLeadRows] = useState<any[]>([])
     const [companyRegistry, setCompanyRegistry] = useState<any[]>([])
+    const [analytics, setAnalytics] = useState<{
+        correlationData: any[],
+        correlations: any[],
+        postponeByCompanySize: any[]
+    }>({
+        correlationData: [],
+        correlations: [],
+        postponeByCompanySize: []
+    })
     const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})
     const [forecastData, setForecastData] = useState<any>(null)
     const [forecastOptions, setForecastOptions] = useState<{ sizes: any[], industries: any[], locations: any[] }>({ sizes: [], industries: [], locations: [] })
@@ -289,11 +300,19 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                 if (Array.isArray(corrRes.data)) {
                     setData(corrRes.data)
                     setCompanyRegistry([])
-                    setLeadRows([])
+                    setAnalytics({
+                        correlationData: [],
+                        correlations: [],
+                        postponeByCompanySize: []
+                    })
                 } else {
                     setData(corrRes.data.users || [])
                     setCompanyRegistry(corrRes.data.companyRegistry || [])
-                    setLeadRows(corrRes.data.leadAnalyticsRows || [])
+                    setAnalytics({
+                        correlationData: corrRes.data.analytics?.correlationData || [],
+                        correlations: corrRes.data.analytics?.correlations || [],
+                        postponeByCompanySize: corrRes.data.analytics?.postponeByCompanySize || []
+                    })
                 }
             } else {
                 setError(corrRes.error || 'Error al cargar correlaciones')
@@ -597,12 +616,10 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                 <div className='max-w-7xl mx-auto flex flex-col gap-10'>
 
                     {/* Header */}
-                    <div className='order-1 flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                         <div className='flex items-center gap-6'>
-                            <div
-                                className='w-16 h-16 rounded-[22px] border shadow-lg flex items-center justify-center shrink-0 ah-window-title-icon-shell'
-                            >
-                                <BarChart3 size={34} strokeWidth={1.9} className='ah-window-title-icon' />
+                            <div className='ah-icon-card'>
+                                <BarChart3 size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Data & Correlaciones</h1>
@@ -626,498 +643,63 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                     </div>
 
                     {/* Error Alert */}
-                    <div className='order-2'>
-                        <AnimatePresence>
-                            {error && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    className='p-6 bg-red-50 border-2 border-red-100 rounded-[32px] flex items-center gap-4 text-red-700'
-                                >
-                                    <div className='w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-red-500 shadow-sm'>
-                                        ⚠️
-                                    </div>
-                                    <div>
-                                        <p className='font-black text-sm uppercase tracking-widest'>Error de Carga</p>
-                                        <p className='font-bold text-xs opacity-80'>{error}</p>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                    <AnimatePresence>
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className='p-6 bg-red-50 border-2 border-red-100 rounded-[32px] flex items-center gap-4 text-red-700'
+                            >
+                                <div className='w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-red-500 shadow-sm'>
+                                    ⚠️
+                                </div>
+                                <div>
+                                    <p className='font-black text-sm uppercase tracking-widest'>Error de Carga</p>
+                                    <p className='font-bold text-xs opacity-80'>{error}</p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Insights Grid */}
-                    {showGeneralView && (
-                    <div className='order-3 rounded-[36px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='p-8 border-b flex items-center gap-4' style={{ borderColor: 'var(--card-border)' }}>
-                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                <Users size={24} />
-                            </div>
-                            <div>
-                                <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Insights Estratégicos</h2>
-                                <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Información clave del desempeño histórico</p>
-                            </div>
-                        </div>
-                        <div className='p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-                            {insights.map((insight, idx) => (
-                                <motion.div
-                                    key={idx}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    className='p-8 rounded-[32px] border shadow-sm relative overflow-hidden group'
-                                    style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                                >
-                                    <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: `var(--${insight.color}-500, #2048FF)` }} />
-                                    <div className='relative z-10 flex items-start gap-6'>
-                                        <div className='w-14 h-14 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: `var(--${insight.color}-500, #2048FF)` }}>
-                                            <insight.icon size={28} />
-                                        </div>
-                                        <div className='space-y-2'>
-                                            <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
-                                            <p className='font-medium leading-relaxed text-sm opacity-80' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
-                                        </div>
+                    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+                        {insights.map((insight, idx) => (
+                            <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.1 }}
+                                className='p-8 rounded-[32px] border shadow-sm relative overflow-hidden group'
+                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            >
+                                <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: `var(--${insight.color}-500, #2048FF)` }} />
+                                <div className='relative z-10 flex items-start gap-6'>
+                                    <div className='ah-icon-card ah-icon-card-sm'>
+                                        <insight.icon size={20} strokeWidth={2} />
                                     </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                    )}
-
-                    {/* Commercial Forecasts */}
-                    {showForecastView && (
-                    <div className='order-5 rounded-[36px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='p-8 border-b space-y-5' style={{ borderColor: 'var(--card-border)' }}>
-                            <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
-                                <div className='flex items-center gap-4'>
-                                    <div className='w-12 h-12 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                        <Timer size={24} />
-                                    </div>
-                                    <div>
-                                    <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Pronósticos Comerciales</h2>
-                                    <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                        Basado en historial real de juntas, cierres y proyectos
-                                    </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={fetchForecast}
-                                    disabled={forecastLoading}
-                                    className='px-5 py-2.5 rounded-2xl bg-[#2048FF] text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 disabled:opacity-50'
-                                >
-                                    {forecastLoading ? 'Recalculando...' : 'Recalcular Pronóstico'}
-                                </button>
-                            </div>
-
-                            <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3'>
-                                <select
-                                    value={forecastFilters.size}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, size: e.target.value }))}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Tamaño: Todos</option>
-                                    {forecastOptions.sizes.map((size: any) => <option key={String(size)} value={String(size)}>{`Tamaño ${size}`}</option>)}
-                                </select>
-                                <select
-                                    value={forecastFilters.industry}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, industry: e.target.value }))}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Industria: Todas</option>
-                                    {forecastOptions.industries.map((industry: any) => <option key={String(industry)} value={String(industry)}>{String(industry)}</option>)}
-                                </select>
-                                <select
-                                    value={forecastFilters.location}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, location: e.target.value }))}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Ubicación: Todas</option>
-                                    {forecastOptions.locations.map((location: any) => <option key={String(location)} value={String(location)}>{String(location)}</option>)}
-                                </select>
-                                <select
-                                    value={forecastFilters.sourceChannel}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, sourceChannel: e.target.value as 'all' | 'pre_lead' | 'direct' }))}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Canal: Todos</option>
-                                    <option value='pre_lead'>Canal: Pre-Lead</option>
-                                    <option value='direct'>Canal: Directo</option>
-                                </select>
-                            </div>
-
-                            <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-                                <input
-                                    type='date'
-                                    value={forecastFilters.dateFrom}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
-                                    className='ah-search-input'
-                                />
-                                <input
-                                    type='date'
-                                    value={forecastFilters.dateTo}
-                                    onChange={(e) => setForecastFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
-                                    className='ah-search-input'
-                                />
-                            </div>
-                        </div>
-
-                        {!forecastData ? (
-                            <div className='p-8 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                Aún no hay datos de pronóstico disponibles.
-                            </div>
-                        ) : (
-                            <div className='p-8 space-y-6'>
-                                <div className='grid grid-cols-1 lg:grid-cols-3 gap-4'>
-                                    <div className='rounded-2xl border p-5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                        <p className='text-[10px] uppercase tracking-widest font-black' style={{ color: 'var(--text-secondary)' }}>Juntas para Cerrar</p>
-                                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{(forecastData.meetingsToCloseForecast?.averageMeetings || 0).toFixed(2)}</p>
-                                        <p className='text-xs font-bold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                            Rango: {Number(forecastData.meetingsToCloseForecast?.p25 || 0).toFixed(1)} - {Number(forecastData.meetingsToCloseForecast?.p75 || 0).toFixed(1)} · n={forecastData.meetingsToCloseForecast?.sampleSize || 0}
-                                        </p>
-                                        <p className='text-[11px] font-black mt-2 uppercase tracking-wider' style={{ color: forecastData.meetingsToCloseForecast?.insufficientSample ? '#f59e0b' : '#10b981' }}>
-                                            Confianza: {forecastData.meetingsToCloseForecast?.confidence || 'N/A'}
-                                        </p>
-                                    </div>
-
-                                    <div className='rounded-2xl border p-5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                        <p className='text-[10px] uppercase tracking-widest font-black' style={{ color: 'var(--text-secondary)' }}>Prob. Posponer Junta</p>
-                                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>
-                                            {((forecastData.postponementForecast?.globalProbability || 0) * 100).toFixed(1)}%
-                                        </p>
-                                        <p className='text-xs font-bold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                            Reagendadas: {forecastData.postponementForecast?.rescheduledMeetings || 0} / {forecastData.postponementForecast?.sampleSize || 0}
-                                        </p>
-                                        <p className='text-[11px] font-black mt-2 uppercase tracking-wider' style={{ color: forecastData.postponementForecast?.insufficientSample ? '#f59e0b' : '#10b981' }}>
-                                            Confianza: {forecastData.postponementForecast?.confidence || 'N/A'}
-                                        </p>
-                                    </div>
-
-                                    <div className='rounded-2xl border p-5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                        <p className='text-[10px] uppercase tracking-widest font-black' style={{ color: 'var(--text-secondary)' }}>Proyectos por Nueva Empresa</p>
-                                        <p className='text-3xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>
-                                            {(forecastData.projectsForecast?.avgProjectsPerNewCompany || 0).toFixed(2)}
-                                        </p>
-                                        <p className='text-xs font-bold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                            P(0): {((forecastData.projectsForecast?.distribution?.p0 || 0) * 100).toFixed(0)}% · P(1): {((forecastData.projectsForecast?.distribution?.p1 || 0) * 100).toFixed(0)}% · P(2+): {((forecastData.projectsForecast?.distribution?.p2plus || 0) * 100).toFixed(0)}%
-                                        </p>
-                                        <p className='text-[11px] font-black mt-2 uppercase tracking-wider' style={{ color: forecastData.projectsForecast?.insufficientSample ? '#f59e0b' : '#10b981' }}>
-                                            Confianza: {forecastData.projectsForecast?.confidence || 'N/A'} · n={forecastData.projectsForecast?.sampleSizeCompanies || 0}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)' }}>
-                                    <div className='px-6 py-4 border-b' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                        <p className='text-[10px] uppercase tracking-widest font-black' style={{ color: 'var(--text-secondary)' }}>
-                                            Segmentos sugeridos para decisión
-                                        </p>
-                                    </div>
-                                    <div className='overflow-x-auto'>
-                                        <table className='w-full text-left border-collapse'>
-                                            <thead>
-                                                <tr className='uppercase text-[10px] font-black tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>
-                                                    <th className='px-6 py-3'>Segmento</th>
-                                                    <th className='px-6 py-3'>Avg Proyectos</th>
-                                                    <th className='px-6 py-3'>Prob. Posponer</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {forecastSegmentRows.map((row: any, idx: number) => (
-                                                    <tr key={`${row.segment}-${idx}`} className='border-t' style={{ borderColor: 'var(--card-border)' }}>
-                                                        <td className='px-6 py-4 font-black text-sm' style={{ color: 'var(--text-primary)' }}>{row.segment}</td>
-                                                        <td className='px-6 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{Number(row.avgProjects || 0).toFixed(2)}</td>
-                                                        <td className='px-6 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{(Number(row.postponeProb || 0) * 100).toFixed(1)}%</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    {forecastSegmentRows.length === 0 && (
-                                        <div className='p-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                            Muestra insuficiente para desglosar segmentos con estos filtros.
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className='rounded-2xl border p-5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                    <p className='text-[10px] uppercase tracking-widest font-black mb-3' style={{ color: 'var(--text-secondary)' }}>
-                                        Top factores asociados a aplazamiento
-                                    </p>
                                     <div className='space-y-2'>
-                                        {(forecastData.postponementForecast?.topFactors || []).slice(0, 6).map((factor: any, idx: number) => (
-                                            <div key={`${factor.dimension}-${factor.label}-${idx}`} className='flex items-center justify-between rounded-xl border px-4 py-3' style={{ borderColor: 'var(--card-border)' }}>
-                                                <div>
-                                                    <p className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>{factor.dimension}: {factor.label}</p>
-                                                    <p className='text-[10px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>n={factor.n}</p>
-                                                </div>
-                                                <div className='text-right'>
-                                                    <p className='font-black text-sm' style={{ color: factor.liftVsGlobal >= 0 ? '#ef4444' : '#10b981' }}>
-                                                        {factor.liftVsGlobal >= 0 ? '+' : ''}{(factor.liftVsGlobal * 100).toFixed(1)} pts
-                                                    </p>
-                                                    <p className='text-[10px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                                        {(factor.probability * 100).toFixed(1)}%
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
+                                        <p className='font-medium leading-relaxed text-sm opacity-80' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
                                     </div>
-                                    {(forecastData.postponementForecast?.topFactors || []).length === 0 && (
-                                        <p className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                            No hay suficientes segmentos con muestra mínima para detectar factores sólidos.
-                                        </p>
-                                    )}
                                 </div>
-
-                                {(forecastData.meetingsToCloseForecast?.insufficientSample || forecastData.postponementForecast?.insufficientSample || forecastData.projectsForecast?.insufficientSample) && (
-                                    <div className='rounded-2xl border p-4 text-sm font-bold' style={{ borderColor: 'rgba(245, 158, 11, 0.35)', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.08)' }}>
-                                        Insuficiente muestra en uno o más pronósticos. Amplía rango de fechas o reduce filtros para mejorar confiabilidad.
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                            </motion.div>
+                        ))}
                     </div>
-                    )}
 
-                    {/* Correlation Explorer */}
-                    {showGraphView && (
-                    <div className='order-4 rounded-[36px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='p-8 border-b space-y-5' style={{ borderColor: 'var(--card-border)' }}>
-                            <div className='flex flex-col lg:flex-row lg:items-center justify-between gap-4'>
-                                <div className='flex items-center gap-4'>
-                                    <div className='w-12 h-12 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                        <TrendingUp size={24} />
-                                    </div>
-                                    <div>
-                                        <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Correlation Explorer</h2>
-                                        <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                            {filteredCorrelationCombinations.length} combinaciones válidas de {correlationCombinations.length} posibles
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className='flex items-center gap-2'>
-                                    <button
-                                        onClick={() => setCorrelationView('important')}
-                                        className={`ah-toggle-pill ${correlationView === 'important' ? 'ah-toggle-pill--active' : ''}`}
-                                    >
-                                        Importantes
-                                    </button>
-                                    <button
-                                        onClick={() => setCorrelationView('explorer')}
-                                        className={`ah-toggle-pill ${correlationView === 'explorer' ? 'ah-toggle-pill--active' : ''}`}
-                                    >
-                                        Explorador
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'>
-                                <select
-                                    value={selectedPresetId}
-                                    onChange={(e) => setSelectedPresetId(e.target.value)}
-                                    className='ah-select-control'
-                                >
-                                    {QUICK_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>Preset: {preset.label}</option>)}
-                                </select>
-
-                                <select
-                                    value={analysisScope}
-                                    onChange={(e) => setAnalysisScope(e.target.value as CorrelationScope)}
-                                    className='ah-select-control'
-                                >
-                                    <option value='team'>Modo: Correlación Equipo</option>
-                                    <option value='individual'>Modo: Correlación Individual (por usuario)</option>
-                                </select>
-
-                                {analysisScope === 'individual' && (
-                                    <select
-                                        value={selectedUserId}
-                                        onChange={(e) => setSelectedUserId(e.target.value)}
-                                        className='ah-select-control'
-                                    >
-                                        <option value='all'>Usuario: Todos</option>
-                                        {userOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                                    </select>
-                                )}
-                            </div>
-
-                            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3'>
-                                <select
-                                    value={xMetric}
-                                    onChange={(e) => setXMetric(e.target.value as MetricKey)}
-                                    className='ah-select-control'
-                                >
-                                    {Array.from(new Set(scopeMetrics.map((metric) => metric.group))).map((group) => (
-                                        <optgroup key={group} label={group}>
-                                            {scopeMetrics.filter((metric) => metric.group === group).map((metric) => (
-                                                <option key={metric.key} value={metric.key}>Eje X: {metric.label}</option>
-                                            ))}
-                                        </optgroup>
-                                    ))}
-                                </select>
-                                <select
-                                    value={yMetric}
-                                    onChange={(e) => setYMetric(e.target.value as MetricKey)}
-                                    className='ah-select-control'
-                                >
-                                    {Array.from(new Set(scopeMetrics.map((metric) => metric.group))).map((group) => (
-                                        <optgroup key={group} label={group}>
-                                            {scopeMetrics.filter((metric) => metric.group === group).map((metric) => (
-                                                <option key={metric.key} value={metric.key}>Eje Y: {metric.label}</option>
-                                            ))}
-                                        </optgroup>
-                                    ))}
-                                </select>
-                                <select
-                                    value={strengthFilter}
-                                    onChange={(e) => setStrengthFilter(e.target.value as 'all' | 'strong' | 'moderate' | 'weak')}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Fuerza: Todas</option>
-                                    <option value='strong'>Fuerza: Fuerte (|r| ≥ 0.60)</option>
-                                    <option value='moderate'>Fuerza: Moderada (0.30 - 0.59)</option>
-                                    <option value='weak'>Fuerza: Débil (&lt; 0.30)</option>
-                                </select>
-                                <select
-                                    value={directionFilter}
-                                    onChange={(e) => setDirectionFilter(e.target.value as 'all' | 'positive' | 'negative')}
-                                    className='ah-select-control'
-                                >
-                                    <option value='all'>Dirección: Todas</option>
-                                    <option value='positive'>Dirección: Positiva</option>
-                                    <option value='negative'>Dirección: Negativa</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className='grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-0'>
-                            <div className='p-8 border-r' style={{ borderColor: 'var(--card-border)' }}>
-                                <div className='mb-5 flex items-center justify-between'>
-                                    <div>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)' }}>Scatter</p>
-                                        <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{activeCorrelation.xLabel} vs {activeCorrelation.yLabel}</h3>
-                                    </div>
-                                    <div className='text-right'>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.15em]' style={{ color: 'var(--text-secondary)' }}>Correlación</p>
-                                        <p className='font-black text-xl' style={{ color: activeCorrelation.r !== null && activeCorrelation.r >= 0 ? '#10b981' : '#ef4444' }}>
-                                            {activeCorrelation.r !== null ? activeCorrelation.r.toFixed(3) : 'N/A'}
-                                        </p>
-                                        <p className='text-[10px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                            {activeCorrelation.strengthLabel} · n={activeCorrelation.n}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className='rounded-[24px] border p-4 mb-4' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                    {(() => {
-                                        const chartW = 920
-                                        const chartH = 430
-                                        const padding = 54
-                                        const xs = scatterPoints.map((p) => p.x)
-                                        const ys = scatterPoints.map((p) => p.y)
-
-                                        if (xs.length < 2 || ys.length < 2) {
-                                            return (
-                                                <div className='h-[430px] flex items-center justify-center'>
-                                                    <p className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>No hay suficientes datos para graficar esta combinación.</p>
-                                                </div>
-                                            )
-                                        }
-
-                                        const minX = Math.min(...xs)
-                                        const maxX = Math.max(...xs)
-                                        const minY = Math.min(...ys)
-                                        const maxY = Math.max(...ys)
-                                        const xRange = Math.max(1, maxX - minX)
-                                        const yRange = Math.max(1, maxY - minY)
-
-                                        const scaleX = (val: number) => padding + ((val - minX) / xRange) * (chartW - padding * 2)
-                                        const scaleY = (val: number) => chartH - padding - ((val - minY) / yRange) * (chartH - padding * 2)
-
-                                        return (
-                                            <svg viewBox={`0 0 ${chartW} ${chartH}`} className='w-full h-[430px]'>
-                                                <line x1={padding} y1={chartH - padding} x2={chartW - padding} y2={chartH - padding} stroke='rgba(148,163,184,0.45)' />
-                                                <line x1={padding} y1={padding} x2={padding} y2={chartH - padding} stroke='rgba(148,163,184,0.45)' />
-
-                                                {scatterPoints.map((point) => (
-                                                    <g key={point.pointId}>
-                                                        <circle
-                                                            cx={scaleX(point.x)}
-                                                            cy={scaleY(point.y)}
-                                                            r={6.2}
-                                                            fill={point.gender === 'Femenino' ? '#ec4899' : point.gender === 'Masculino' ? '#3b82f6' : '#14b8a6'}
-                                                            opacity='0.9'
-                                                        >
-                                                            <title>{`${point.name} · X: ${point.x.toFixed(2)} · Y: ${point.y.toFixed(2)}`}</title>
-                                                        </circle>
-                                                    </g>
-                                                ))}
-                                            </svg>
-                                        )
-                                    })()}
-                                </div>
-
-                                <div className='rounded-2xl border p-4' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.15em] mb-2' style={{ color: 'var(--text-secondary)' }}>Interpretación</p>
-                                    <p className='font-black text-sm mb-2' style={{ color: 'var(--text-primary)' }}>
-                                        Relación {activeCorrelation.r !== null && activeCorrelation.r >= 0 ? 'positiva' : 'negativa'} {activeCorrelation.strengthLabel.toLowerCase()} entre {activeCorrelation.xLabel} y {activeCorrelation.yLabel}.
-                                    </p>
-                                    <p className='font-medium text-sm leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
-                                        Recomendación: {activeCorrelation.recommendation}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className='p-8'>
-                                <div className='mb-4'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)' }}>
-                                        {correlationView === 'important' ? 'Detección automática' : 'Combinaciones filtradas'}
-                                    </p>
-                                    <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>
-                                        {correlationView === 'important' ? 'Correlaciones Importantes' : 'Matriz total de pares'}
-                                    </h3>
-                                </div>
-                                <div className='max-h-[560px] overflow-y-auto custom-scrollbar pr-1 space-y-2'>
-                                    {(correlationView === 'important' ? importantCorrelations : filteredCorrelationCombinations).map((combo: {
-                                        x: MetricKey
-                                        y: MetricKey
-                                        r: number
-                                        n: number
-                                        strengthLabel?: string
-                                        recommendation?: string
-                                    }) => (
-                                        <button
-                                            key={`${combo.x}-${combo.y}`}
-                                            onClick={() => { setXMetric(combo.x); setYMetric(combo.y) }}
-                                            className='w-full text-left rounded-2xl border p-4 transition-all hover:scale-[1.01]'
-                                            style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}
-                                        >
-                                            <p className='font-black text-sm leading-tight' style={{ color: 'var(--text-primary)' }}>
-                                                {metricLabelByKey[combo.x]} <span style={{ color: 'var(--text-secondary)' }}>vs</span> {metricLabelByKey[combo.y]}
-                                            </p>
-                                            <div className='mt-1 flex items-center justify-between'>
-                                                <span className='text-[10px] font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                                    n={combo.n} {combo.strengthLabel ? `· ${combo.strengthLabel}` : ''}
-                                                </span>
-                                                <span className='text-sm font-black' style={{ color: combo.r >= 0 ? '#10b981' : '#ef4444' }}>r={combo.r.toFixed(3)}</span>
-                                            </div>
-                                            {combo.recommendation && (
-                                                <p className='mt-2 text-xs font-medium leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
-                                                    {combo.recommendation}
-                                                </p>
-                                            )}
-                                        </button>
-                                    ))}
-                                    {(correlationView === 'important' ? importantCorrelations.length === 0 : filteredCorrelationCombinations.length === 0) && (
-                                        <div className='rounded-2xl border p-6 text-center' style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                            No hay correlaciones disponibles con los filtros y muestra actual.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                    {/* Ventanas Analíticas: Correlaciones + Pronóstico */}
+                    <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
+                        <CorrelationScatterWindow
+                            rows={analytics.correlationData || []}
+                            title='Gráfica de Correlaciones'
+                            subtitle='Analiza relación entre variables del equipo'
+                        />
+                        <PostponeForecastWindow
+                            rows={analytics.postponeByCompanySize || []}
+                            title='Pronóstico de Comportamiento'
+                            subtitle='Probabilidad de posponer/cancelar por tamaño de empresa'
+                        />
                     </div>
-                    )}
 
                     {/* Rising Stars Section */}
                     {showGeneralView && risingStars.length > 0 && (
@@ -1165,8 +747,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                     <div className='order-4 rounded-[40px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='p-8 border-b flex flex-col md:flex-row md:items-center justify-between gap-6' style={{ borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                    <TableIcon size={24} />
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <TableIcon size={22} strokeWidth={2} />
                                 </div>
                                 <div>
                                     <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Sellers</h2>
@@ -1361,8 +943,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                     {showGeneralView && (
                     <div className='order-8 space-y-6'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-500/10 text-blue-500'>
-                                <Building2 size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <Building2 size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Registro de Empresas</h2>
@@ -1412,8 +994,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                     {showGeneralView && (
                     <div className='order-9 space-y-6'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-yellow-500/10 text-yellow-500'>
-                                <Trophy size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <Trophy size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Historial de Carreras</h2>

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface PreLeadDetailViewProps {
     preLead: any
@@ -21,6 +22,7 @@ export default function PreLeadDetailView({
     onEmailClick,
     userEmail
 }: PreLeadDetailViewProps) {
+    useBodyScrollLock(isOpen)
     if (!preLead) return null
 
     return (

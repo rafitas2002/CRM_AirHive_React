@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Trophy, TrendingUp, Info } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
@@ -21,9 +21,36 @@ interface SellerRaceProps {
 export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
     const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
+    const orderedSellers = rankedSellers.map((entry) => entry.item)
+
+    const sellerPositions = useMemo(() => {
+        const positions = new Map<string, number>()
+        const positiveValues = orderedSellers
+            .map((s) => s.value)
+            .filter((value) => value > 0)
+
+        const uniquePositiveValues = Array.from(new Set(positiveValues)).sort((a: number, b: number) => b - a)
+        const positiveRankByValue = new Map<number, number>()
+        uniquePositiveValues.forEach((value, idx) => {
+            // Competition ranking for positives (1,2,2,4...)
+            const rank = positiveValues.filter((v: number) => v > value).length + 1
+            positiveRankByValue.set(value, rank || idx + 1)
+        })
+
+        orderedSellers.forEach((seller) => {
+            if (seller.value <= 0) {
+                // Business rule: users with $0 start at position 4.
+                positions.set(seller.name, 4)
+            } else {
+                positions.set(seller.name, positiveRankByValue.get(seller.value) ?? 1)
+            }
+        })
+
+        return positions
+    }, [orderedSellers])
 
     return (
-        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative ah-accent-hover-surface' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex justify-between items-end'>
                 <div>
                     <div className='flex items-center gap-3'>
@@ -33,18 +60,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                         </h3>
                         <button
                             onClick={() => setIsINFOOpen(true)}
-                            className='w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer'
-                            style={{ background: 'var(--hover-bg)', color: 'var(--text-secondary)', border: '1px solid var(--card-border)' }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.borderColor = 'var(--input-focus)'
-                                e.currentTarget.style.color = 'var(--input-focus)'
-                                e.currentTarget.style.boxShadow = '0 0 0 3px rgb(var(--input-focus-rgb) / 0.12)'
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.borderColor = 'var(--card-border)'
-                                e.currentTarget.style.color = 'var(--text-secondary)'
-                                e.currentTarget.style.boxShadow = 'none'
-                            }}
+                            className='w-7 h-7 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] hover:bg-blue-500/10 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-105'
                             title="Ver Detalles y Medallero"
                         >
                             <Info size={14} />
@@ -68,13 +84,14 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                 {rankedSellers.map((runner, index) => {
                     const seller = runner.item
                     const progress = (seller.value / maxGoal) * 100
+                    const position = sellerPositions.get(seller.name) ?? 4
 
                     return (
                         <div key={seller.name} className='relative group'>
                             <div className='flex justify-between items-center mb-2'>
                                 <div className='flex items-center gap-2'>
-                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${runner.medal === 'gold' ? 'bg-amber-500/20 text-amber-600' : runner.medal === 'silver' ? 'bg-slate-300/20 text-slate-400' : runner.medal === 'bronze' ? 'bg-orange-500/20 text-orange-500' : 'text-[var(--text-secondary)]'}`} style={{ background: runner.medal ? undefined : 'var(--hover-bg)' }}>
-                                        {runner.rank}
+                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${position === 1 ? 'bg-amber-500/20 text-amber-600' : 'text-[var(--text-secondary)]'}`} style={{ background: position === 1 ? undefined : 'var(--hover-bg)' }}>
+                                        {position}
                                     </span>
                                     <span className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{seller.name}</span>
                                 </div>
@@ -92,8 +109,8 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, progress)}%` }}
                                         transition={{ duration: 1.5, delay: index * 0.1, ease: 'easeOut' }}
-                                        className={`h-full rounded-full shadow-lg relative ${runner.medal === 'gold' ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
-                                            runner.medal === 'silver' ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
+                                        className={`h-full rounded-full shadow-lg relative ${position === 1 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
+                                            position === 2 ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
                                                 'bg-gradient-to-r from-gray-400 to-gray-500'
                                             }`}
                                     >
@@ -134,7 +151,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
 
                             {/* Hover Details */}
                             <div className='absolute -right-2 top-0 bottom-0 flex items-center transition-all duration-300 transform group-hover:translate-x-2'>
-                                {runner.medal === 'gold' && <TrendingUp className='w-4 h-4 text-emerald-500' />}
+                                {position === 1 && <TrendingUp className='w-4 h-4 text-emerald-500' />}
                             </div>
                         </div>
                     )

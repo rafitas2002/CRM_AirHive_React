@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Database } from '@/lib/supabase'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 
@@ -18,6 +19,7 @@ export default function MeetingConfirmationModal({
     onConfirm,
     onClose
 }: MeetingConfirmationModalProps) {
+    useBodyScrollLock(true)
     const [notes, setNotes] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
 

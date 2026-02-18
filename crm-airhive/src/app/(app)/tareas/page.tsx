@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import TaskModal from '@/components/TaskModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { Plus, CheckSquare, Calendar, Clock, Building2, User, Pencil, Trash2, CheckCircle2, RotateCw, ListTodo, AlertCircle, Search } from 'lucide-react'
+import { Plus, CheckSquare, Calendar, Clock, Building2, User, Pencil, Trash2, CheckCircle2, ListTodo, AlertCircle, Search } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
 interface Task {
@@ -231,8 +231,8 @@ export default function TareasPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
-                                <CheckSquare size={36} strokeWidth={1.5} className="ah-window-title-icon" />
+                            <div className='ah-icon-card transition-all hover:scale-105'>
+                                <CheckSquare size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -247,22 +247,8 @@ export default function TareasPage() {
 
                     <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <button
-                            onClick={fetchTasks}
-                            className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
-                            style={{
-                                background: 'var(--card-bg)',
-                                borderColor: 'var(--card-border)',
-                                color: 'var(--text-primary)'
-                            }}
-                        >
-                            <div className='flex items-center gap-2'>
-                                <span>Refrescar</span>
-                                <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
-                            </div>
-                        </button>
-                        <button
                             onClick={() => { setModalMode('create'); setCurrentTask(null); setIsModalOpen(true); }}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2'
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer'
                         >
                             <Plus size={16} />
                             Nueva Tarea
@@ -317,8 +303,8 @@ export default function TareasPage() {
 
                                 {groupTasks.length === 0 ? (
                                     <div className='p-16 border-2 border-dashed rounded-[40px] flex flex-col items-center text-center' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                        <div className='w-16 h-16 rounded-[22px] flex items-center justify-center mb-4 transition-all hover:scale-110 shadow-inner' style={{ background: 'var(--background)' }}>
-                                            <ListTodo size={32} className='opacity-10' />
+                                        <div className='ah-icon-card mb-4 transition-all hover:scale-110'>
+                                            <ListTodo size={32} strokeWidth={2} />
                                         </div>
                                         <p className='text-sm font-black' style={{ color: 'var(--text-primary)' }}>Panel Limpio</p>
                                         <p className='text-[10px] font-bold uppercase tracking-widest opacity-40' style={{ color: 'var(--text-secondary)' }}>No hay actividades pendientes para hoy</p>

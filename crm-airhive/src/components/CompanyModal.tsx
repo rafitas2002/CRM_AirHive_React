@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
 import { getCatalogs } from '@/app/actions/catalogs'
+import { useAuth } from '@/lib/auth'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 export type CompanyData = {
     id?: string
@@ -14,6 +16,8 @@ export type CompanyData = {
     logo_url: string
     industria: string
     industria_id?: string
+    industria_ids?: string[]
+    industrias?: string[]
     website: string
     descripcion: string
 }
@@ -35,6 +39,9 @@ export default function CompanyModal({
     mode = 'create',
     companies = []
 }: CompanyModalProps) {
+    useBodyScrollLock(isOpen)
+    const auth = useAuth()
+    const isAdmin = auth.profile?.role === 'admin'
     const [formData, setFormData] = useState<CompanyData>({
         nombre: '',
         tamano: 1,
@@ -42,6 +49,8 @@ export default function CompanyModal({
         logo_url: '',
         industria: '',
         industria_id: '',
+        industria_ids: [],
+        industrias: [],
         website: '',
         descripcion: ''
     })
@@ -70,6 +79,8 @@ export default function CompanyModal({
                 logo_url: '',
                 industria: '',
                 industria_id: '',
+                industria_ids: [],
+                industrias: [],
                 website: '',
                 descripcion: ''
             })
@@ -121,10 +132,35 @@ export default function CompanyModal({
     const selectCompany = (company: CompanyData) => {
         setFormData({
             ...company,
+            industria_ids: company.industria_ids || (company.industria_id ? [company.industria_id] : []),
+            industrias: company.industrias || (company.industria ? [company.industria] : []),
             // Ensure id is kept if we want to update the existing one, 
             // but the parent might handle that.
         })
         setShowSuggestions(false)
+    }
+
+    const toggleIndustrySelection = (industryId: string) => {
+        const ids = formData.industria_ids || []
+        const isSelected = ids.includes(industryId)
+        const nextIds = isSelected
+            ? ids.filter(id => id !== industryId)
+            : [...ids, industryId]
+
+        const selectedIds = nextIds.includes(formData.industria_id || '')
+            ? nextIds
+            : (formData.industria_id ? [formData.industria_id, ...nextIds] : nextIds)
+
+        const uniqueIds = Array.from(new Set(selectedIds))
+        const names = uniqueIds
+            .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
+            .filter((n): n is string => !!n)
+
+        setFormData(prev => ({
+            ...prev,
+            industria_ids: uniqueIds,
+            industrias: names
+        }))
     }
 
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +226,24 @@ export default function CompanyModal({
         e.preventDefault()
         setIsSubmitting(true)
         try {
-            await onSave(formData)
+            const fallbackPrimary = (formData.industria_ids || [])[0] || ''
+            const primaryIndustryId = formData.industria_id || fallbackPrimary
+            const mergedIndustryIds = Array.from(new Set([
+                ...(primaryIndustryId ? [primaryIndustryId] : []),
+                ...(formData.industria_ids || [])
+            ])).filter(Boolean)
+            const mergedIndustryNames = mergedIndustryIds
+                .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
+                .filter((n): n is string => !!n)
+            const primaryIndustryName = catalogs.industrias?.find(i => i.id === primaryIndustryId)?.name || formData.industria
+
+            await onSave({
+                ...formData,
+                industria_id: primaryIndustryId,
+                industria: primaryIndustryName,
+                industria_ids: mergedIndustryIds,
+                industrias: mergedIndustryNames
+            })
             onClose()
         } catch (error) {
             console.error('Error saving company:', error)
@@ -291,7 +344,19 @@ export default function CompanyModal({
                                 value={formData.industria_id || ''}
                                 onChange={(val) => {
                                     const name = catalogs.industrias?.find(i => i.id === val)?.name || ''
-                                    setFormData({ ...formData, industria_id: val, industria: name })
+                                    setFormData(prev => {
+                                        const nextIndustryIds = Array.from(new Set([val, ...(prev.industria_ids || [])])).filter(Boolean)
+                                        const nextNames = nextIndustryIds
+                                            .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
+                                            .filter((n): n is string => !!n)
+                                        return {
+                                            ...prev,
+                                            industria_id: val,
+                                            industria: name,
+                                            industria_ids: nextIndustryIds,
+                                            industrias: nextNames
+                                        }
+                                    })
                                 }}
                                 options={catalogs.industrias || []}
                                 tableName="industrias"
@@ -301,7 +366,62 @@ export default function CompanyModal({
                                         industrias: [...(prev.industrias || []), opt].sort((a, b) => a.name.localeCompare(b.name))
                                     }))
                                 }}
+                                canDeleteOptions={isAdmin}
+                                onDeleteOption={(deletedId) => {
+                                    setCatalogs(prev => ({
+                                        ...prev,
+                                        industrias: (prev.industrias || []).filter(i => i.id !== deletedId)
+                                    }))
+                                    setFormData(prev => {
+                                        const remainingIds = (prev.industria_ids || []).filter(id => id !== deletedId)
+                                        const nextPrimary = prev.industria_id === deletedId ? (remainingIds[0] || '') : (prev.industria_id || '')
+                                        const nextPrimaryName = catalogs.industrias?.find(i => i.id === nextPrimary)?.name || ''
+                                        const remainingNames = remainingIds
+                                            .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
+                                            .filter((n): n is string => !!n)
+                                        return {
+                                            ...prev,
+                                            industria_id: nextPrimary,
+                                            industria: nextPrimaryName,
+                                            industria_ids: remainingIds,
+                                            industrias: remainingNames
+                                        }
+                                    })
+                                }}
                             />
+
+                            <div className='col-span-1 md:col-span-2 space-y-2'>
+                                <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] opacity-60'>
+                                    Industrias Secundarias
+                                </label>
+                                <p className='text-xs text-[var(--text-secondary)]'>
+                                    Puedes asignar varias. La industria principal se conserva para reportes.
+                                </p>
+                                <div className='flex flex-wrap gap-2 p-3 border border-[var(--input-border)] rounded-xl bg-[var(--input-bg)] min-h-[52px]'>
+                                    {(catalogs.industrias || []).map((industry) => {
+                                        const selected = (formData.industria_ids || []).includes(industry.id) || formData.industria_id === industry.id
+                                        const isPrimary = formData.industria_id === industry.id
+                                        return (
+                                            <button
+                                                key={industry.id}
+                                                type='button'
+                                                onClick={() => toggleIndustrySelection(industry.id)}
+                                                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${selected
+                                                    ? 'bg-blue-500/15 text-blue-600 border-blue-500/30'
+                                                    : 'bg-[var(--card-bg)] text-[var(--text-secondary)] border-[var(--card-border)] hover:border-blue-300'
+                                                    }`}
+                                            >
+                                                {industry.name}{isPrimary ? ' (Principal)' : ''}
+                                            </button>
+                                        )
+                                    })}
+                                    {(catalogs.industrias || []).length === 0 && (
+                                        <span className='text-xs text-[var(--text-secondary)]'>
+                                            No hay industrias disponibles.
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
 
                             {/* Ubicación */}
                             <div className='space-y-4 col-span-1 md:col-span-2 p-6 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>

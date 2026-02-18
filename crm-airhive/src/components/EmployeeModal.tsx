@@ -6,6 +6,7 @@ import { X, Save, Eye, EyeOff, Briefcase, Activity, ChevronRight, User, Plus, Tr
 import CatalogSelect from './CatalogSelect'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { useAuth } from '@/lib/auth'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface EmployeeModalProps {
     isOpen: boolean
@@ -41,6 +42,7 @@ function normalizeAreaIds(rawDetails: any): string[] {
 }
 
 export default function EmployeeModal({ isOpen, onClose, onSave, employee }: EmployeeModalProps) {
+    useBodyScrollLock(isOpen)
     const { profile: currentUser } = useAuth()
 
     // --- State ---
