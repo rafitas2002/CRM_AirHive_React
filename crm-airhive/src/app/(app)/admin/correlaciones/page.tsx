@@ -675,16 +675,16 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                             >
                                 <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: `var(--${insight.color}-500, #2048FF)` }} />
                                 <div className='relative z-10 flex items-start gap-6'>
-                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <div className='ah-icon-card ah-icon-card-sm'>
                                         <insight.icon size={20} strokeWidth={2} />
                                     </div>
-                                    <div>
-                                        <p className='font-black text-sm uppercase tracking-widest'>Error de Carga</p>
-                                        <p className='font-bold text-xs opacity-80'>{error}</p>
+                                    <div className='space-y-2'>
+                                        <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
+                                        <p className='font-medium leading-relaxed text-sm opacity-80' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
                                     </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                </div>
+                            </motion.div>
+                        ))}
                     </div>
 
                     {/* Ventanas Analíticas: Correlaciones + Pronóstico */}
