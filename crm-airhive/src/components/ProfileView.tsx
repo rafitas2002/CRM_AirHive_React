@@ -59,7 +59,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 catsResponse
             ] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', userId).single(),
-                supabase.from('employee_profiles').select('*').eq('user_id', userId).single(),
+                (supabase.from('employee_profiles') as any).select('*').eq('user_id', userId).single(),
                 supabase
                     .from('seller_industry_badges')
                     .select('industria_id, closures_count, level, next_level_threshold, unlocked_at, updated_at, industrias(name)')

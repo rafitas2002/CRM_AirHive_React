@@ -110,7 +110,9 @@ function getAreaColorFromSeed(seed: string, theme: 'claro' | 'gris' | 'oscuro', 
         return {
             bg: `hsl(${hue} ${sat}% ${tone.bgL}%)`,
             border: `hsl(${hue} ${Math.max(56, sat - 14)}% ${tone.borderL}%)`,
-            text: `hsl(${hue} ${Math.max(62, sat - 10)}% ${tone.textL}%)`
+            text: `hsl(${hue} ${Math.max(62, sat - 10)}% ${tone.textL}%)`,
+            bgStrong: `hsl(${hue} ${Math.max(70, sat - 6)}% 46%)`,
+            borderStrong: `hsl(${hue} ${Math.max(66, sat - 10)}% 40%)`
         }
     }
 
@@ -126,7 +128,9 @@ function getAreaColorFromSeed(seed: string, theme: 'claro' | 'gris' | 'oscuro', 
         return {
             bg: `hsl(${hue} ${sat}% ${tone.bgL}% / ${tone.alpha})`,
             border: `hsl(${hue} ${Math.max(66, sat - 8)}% ${tone.borderL}% / 0.82)`,
-            text: `hsl(${hue} ${Math.max(82, sat - 2)}% ${tone.textL}%)`
+            text: `hsl(${hue} ${Math.max(82, sat - 2)}% ${tone.textL}%)`,
+            bgStrong: `hsl(${hue} ${Math.max(70, sat - 6)}% 44%)`,
+            borderStrong: `hsl(${hue} ${Math.max(66, sat - 10)}% 38%)`
         }
     }
 
@@ -144,6 +148,17 @@ function getAreaColorFromSeed(seed: string, theme: 'claro' | 'gris' | 'oscuro', 
         text: `hsl(${hue} 75% 32%)`,
         bgStrong: `hsl(${hue} 78% 42%)`,
         borderStrong: `hsl(${hue} 72% 38%)`
+    }
+}
+
+function getUniqueAreaColor(seedNumber: number): AreaColorMeta {
+    const hue = positiveMod(seedNumber * 37, 360)
+    return {
+        bg: `hsl(${hue} 84% 94%)`,
+        border: `hsl(${hue} 72% 62%)`,
+        text: `hsl(${hue} 72% 30%)`,
+        bgStrong: `hsl(${hue} 74% 46%)`,
+        borderStrong: `hsl(${hue} 70% 40%)`
     }
 }
 

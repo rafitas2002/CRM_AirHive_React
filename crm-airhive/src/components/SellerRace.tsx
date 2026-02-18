@@ -21,22 +21,23 @@ interface SellerRaceProps {
 export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
     const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
+    const orderedSellers = rankedSellers.map((entry) => entry.item)
 
     const sellerPositions = useMemo(() => {
         const positions = new Map<string, number>()
-        const positiveValues = sortedSellers
+        const positiveValues = orderedSellers
             .map((s) => s.value)
             .filter((value) => value > 0)
 
-        const uniquePositiveValues = Array.from(new Set(positiveValues)).sort((a, b) => b - a)
+        const uniquePositiveValues = Array.from(new Set(positiveValues)).sort((a: number, b: number) => b - a)
         const positiveRankByValue = new Map<number, number>()
         uniquePositiveValues.forEach((value, idx) => {
             // Competition ranking for positives (1,2,2,4...)
-            const rank = positiveValues.filter((v) => v > value).length + 1
+            const rank = positiveValues.filter((v: number) => v > value).length + 1
             positiveRankByValue.set(value, rank || idx + 1)
         })
 
-        sortedSellers.forEach((seller) => {
+        orderedSellers.forEach((seller) => {
             if (seller.value <= 0) {
                 // Business rule: users with $0 start at position 4.
                 positions.set(seller.name, 4)
@@ -46,7 +47,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
         })
 
         return positions
-    }, [sortedSellers])
+    }, [orderedSellers])
 
     return (
         <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>

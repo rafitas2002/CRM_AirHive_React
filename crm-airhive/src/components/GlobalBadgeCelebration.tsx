@@ -4,12 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { X, Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler } from 'lucide-react'
-import type { Database } from '@/lib/supabase'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
-type BadgeEventRow = Database['public']['Tables']['seller_badge_events']['Row']
-type SpecialBadgeEventRow = Database['public']['Tables']['seller_special_badge_events']['Row']
-type IndustryRow = Database['public']['Tables']['industrias']['Row']
+type SpecialBadgeEventRow = {
+    badge_type: string
+    badge_label: string | null
+    level: number
+    event_type: 'unlocked' | 'upgraded' | string
+    progress_count: number | null
+}
+
+type IndustryRow = {
+    id: string
+    name: string
+    is_active?: boolean
+}
 
 type CelebrationEvent = {
     id: string // prefixed to avoid collisions between tables
@@ -61,17 +70,17 @@ export default function GlobalBadgeCelebration() {
             const scopedId = `industry:${eventId}`
             if (!eventId || shownIds.current.has(scopedId)) return
 
-            const { data, error } = await supabase
+            const { data, error } = await (supabase
                 .from('seller_badge_events')
                 .select('id, industria_id, level, event_type, closures_count, industrias(name)')
                 .eq('id', eventId)
-                .maybeSingle()
+                .maybeSingle() as any)
 
             if (error || !data?.id || !data?.industria_id || !data?.level) return
 
             shownIds.current.add(scopedId)
 
-            const industryName = (data as BadgeEventRow & { industrias?: { name?: string } | null })?.industrias?.name || 'Industria'
+            const industryName = (data as { industrias?: { name?: string } | null })?.industrias?.name || 'Industria'
             const safeEventType = (data.event_type === 'upgraded' ? 'upgraded' : 'unlocked') as 'upgraded' | 'unlocked'
 
             setQueue((prev) => [
@@ -93,11 +102,11 @@ export default function GlobalBadgeCelebration() {
             const scopedId = `special:${eventId}`
             if (!eventId || shownIds.current.has(scopedId)) return
 
-            const { data, error } = await supabase
+            const { data, error } = await ((supabase as any)
                 .from('seller_special_badge_events')
                 .select('id, badge_type, badge_label, level, event_type, progress_count')
                 .eq('id', eventId)
-                .maybeSingle()
+                .maybeSingle())
 
             if (error || !data?.id || !data?.badge_type || !data?.level) return
 
