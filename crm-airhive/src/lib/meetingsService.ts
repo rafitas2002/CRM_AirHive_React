@@ -81,6 +81,12 @@ export async function createMeeting(meetingData: MeetingInsert) {
 }
 
 export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
+    const { data: previousMeeting } = await (supabase
+        .from('meetings') as any)
+        .select('*')
+        .eq('id', meetingId)
+        .single()
+
     const { data, error } = await (supabase
         .from('meetings') as any)
         .update(updates)
@@ -98,6 +104,41 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
     // If start_time changed, update lead's next_meeting_id
     if (updates.start_time && data) {
         await updateLeadNextMeeting(data.lead_id)
+
+        const prevStart = previousMeeting?.start_time ? new Date(previousMeeting.start_time).toISOString() : null
+        const newStart = new Date(updates.start_time).toISOString()
+        const wasRescheduled = !!prevStart && prevStart !== newStart
+
+        if (wasRescheduled) {
+            try {
+                await (supabase
+                    .from('meeting_reschedule_events') as any)
+                    .insert({
+                        meeting_id: meetingId,
+                        lead_id: data.lead_id,
+                        seller_id: data.seller_id,
+                        old_start_time: prevStart,
+                        new_start_time: newStart,
+                        changed_by: data.seller_id,
+                        reason: 'manual_update'
+                    })
+            } catch (auditError) {
+                // Non-blocking telemetry
+                console.warn('[MeetingRescheduleAudit] Could not persist audit event:', auditError)
+            }
+
+            trackEvent({
+                eventType: 'meeting_rescheduled',
+                entityType: 'meeting',
+                entityId: meetingId,
+                userId: data.seller_id,
+                metadata: {
+                    lead_id: data.lead_id,
+                    old_start_time: prevStart,
+                    new_start_time: newStart
+                }
+            })
+        }
     }
 
     return data

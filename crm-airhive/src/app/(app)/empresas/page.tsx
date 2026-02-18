@@ -22,6 +22,24 @@ export type CompanyWithProjects = CompanyData & {
     projectAntiquityDate: string | null
 }
 
+function parseSupabaseError(error: any, fallback: string) {
+    if (!error) return fallback
+    if (typeof error === 'string') return error
+    if (error?.message) return error.message as string
+
+    const fragments = [error?.code, error?.details, error?.hint].filter(Boolean)
+    if (fragments.length > 0) return fragments.join(' | ')
+
+    try {
+        const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error))
+        if (serialized && serialized !== '{}') return serialized
+    } catch {
+        // ignore serialization failures and use fallback
+    }
+
+    return fallback
+}
+
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
@@ -231,16 +249,36 @@ export default function EmpresasPage() {
 
     const confirmDelete = async () => {
         if (!companyToDelete) return
+        const companyId = companyToDelete
+        const companyToDeleteData = companies.find((company) => company.id === companyId)
 
         const { error } = await supabase
             .from('empresas')
             .delete()
-            .eq('id', companyToDelete)
+            .eq('id', companyId)
 
         if (error) {
-            console.error('Error deleting company:', error)
-            alert('Error al eliminar la empresa')
+            console.error('Error deleting company:', {
+                code: (error as any)?.code,
+                message: (error as any)?.message,
+                details: (error as any)?.details,
+                hint: (error as any)?.hint,
+                raw: error
+            })
+            alert(`Error al eliminar la empresa: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
         } else {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent({
+                eventType: 'company_deleted',
+                entityType: 'company',
+                entityId: companyId,
+                metadata: {
+                    nombre: companyToDeleteData?.nombre || null,
+                    industria: companyToDeleteData?.industria || null,
+                    ubicacion: companyToDeleteData?.ubicacion || null
+                }
+            })
+
             await fetchCompanies()
         }
 

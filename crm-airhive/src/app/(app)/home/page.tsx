@@ -20,6 +20,7 @@ import SellerRace from '@/components/SellerRace'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
 import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 import MyTasksWidget from '@/components/MyTasksWidget'
+import { rankRaceItems } from '@/lib/raceRanking'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -120,6 +121,7 @@ function AdminDashboardView({ username }: { username: string }) {
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
+    const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.negotiationPipeline)
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
@@ -259,15 +261,17 @@ function AdminDashboardView({ username }: { username: string }) {
                                 <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
                             </div>
                             <div className='p-4 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4'>
-                                {stats.sellers.slice(0, 6).map((s, i) => (
+                                {rankedSellers.slice(0, 6).map((entry) => {
+                                    const s = entry.item
+                                    return (
                                     <div key={s.name} className='flex items-center justify-between p-4 rounded-2xl transition-all group' style={{ background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                                         <div className='flex items-center gap-4'>
-                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${i === 0 ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' :
-                                                i === 1 ? 'bg-slate-500/20 text-slate-500 border border-slate-500/30' :
-                                                    i === 2 ? 'bg-orange-500/20 text-orange-600 border border-orange-500/30' :
+                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${entry.medal === 'gold' ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' :
+                                                entry.medal === 'silver' ? 'bg-slate-500/20 text-slate-500 border border-slate-500/30' :
+                                                    entry.medal === 'bronze' ? 'bg-orange-500/20 text-orange-600 border border-orange-500/30' :
                                                         'bg-gray-500/10 text-gray-500 border border-gray-500/20'
                                                 }`}>
-                                                {i + 1}
+                                                {entry.rank}
                                             </div>
                                             <div>
                                                 <p className='font-black text-sm group-hover:text-[#1700AC] transition-colors' style={{ color: 'var(--text-primary)' }}>{s.name}</p>
@@ -284,7 +288,8 @@ function AdminDashboardView({ username }: { username: string }) {
                                             <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Forecast Adj</p>
                                         </div>
                                     </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     </div>

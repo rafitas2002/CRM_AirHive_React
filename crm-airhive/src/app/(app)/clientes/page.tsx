@@ -34,6 +34,26 @@ const normalizeLead = (lead: Lead) => ({
 
 import { useAuth } from '@/lib/auth'
 
+function parseSupabaseError(error: any, fallback: string) {
+    if (!error) return fallback
+    if (typeof error === 'string') return error
+    if (error?.message) return error.message as string
+
+    const fragments = [error?.code, error?.details, error?.hint].filter(Boolean)
+    if (fragments.length > 0) {
+        return fragments.join(' | ')
+    }
+
+    try {
+        const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error))
+        if (serialized && serialized !== '{}') return serialized
+    } catch {
+        // ignore serialization failures and use fallback
+    }
+
+    return fallback
+}
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
@@ -409,18 +429,38 @@ export default function LeadsPage() {
 
     const confirmDelete = async () => {
         if (!clientToDelete) return
+        const leadId = clientToDelete
+        const leadToDelete = leads.find((lead) => lead.id === leadId)
 
         const { error } = await (supabase
             .from('clientes') as any)
             .delete()
-            .eq('id', clientToDelete)
+            .eq('id', leadId)
 
         if (error) {
-            console.error('Error deleting lead:', error)
-            alert('Error al eliminar el lead')
+            console.error('Error deleting lead:', {
+                code: (error as any)?.code,
+                message: (error as any)?.message,
+                details: (error as any)?.details,
+                hint: (error as any)?.hint,
+                raw: error
+            })
+            alert(`Error al eliminar el lead: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
         } else {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent({
+                eventType: 'lead_deleted',
+                entityType: 'lead',
+                entityId: leadId,
+                metadata: {
+                    empresa: leadToDelete?.empresa || null,
+                    etapa: leadToDelete?.etapa || null,
+                    owner_id: leadToDelete?.owner_id || null
+                }
+            })
+
             // Clear selected lead if it's the one being deleted
-            if (selectedLead?.id === clientToDelete) {
+            if (selectedLead?.id === leadId) {
                 setSelectedLead(null)
                 setIsDetailViewOpen(false)
             }

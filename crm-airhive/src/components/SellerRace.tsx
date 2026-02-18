@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Trophy, TrendingUp, Info } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
+import { rankRaceItems } from '@/lib/raceRanking'
 
 interface SellerRaceData {
     name: string
@@ -19,8 +20,7 @@ interface SellerRaceProps {
 
 export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
-    // Sort by value for the "race" look
-    const sortedSellers = [...sellers].sort((a, b) => b.value - a.value)
+    const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
 
     const sellerPositions = useMemo(() => {
         const positions = new Map<string, number>()
@@ -80,7 +80,8 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                     ))}
                 </div>
 
-                {sortedSellers.map((seller, index) => {
+                {rankedSellers.map((runner, index) => {
+                    const seller = runner.item
                     const progress = (seller.value / maxGoal) * 100
                     const position = sellerPositions.get(seller.name) ?? 4
 

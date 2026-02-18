@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { getAdminCorrelationData } from '@/app/actions/admin'
+import { getAdminCorrelationData, getAdminCommercialForecast } from '@/app/actions/admin'
 import { getPastRaces, syncRaceResults } from '@/app/actions/race'
 import { RaceHistoryTable } from '@/components/RaceHistoryTable'
 import {
@@ -18,7 +18,6 @@ import {
     Search,
     Filter,
     Table as TableIcon,
-    RefreshCcw,
     Zap,
     BarChart3,
     Building2,
@@ -32,10 +31,171 @@ import CorrelationScatterWindow from '@/components/insights/CorrelationScatterWi
 import PostponeForecastWindow from '@/components/insights/PostponeForecastWindow'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function CorrelacionesPage() {
+type CorrelationScope = 'team' | 'individual'
+
+type MetricKey =
+    | 'totalSales' | 'totalMedals' | 'goldMedals' | 'medalRatio' | 'tenureMonths' | 'age' | 'growth'
+    | 'meetingsPerClose' | 'forecastAccuracy' | 'avgResponseTimeHours'
+    | 'preLeadsCount' | 'preLeadConversionRate' | 'avgPreLeadsPerDay' | 'avgConvertedPreLeadsPerMonth' | 'avgConversionLagDays'
+    | 'companiesCreated' | 'avgCompaniesPerMonth'
+    | 'activityEvents90d' | 'activityDays90d' | 'leadCreatedEvents90d' | 'leadClosedEvents90d'
+    | 'forecastUpdatedEvents90d' | 'meetingsScheduledEvents90d' | 'meetingsFinishedEvents90d' | 'taskStatusChangedEvents90d'
+    | 'preLeadCreatedEvents90d' | 'preLeadConvertedEvents90d'
+    | 'probabilidad' | 'valorEstimado' | 'calificacion' | 'meetingsCount' | 'responseHours' | 'hasPhysicalMeeting'
+    | 'fromPreLead' | 'conversionLagDays' | 'closedOutcome'
+
+interface MetricDefinition {
+    key: MetricKey
+    label: string
+    group: string
+    scopes: CorrelationScope[]
+}
+
+const METRIC_CATALOG: MetricDefinition[] = [
+    { key: 'totalSales', label: 'Ventas Totales', group: 'Resultado Comercial', scopes: ['team'] },
+    { key: 'totalMedals', label: 'Total Medallas', group: 'Resultado Comercial', scopes: ['team'] },
+    { key: 'goldMedals', label: 'Medallas Oro', group: 'Resultado Comercial', scopes: ['team'] },
+    { key: 'medalRatio', label: 'Eficiencia de Medallas', group: 'Resultado Comercial', scopes: ['team'] },
+    { key: 'growth', label: 'Crecimiento %', group: 'Resultado Comercial', scopes: ['team'] },
+    { key: 'forecastAccuracy', label: 'Forecast Accuracy %', group: 'Resultado Comercial', scopes: ['team'] },
+
+    { key: 'preLeadsCount', label: 'Pre-Leads Totales', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'preLeadConversionRate', label: 'Conversión Pre-Lead %', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'avgPreLeadsPerDay', label: 'Pre-Leads / Día', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'avgConvertedPreLeadsPerMonth', label: 'Conv. Pre-Lead / Mes', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'avgConversionLagDays', label: 'Lag Conversión (días)', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'companiesCreated', label: 'Empresas Creadas', group: 'Prospección y Conversión', scopes: ['team'] },
+    { key: 'avgCompaniesPerMonth', label: 'Empresas / Mes', group: 'Prospección y Conversión', scopes: ['team'] },
+
+    { key: 'meetingsPerClose', label: 'Reuniones por Cierre', group: 'Cadencia Operativa', scopes: ['team'] },
+    { key: 'avgResponseTimeHours', label: 'Respuesta Promedio (hrs)', group: 'Cadencia Operativa', scopes: ['team'] },
+    { key: 'tenureMonths', label: 'Antigüedad (meses)', group: 'Cadencia Operativa', scopes: ['team'] },
+    { key: 'age', label: 'Edad', group: 'Cadencia Operativa', scopes: ['team'] },
+
+    { key: 'activityEvents90d', label: 'Actividad Total 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'activityDays90d', label: 'Días Activos 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'leadCreatedEvents90d', label: 'Eventos Lead Creado 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'leadClosedEvents90d', label: 'Eventos Lead Cerrado 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'forecastUpdatedEvents90d', label: 'Eventos Forecast 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'meetingsScheduledEvents90d', label: 'Juntas Agendadas 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'meetingsFinishedEvents90d', label: 'Juntas Finalizadas 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'taskStatusChangedEvents90d', label: 'Cambios Estado Tarea 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'preLeadCreatedEvents90d', label: 'Pre-Leads Creados 90d', group: 'Telemetría 90d', scopes: ['team'] },
+    { key: 'preLeadConvertedEvents90d', label: 'Pre-Leads Convertidos 90d', group: 'Telemetría 90d', scopes: ['team'] },
+
+    { key: 'probabilidad', label: 'Probabilidad Forecast', group: 'Calidad de Lead (Usuario)', scopes: ['individual'] },
+    { key: 'valorEstimado', label: 'Valor Estimado', group: 'Calidad de Lead (Usuario)', scopes: ['individual'] },
+    { key: 'calificacion', label: 'Calificación', group: 'Calidad de Lead (Usuario)', scopes: ['individual'] },
+    { key: 'meetingsCount', label: 'Reuniones del Lead', group: 'Proceso Comercial (Usuario)', scopes: ['individual'] },
+    { key: 'responseHours', label: 'Horas a Primera Reunión', group: 'Proceso Comercial (Usuario)', scopes: ['individual'] },
+    { key: 'hasPhysicalMeeting', label: 'Incluye Reunión Presencial', group: 'Proceso Comercial (Usuario)', scopes: ['individual'] },
+    { key: 'fromPreLead', label: 'Origen Pre-Lead', group: 'Proceso Comercial (Usuario)', scopes: ['individual'] },
+    { key: 'conversionLagDays', label: 'Lag Conversión PreLead->Lead', group: 'Proceso Comercial (Usuario)', scopes: ['individual'] },
+    { key: 'closedOutcome', label: 'Resultado Cierre (1/0)', group: 'Resultado Lead (Usuario)', scopes: ['individual'] }
+]
+
+const QUICK_PRESETS: Array<{ id: string, label: string, scope: CorrelationScope, x: MetricKey, y: MetricKey }> = [
+    { id: 'team_prelead_sales', label: 'Equipo: Pre-Leads / Día vs Ventas', scope: 'team', x: 'avgPreLeadsPerDay', y: 'totalSales' },
+    { id: 'team_speed_accuracy', label: 'Equipo: Respuesta vs Forecast Accuracy', scope: 'team', x: 'avgResponseTimeHours', y: 'forecastAccuracy' },
+    { id: 'team_effort_close', label: 'Equipo: Reuniones por Cierre vs Ventas', scope: 'team', x: 'meetingsPerClose', y: 'totalSales' },
+    { id: 'user_prob_outcome', label: 'Usuario: Probabilidad vs Resultado', scope: 'individual', x: 'probabilidad', y: 'closedOutcome' },
+    { id: 'user_speed_outcome', label: 'Usuario: Tiempo Respuesta vs Resultado', scope: 'individual', x: 'responseHours', y: 'closedOutcome' },
+    { id: 'user_meetings_value', label: 'Usuario: Reuniones vs Valor Estimado', scope: 'individual', x: 'meetingsCount', y: 'valorEstimado' }
+]
+
+const metricLabelByKey: Record<MetricKey, string> = METRIC_CATALOG.reduce((acc, metric) => {
+    acc[metric.key] = metric.label
+    return acc
+}, {} as Record<MetricKey, string>)
+
+const metricHigherIsBetter: Partial<Record<MetricKey, boolean>> = {
+    totalSales: true,
+    totalMedals: true,
+    goldMedals: true,
+    medalRatio: true,
+    forecastAccuracy: true,
+    preLeadConversionRate: true,
+    avgConvertedPreLeadsPerMonth: true,
+    activityEvents90d: true,
+    meetingsPerClose: false,
+    avgResponseTimeHours: false,
+    avgConversionLagDays: false,
+    responseHours: false,
+    conversionLagDays: false,
+    closedOutcome: true
+}
+
+const getMetricValue = (row: any, metric: MetricKey): number | null => {
+    if (metric === 'goldMedals') return Number(row?.medals?.gold || 0)
+    const raw = row?.[metric]
+    if (raw === null || raw === undefined) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+const pearsonCorrelation = (rows: any[], xMetric: MetricKey, yMetric: MetricKey) => {
+    const pairs = rows
+        .map((row) => ({ x: getMetricValue(row, xMetric), y: getMetricValue(row, yMetric) }))
+        .filter((pair) => pair.x !== null && pair.y !== null) as Array<{ x: number, y: number }>
+
+    if (pairs.length < 3) return { r: null, n: pairs.length }
+
+    const n = pairs.length
+    const sumX = pairs.reduce((acc, p) => acc + p.x, 0)
+    const sumY = pairs.reduce((acc, p) => acc + p.y, 0)
+    const meanX = sumX / n
+    const meanY = sumY / n
+
+    let numerator = 0
+    let denominatorX = 0
+    let denominatorY = 0
+
+    pairs.forEach((p) => {
+        const dx = p.x - meanX
+        const dy = p.y - meanY
+        numerator += dx * dy
+        denominatorX += dx * dx
+        denominatorY += dy * dy
+    })
+
+    const denominator = Math.sqrt(denominatorX * denominatorY)
+    if (denominator === 0) return { r: null, n }
+
+    return { r: numerator / denominator, n }
+}
+
+const getStrengthLabel = (r: number) => {
+    const abs = Math.abs(r)
+    if (abs >= 0.7) return 'Muy fuerte'
+    if (abs >= 0.5) return 'Fuerte'
+    if (abs >= 0.3) return 'Moderada'
+    return 'Débil'
+}
+
+const buildRecommendation = (xMetric: MetricKey, yMetric: MetricKey, r: number) => {
+    const xBetter = metricHigherIsBetter[xMetric]
+    const yBetter = metricHigherIsBetter[yMetric]
+    const direction = r >= 0 ? 'positiva' : 'negativa'
+
+    if (xBetter !== undefined && yBetter !== undefined) {
+        const favorable = (xBetter === yBetter && r > 0) || (xBetter !== yBetter && r < 0)
+        if (favorable) {
+            return `La relación es ${direction} y favorece resultado: estandariza esta práctica como playbook operativo.`
+        }
+        return `La relación es ${direction} y parece fricción: revisa proceso/segmentación para evitar efecto adverso.`
+    }
+
+    return r >= 0
+        ? 'A mayor valor en X, también sube Y. Conviene reforzar el proceso que impulsa X y monitorear causalidad.'
+        : 'A mayor valor en X, Y cae. Conviene identificar cuellos de botella y diseñar un experimento A/B para corregir.'
+}
+
+export default function CorrelacionesPage({ forcedView }: { forcedView?: 'general' | 'grafica' | 'pronostico' } = {}) {
     const auth = useAuth()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [data, setData] = useState<any[]>([])
+    const [leadRows, setLeadRows] = useState<any[]>([])
     const [companyRegistry, setCompanyRegistry] = useState<any[]>([])
     const [analytics, setAnalytics] = useState<{
         correlationData: any[],
@@ -47,13 +207,43 @@ export default function CorrelacionesPage() {
         postponeByCompanySize: []
     })
     const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})
+    const [forecastData, setForecastData] = useState<any>(null)
+    const [forecastOptions, setForecastOptions] = useState<{ sizes: any[], industries: any[], locations: any[] }>({ sizes: [], industries: [], locations: [] })
+    const [forecastFilters, setForecastFilters] = useState<{
+        dateFrom: string
+        dateTo: string
+        size: string
+        industry: string
+        location: string
+        sourceChannel: 'all' | 'pre_lead' | 'direct'
+    }>({
+        dateFrom: '',
+        dateTo: '',
+        size: 'all',
+        industry: 'all',
+        location: 'all',
+        sourceChannel: 'all'
+    })
     const [loading, setLoading] = useState(true)
-    const [syncing, setSyncing] = useState(false)
+    const [forecastLoading, setForecastLoading] = useState(false)
+    const [autoClosingMonth, setAutoClosingMonth] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [sortBy, setSortBy] = useState('totalSales')
     const [genderFilter, setGenderFilter] = useState('all')
     const [ageRange, setAgeRange] = useState('all')
+    const [analysisScope, setAnalysisScope] = useState<CorrelationScope>('team')
+    const [correlationView, setCorrelationView] = useState<'important' | 'explorer'>('important')
+    const [selectedPresetId, setSelectedPresetId] = useState<string>('team_prelead_sales')
+    const [selectedUserId, setSelectedUserId] = useState<string>('all')
+    const [xMetric, setXMetric] = useState<MetricKey>('avgPreLeadsPerDay')
+    const [yMetric, setYMetric] = useState<MetricKey>('totalSales')
+    const [strengthFilter, setStrengthFilter] = useState<'all' | 'strong' | 'moderate' | 'weak'>('all')
+    const [directionFilter, setDirectionFilter] = useState<'all' | 'positive' | 'negative'>('all')
     const [error, setError] = useState<string | null>(null)
+    const currentView = (forcedView || searchParams.get('view') || 'general').toLowerCase()
+    const showGraphView = currentView === 'grafica'
+    const showForecastView = currentView === 'pronostico'
+    const showGeneralView = !showGraphView && !showForecastView
 
     useEffect(() => {
         if (!auth.loading && !auth.loggedIn) {
@@ -68,13 +258,41 @@ export default function CorrelacionesPage() {
         fetchData()
     }, [auth.loading, auth.loggedIn, auth.profile, router])
 
-    const fetchData = async () => {
+    useEffect(() => {
+        const runAutomaticMonthlyClose = async () => {
+            if (!auth.profile || auth.profile.role !== 'admin') return
+
+            const now = new Date()
+            const currentDay = now.getDate()
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+            if (currentDay !== lastDayOfMonth) return
+
+            const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+            const storageKey = `ah:auto-close-month:${monthKey}`
+            if (typeof window !== 'undefined' && window.localStorage.getItem(storageKey) === 'done') return
+
+            setAutoClosingMonth(true)
+            const res = await syncRaceResults()
+            if (res.success) {
+                await fetchData()
+                if (typeof window !== 'undefined') window.localStorage.setItem(storageKey, 'done')
+            } else {
+                console.error('Automatic monthly close failed:', res.error)
+            }
+            setAutoClosingMonth(false)
+        }
+
+        runAutomaticMonthlyClose()
+    }, [auth.profile])
+
+    async function fetchData() {
         setLoading(true)
         setError(null)
         try {
-            const [corrRes, raceRes] = await Promise.all([
+            const [corrRes, raceRes, forecastRes] = await Promise.all([
                 getAdminCorrelationData(),
-                getPastRaces()
+                getPastRaces(),
+                getAdminCommercialForecast()
             ])
 
             if (corrRes.success && corrRes.data) {
@@ -103,23 +321,48 @@ export default function CorrelacionesPage() {
             if (raceRes.success && raceRes.data) {
                 setPastRaces(raceRes.data)
             }
+
+            if (forecastRes.success && forecastRes.data) {
+                setForecastData(forecastRes.data)
+                setForecastOptions(forecastRes.data.options || { sizes: [], industries: [], locations: [] })
+            }
         } catch (err: any) {
             setError(err.message || 'Error inesperado')
         }
         setLoading(false)
     }
 
-    const handleSync = async () => {
-        setSyncing(true)
-        const res = await syncRaceResults()
-        if (res.success) {
-            await fetchData()
-            alert('¡Sincronización mensual completada!')
-        } else {
-            alert('Error al sincronizar: ' + res.error)
+    const fetchForecast = async () => {
+        setForecastLoading(true)
+        try {
+            const res = await getAdminCommercialForecast(forecastFilters)
+            if (res.success && res.data) {
+                setForecastData(res.data)
+                setForecastOptions(res.data.options || { sizes: [], industries: [], locations: [] })
+            } else {
+                setError(res.error || 'No se pudo calcular el pronóstico')
+            }
+        } catch (err: any) {
+            setError(err.message || 'Error recalculando pronósticos')
         }
-        setSyncing(false)
+        setForecastLoading(false)
     }
+
+    useEffect(() => {
+        const preset = QUICK_PRESETS.find((item) => item.id === selectedPresetId)
+        if (!preset) return
+        setAnalysisScope(preset.scope)
+        setXMetric(preset.x)
+        setYMetric(preset.y)
+    }, [selectedPresetId])
+
+    const scopeMetrics = useMemo(() => METRIC_CATALOG.filter((metric) => metric.scopes.includes(analysisScope)), [analysisScope])
+
+    useEffect(() => {
+        const keys = new Set(scopeMetrics.map((metric) => metric.key))
+        if (!keys.has(xMetric)) setXMetric(scopeMetrics[0]?.key || 'totalSales')
+        if (!keys.has(yMetric)) setYMetric(scopeMetrics[1]?.key || scopeMetrics[0]?.key || 'totalSales')
+    }, [scopeMetrics, xMetric, yMetric])
 
     const filteredData = useMemo(() => {
         let result = data.filter(item =>
@@ -165,6 +408,86 @@ export default function CorrelacionesPage() {
             .sort((a, b) => b.medalRatio - a.medalRatio)
             .slice(0, 3)
     }, [data])
+
+    const userOptions = useMemo(() => {
+        return data
+            .map((row) => ({ id: row.userId, name: row.name }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+    }, [data])
+
+    const correlationRows = useMemo(() => {
+        if (analysisScope === 'team') return filteredData
+        if (selectedUserId === 'all') return leadRows
+        return leadRows.filter((row) => row.ownerId === selectedUserId)
+    }, [analysisScope, filteredData, leadRows, selectedUserId])
+
+    const correlationCombinations = useMemo(() => {
+        const metrics = scopeMetrics
+        const combos: Array<{ x: MetricKey, y: MetricKey, r: number, n: number }> = []
+        for (let i = 0; i < metrics.length; i++) {
+            for (let j = i + 1; j < metrics.length; j++) {
+                const x = metrics[i].key
+                const y = metrics[j].key
+                const { r, n } = pearsonCorrelation(correlationRows, x, y)
+                if (r !== null) combos.push({ x, y, r, n })
+            }
+        }
+        return combos
+            .filter((combo) => combo.n >= (analysisScope === 'team' ? 4 : 8))
+            .sort((a, b) => Math.abs(b.r) - Math.abs(a.r))
+    }, [scopeMetrics, correlationRows, analysisScope])
+
+    const filteredCorrelationCombinations = useMemo(() => {
+        return correlationCombinations.filter((combo) => {
+            const abs = Math.abs(combo.r)
+            if (strengthFilter === 'strong' && abs < 0.6) return false
+            if (strengthFilter === 'moderate' && (abs < 0.3 || abs >= 0.6)) return false
+            if (strengthFilter === 'weak' && abs >= 0.3) return false
+            if (directionFilter === 'positive' && combo.r <= 0) return false
+            if (directionFilter === 'negative' && combo.r >= 0) return false
+            return true
+        })
+    }, [correlationCombinations, strengthFilter, directionFilter])
+
+    const importantCorrelations = useMemo(() => {
+        return correlationCombinations
+            .filter((combo) => Math.abs(combo.r) >= 0.5)
+            .slice(0, 8)
+            .map((combo) => ({
+                ...combo,
+                strengthLabel: getStrengthLabel(combo.r),
+                recommendation: buildRecommendation(combo.x, combo.y, combo.r)
+            }))
+    }, [correlationCombinations])
+
+    const activeCorrelation = useMemo(() => {
+        const selected = pearsonCorrelation(correlationRows, xMetric, yMetric)
+        return {
+            r: selected.r,
+            n: selected.n,
+            xLabel: metricLabelByKey[xMetric],
+            yLabel: metricLabelByKey[yMetric],
+            strengthLabel: selected.r !== null ? getStrengthLabel(selected.r) : 'N/A',
+            recommendation: selected.r !== null ? buildRecommendation(xMetric, yMetric, selected.r) : 'No hay suficientes datos para recomendar.'
+        }
+    }, [correlationRows, xMetric, yMetric])
+
+    const scatterPoints = useMemo(() => {
+        return correlationRows
+            .map((row, idx) => {
+                const x = getMetricValue(row, xMetric)
+                const y = getMetricValue(row, yMetric)
+                if (x === null || y === null) return null
+                return {
+                    pointId: String(row.userId || row.leadId || idx),
+                    name: row.name || row.ownerName || `Lead ${row.leadId}`,
+                    gender: row.gender || 'N/A',
+                    x,
+                    y
+                }
+            })
+            .filter((item): item is { pointId: string, name: string, gender: string, x: number, y: number } => !!item)
+    }, [correlationRows, xMetric, yMetric])
 
     // Analysis Logic
     const insights = useMemo(() => {
@@ -261,6 +584,21 @@ export default function CorrelacionesPage() {
         ]
     }, [data])
 
+    const forecastSegmentRows = useMemo(() => {
+        if (!forecastData) return []
+        const byIndustry = (forecastData.projectsForecast?.byIndustry || []).slice(0, 4).map((row: any) => ({
+            segment: `Industria: ${row.label}`,
+            avgProjects: row.avgProjects || 0,
+            postponeProb: (forecastData.postponementForecast?.byIndustry || []).find((item: any) => item.label === row.label)?.probability || 0
+        }))
+        const bySize = (forecastData.projectsForecast?.bySize || []).slice(0, 4).map((row: any) => ({
+            segment: `Tamaño: ${row.label}`,
+            avgProjects: row.avgProjects || 0,
+            postponeProb: (forecastData.postponementForecast?.bySize || []).find((item: any) => item.label === row.label)?.probability || 0
+        }))
+        return [...byIndustry, ...bySize].slice(0, 8)
+    }, [forecastData])
+
     if (loading || auth.loading) {
         return (
             <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}>
@@ -275,10 +613,10 @@ export default function CorrelacionesPage() {
     return (
         <div className='h-full flex flex-col overflow-hidden' style={{ background: 'transparent' }}>
             <div className='flex-1 overflow-y-auto p-8 custom-scrollbar'>
-                <div className='max-w-7xl mx-auto space-y-10'>
+                <div className='max-w-7xl mx-auto flex flex-col gap-10'>
 
                     {/* Header */}
-                    <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='order-1 flex flex-col md:flex-row md:items-center justify-between gap-6'>
                         <div className='flex items-center gap-6'>
                             <div className='ah-icon-card'>
                                 <BarChart3 size={34} strokeWidth={1.9} />
@@ -292,22 +630,15 @@ export default function CorrelacionesPage() {
                             <div className='px-4 py-2 bg-blue-50/10 text-[#2048FF] rounded-xl font-black text-xs uppercase tracking-widest border border-blue-100/20'>
                                 Modo Admin
                             </div>
-                            <button
-                                onClick={handleSync}
-                                disabled={syncing}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-bold text-xs uppercase tracking-wider ${syncing ? 'opacity-50 cursor-not-allowed bg-slate-800' : 'bg-[#2048FF] text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20'}`}
+                            <div className='px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider border'
+                                style={{
+                                    color: 'var(--text-secondary)',
+                                    borderColor: 'var(--card-border)',
+                                    background: 'var(--background)'
+                                }}
                             >
-                                <RefreshCcw size={14} className={syncing ? 'animate-spin' : ''} />
-                                {syncing ? 'Sincronizando...' : 'Cerrar Mes / Sincronizar'}
-                            </button>
-                            <button
-                                onClick={fetchData}
-                                className='p-2 rounded-xl transition-colors hover:bg-slate-800'
-                                style={{ color: 'var(--text-secondary)' }}
-                                title='Actualizar Todo'
-                            >
-                                🔄
-                            </button>
+                                {autoClosingMonth ? 'Cierre mensual automático en proceso...' : 'Cierre mensual automático activo'}
+                            </div>
                         </div>
                     </div>
 
@@ -347,13 +678,13 @@ export default function CorrelacionesPage() {
                                 <div className='ah-icon-card ah-icon-card-sm'>
                                         <insight.icon size={20} strokeWidth={2} />
                                     </div>
-                                    <div className='space-y-2'>
-                                        <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
-                                        <p className='font-medium leading-relaxed text-sm opacity-80' style={{ color: 'var(--text-secondary)' }}>{insight.desc}</p>
+                                    <div>
+                                        <p className='font-black text-sm uppercase tracking-widest'>Error de Carga</p>
+                                        <p className='font-bold text-xs opacity-80'>{error}</p>
                                     </div>
-                                </div>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     {/* Ventanas Analíticas: Correlaciones + Pronóstico */}
@@ -371,8 +702,8 @@ export default function CorrelacionesPage() {
                     </div>
 
                     {/* Rising Stars Section */}
-                    {risingStars.length > 0 && (
-                        <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-[32px] p-8 border border-blue-500/20">
+                    {showGeneralView && risingStars.length > 0 && (
+                        <div className="order-7 bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-[32px] p-8 border border-blue-500/20">
                             <div className="flex items-center gap-4 mb-6">
                                 <div className="p-3 bg-blue-500 rounded-2xl text-white shadow-lg shadow-blue-500/30">
                                     <ArrowUpRight size={24} />
@@ -412,7 +743,8 @@ export default function CorrelacionesPage() {
                     )}
 
                     {/* Master Table Section */}
-                    <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    {showGeneralView && (
+                    <div className='order-4 rounded-[40px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='p-8 border-b flex flex-col md:flex-row md:items-center justify-between gap-6' style={{ borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center gap-4'>
                                 <div className='ah-icon-card ah-icon-card-sm'>
@@ -606,8 +938,10 @@ export default function CorrelacionesPage() {
                             </div>
                         )}
                     </div>
+                    )}
                     {/* Past Races History */}
-                    <div className='space-y-6'>
+                    {showGeneralView && (
+                    <div className='order-8 space-y-6'>
                         <div className='flex items-center gap-4'>
                             <div className='ah-icon-card ah-icon-card-sm'>
                                 <Building2 size={22} strokeWidth={2} />
@@ -654,9 +988,11 @@ export default function CorrelacionesPage() {
                             )}
                         </div>
                     </div>
+                    )}
 
                     {/* Past Races History */}
-                    <div className='space-y-6'>
+                    {showGeneralView && (
+                    <div className='order-9 space-y-6'>
                         <div className='flex items-center gap-4'>
                             <div className='ah-icon-card ah-icon-card-sm'>
                                 <Trophy size={22} strokeWidth={2} />
@@ -668,6 +1004,7 @@ export default function CorrelacionesPage() {
                         </div>
                         <RaceHistoryTable races={pastRaces} />
                     </div>
+                    )}
                 </div>
                 <RichardDawkinsFooter />
             </div>

@@ -16,6 +16,11 @@
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
   --input-focus: #2048FF;
+  --input-focus-rgb: 32 72 255;
+  --window-title-icon-bg: linear-gradient(145deg, #102347 0%, #1e3a6b 55%, #264a86 100%);
+  --window-title-icon-border: rgba(37, 99, 235, 0.35);
+  --window-title-icon-color: #ffffff;
+  --window-title-icon-shadow: 0 10px 24px rgb(37 99 235 / 0.16);
   --text-primary: #0A1635;
   --text-secondary: #475569;
   /* Darker secondary text */
@@ -75,6 +80,11 @@
   --input-bg: #6b7280;
   --input-border: #9ca3af;
   --input-focus: #1e3a8a;
+  --input-focus-rgb: 30 58 138;
+  --window-title-icon-bg: linear-gradient(145deg, #233246 0%, #30455f 55%, #3c5677 100%);
+  --window-title-icon-border: rgba(148, 163, 184, 0.4);
+  --window-title-icon-color: #ffffff;
+  --window-title-icon-shadow: 0 10px 24px rgb(15 23 42 / 0.2);
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
   --hover-bg: #6b7280;
@@ -130,6 +140,11 @@
   --input-bg: #1a1a1a;
   --input-border: #404040;
   --input-focus: #2048FF;
+  --input-focus-rgb: 32 72 255;
+  --window-title-icon-bg: linear-gradient(145deg, #0b1220 0%, #161e2f 100%);
+  --window-title-icon-border: rgba(96, 165, 250, 0.24);
+  --window-title-icon-color: #ffffff;
+  --window-title-icon-shadow: 0 10px 30px rgb(2 6 23 / 0.22);
   --text-primary: #ededed;
   --text-secondary: #a3a3a3;
   --hover-bg: #2a2a2a;
@@ -352,6 +367,11 @@ body {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.ah-search-input:hover {
+  border-color: color-mix(in srgb, var(--input-focus) 55%, var(--card-border));
+  box-shadow: 0 0 0 3px rgb(var(--input-focus-rgb) / 0.10);
+}
+
 .ah-search-input::placeholder {
   color: var(--text-secondary);
   opacity: 0.55;
@@ -359,7 +379,7 @@ body {
 
 .ah-search-input:focus {
   border-color: var(--input-focus);
-  box-shadow: 0 0 0 4px rgb(32 72 255 / 0.12);
+  box-shadow: 0 0 0 4px rgb(var(--input-focus-rgb) / 0.16);
 }
 
 .ah-select-control {
@@ -385,9 +405,100 @@ body {
 }
 
 .ah-select-control-order {
-  background: rgb(32 72 255 / 0.07);
-  border-color: rgb(32 72 255 / 0.28);
+  background: var(--hover-bg);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+
+.ah-table-controls--maestra {
+  gap: 14px;
+}
+
+.ah-search-control--maestra {
+  flex: 1 1 560px;
+  min-width: 320px;
+}
+
+.ah-search-input--maestra {
+  border-radius: 22px;
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(2 6 23 / 0.72);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 10px 20px rgb(2 6 23 / 0.22);
+}
+
+.ah-search-input--maestra:focus {
+  border-color: color-mix(in srgb, var(--input-focus) 68%, white 32%);
+  box-shadow: 0 0 0 4px rgb(var(--input-focus-rgb) / 0.18), 0 10px 20px rgb(2 6 23 / 0.22);
+}
+
+.ah-search-input--maestra:hover {
+  border-color: color-mix(in srgb, var(--input-focus) 58%, white 42%);
+  box-shadow: 0 0 0 3px rgb(var(--input-focus-rgb) / 0.14), 0 10px 20px rgb(2 6 23 / 0.22);
+}
+
+.ah-window-title-icon-shell {
+  background: var(--window-title-icon-bg) !important;
+  border-color: var(--window-title-icon-border) !important;
+  box-shadow: var(--window-title-icon-shadow);
+}
+
+.ah-window-title-icon {
+  color: var(--window-title-icon-color);
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.25));
+}
+
+.ah-toggle-pill {
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-weight: 900;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.ah-toggle-pill:hover {
+  border-color: color-mix(in srgb, var(--input-focus) 62%, var(--card-border));
   color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgb(var(--input-focus-rgb) / 0.12);
+}
+
+.ah-toggle-pill--active {
+  border-color: var(--input-focus);
+  color: var(--input-focus);
+  background: color-mix(in srgb, var(--input-focus) 10%, var(--card-bg));
+  box-shadow: 0 0 0 2px rgb(var(--input-focus-rgb) / 0.2);
+}
+
+.ah-accent-hover-surface {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.ah-accent-hover-surface:hover {
+  border-color: color-mix(in srgb, var(--input-focus) 62%, var(--card-border));
+  box-shadow: 0 0 0 3px rgb(var(--input-focus-rgb) / 0.12);
+}
+
+.ah-select-control--maestra {
+  min-width: 220px;
+  border-radius: 18px;
+  border-color: rgb(255 255 255 / 0.08);
+  background: rgb(2 6 23 / 0.72);
+}
+
+@media (max-width: 1024px) {
+  .ah-search-control--maestra {
+    min-width: 260px;
+    flex-basis: 100%;
+  }
+
+  .ah-select-control--maestra {
+    min-width: 180px;
+  }
 }
 
 .ah-reset-filter-btn {

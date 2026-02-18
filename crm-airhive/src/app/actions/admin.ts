@@ -4,6 +4,43 @@ import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { cookies } from 'next/headers'
 
+export interface CommercialForecastFilters {
+    dateFrom?: string
+    dateTo?: string
+    size?: string
+    industry?: string
+    location?: string
+    sourceChannel?: 'all' | 'pre_lead' | 'direct'
+}
+
+const getConfidenceLabel = (n: number) => {
+    if (n >= 80) return 'alta'
+    if (n >= 30) return 'media'
+    if (n >= 10) return 'baja'
+    return 'insuficiente'
+}
+
+const getPercentile = (values: number[], p: number) => {
+    if (values.length === 0) return 0
+    const sorted = [...values].sort((a, b) => a - b)
+    const index = Math.max(0, Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p)))
+    return sorted[index]
+}
+
+const normalizeStage = (stage: string | null | undefined) => String(stage || '').toLowerCase()
+
+const isWonStage = (stage: string | null | undefined) => {
+    const value = normalizeStage(stage)
+    return value.includes('ganad')
+}
+
+const isClosedStage = (stage: string | null | undefined) => {
+    const value = normalizeStage(stage)
+    return value.includes('cerrad')
+}
+
+const norm = (value: string | null | undefined) => (value || '').trim().toLowerCase()
+
 export async function getAdminCorrelationData() {
     try {
         const cookieStore = await cookies()
@@ -25,19 +62,26 @@ export async function getAdminCorrelationData() {
             return { success: false, error: 'No se pudo verificar el rol' }
         }
 
-        if (profile.role !== 'admin' && profile.role !== 'rh') {
+        if (profile.role !== 'admin') {
             return { success: false, error: 'No tienes permisos para acceder a estos datos' }
         }
 
-        let dbClient: any = supabase
+        let dbClient: any
         try {
             dbClient = createAdminClient()
         } catch (envError: any) {
-            console.warn('[AdminCorrelation] Admin env vars missing; using server client fallback:', envError?.message)
+            console.error('[AdminCorrelation] Admin client unavailable. Full cross-user analytics requires service role.', envError?.message)
+            return {
+                success: false,
+                error: 'No se pudo inicializar el cliente admin para analítica global. Configura SUPABASE_SERVICE_ROLE_KEY para ver correlaciones de todos los usuarios.'
+            }
         }
 
         // 2. Fetch tables with ADMIN client
         console.log('[AdminCorrelation] Fetching data tables...')
+        const eventsWindowStart = new Date()
+        eventsWindowStart.setDate(eventsWindowStart.getDate() - 90)
+
         const [
             { data: profiles, error: profError },
             { data: employeeProfiles, error: empError },
@@ -48,7 +92,8 @@ export async function getAdminCorrelationData() {
             { data: industries, error: indError },
             { data: companies, error: compError },
             { data: taskHistory, error: taskError },
-            { data: preLeads, error: preError }
+            { data: preLeads, error: preError },
+            { data: crmEvents, error: eventsError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name') as any,
             dbClient.from('employee_profiles').select('*') as any,
@@ -59,7 +104,10 @@ export async function getAdminCorrelationData() {
             dbClient.from('industrias').select('*') as any,
             dbClient.from('empresas').select('*') as any,
             dbClient.from('historial_tareas').select('user_id') as any,
-            dbClient.from('pre_leads').select('*') as any
+            dbClient.from('pre_leads').select('*') as any,
+            dbClient.from('crm_events')
+                .select('user_id, event_type, created_at')
+                .gte('created_at', eventsWindowStart.toISOString()) as any
         ])
 
         if (profError) throw profError
@@ -72,6 +120,16 @@ export async function getAdminCorrelationData() {
         if (compError) throw compError
         if (taskError) throw taskError
         if (preError) throw preError
+        if (eventsError && eventsError.code !== '42P01') {
+            throw eventsError
+        }
+
+        const eventsByUser = (crmEvents || []).reduce((acc: Record<string, any[]>, evt: any) => {
+            if (!evt?.user_id) return acc
+            if (!acc[evt.user_id]) acc[evt.user_id] = []
+            acc[evt.user_id].push(evt)
+            return acc
+        }, {})
 
         // 3. Aggregate Performance by User
         const performanceMap: Record<string, {
@@ -272,6 +330,19 @@ export async function getAdminCorrelationData() {
             const lastCompanyCreatedAt = userCompanies
                 .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]?.created_at || null
 
+            // Activity telemetry (last 90 days) from crm_events
+            const userEvents = eventsByUser[p.id] || []
+            const activityDays = new Set(
+                userEvents
+                    .map((evt: any) => evt.created_at ? new Date(evt.created_at).toISOString().slice(0, 10) : null)
+                    .filter((day: string | null): day is string => !!day)
+            )
+            const countByType = userEvents.reduce((acc: Record<string, number>, evt: any) => {
+                const key = evt.event_type || 'unknown'
+                acc[key] = (acc[key] || 0) + 1
+                return acc
+            }, {})
+
             return {
                 userId: p.id,
                 name: p.full_name || 'Desconocido',
@@ -302,13 +373,70 @@ export async function getAdminCorrelationData() {
                 companiesCreated,
                 avgCompaniesPerDay: companyAvg.perDay,
                 avgCompaniesPerMonth: companyAvg.perMonth,
-                lastCompanyCreatedAt
+                lastCompanyCreatedAt,
+                activityEvents90d: userEvents.length,
+                activityDays90d: activityDays.size,
+                leadCreatedEvents90d: countByType.lead_created || 0,
+                leadClosedEvents90d: countByType.lead_closed || 0,
+                forecastUpdatedEvents90d: countByType.forecast_registered || 0,
+                meetingsScheduledEvents90d: countByType.meeting_scheduled || 0,
+                meetingsFinishedEvents90d: countByType.meeting_finished || 0,
+                taskStatusChangedEvents90d: countByType.task_status_changed || 0,
+                preLeadCreatedEvents90d: countByType.pre_lead_created || 0,
+                preLeadConvertedEvents90d: countByType.pre_lead_converted || 0
             }
         })
 
         const profileNameById = new Map<string, string>(
             (profiles || []).map((p: any) => [p.id, p.full_name || 'Desconocido'])
         )
+
+        const meetingsByLeadId = (meetings || []).reduce((acc: Record<number, any[]>, meeting: any) => {
+            const leadId = Number(meeting.lead_id)
+            if (!leadId) return acc
+            if (!acc[leadId]) acc[leadId] = []
+            acc[leadId].push(meeting)
+            return acc
+        }, {})
+
+        const leadAnalyticsRows = (clients || [])
+            .map((lead: any) => {
+                const ownerId = lead.owner_id || null
+                const leadMeetings = meetingsByLeadId[lead.id] || []
+                const firstMeeting = [...leadMeetings]
+                    .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())[0]
+
+                const responseHours = firstMeeting && lead.created_at
+                    ? Math.max(0, (new Date(firstMeeting.start_time).getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60))
+                    : 0
+
+                const stage = String(lead.etapa || '').toLowerCase()
+                const isClosed = stage.includes('cerrad')
+                const closedOutcome = stage.includes('ganad') ? 1 : isClosed ? 0 : null
+
+                const sourcePreLead = lead.original_pre_lead_id ? preLeadById.get(lead.original_pre_lead_id) : null
+                const conversionLagDays = sourcePreLead?.created_at && lead.converted_at
+                    ? Math.max(0, (new Date(lead.converted_at).getTime() - new Date(sourcePreLead.created_at).getTime()) / DAY_MS)
+                    : null
+
+                return {
+                    leadId: lead.id,
+                    ownerId,
+                    ownerName: ownerId ? profileNameById.get(ownerId) || 'Desconocido' : 'Sin asignar',
+                    createdAt: lead.created_at,
+                    stage: lead.etapa || 'N/A',
+                    probabilidad: Number(lead.probabilidad || 0),
+                    valorEstimado: Number(lead.valor_estimado || 0),
+                    calificacion: Number(lead.calificacion || 0),
+                    meetingsCount: leadMeetings.length,
+                    responseHours,
+                    hasPhysicalMeeting: leadMeetings.some((m: any) => m.meeting_type === 'presencial') ? 1 : 0,
+                    fromPreLead: lead.original_pre_lead_id ? 1 : 0,
+                    conversionLagDays,
+                    closedOutcome
+                }
+            })
+            .filter((row: any) => !!row.ownerId)
 
         const companyRegistry = (companies || [])
             .map((company: any) => ({
@@ -403,6 +531,277 @@ export async function getAdminCorrelationData() {
     } catch (error: any) {
         console.error('[AdminCorrelation] General Exception:', error)
         return { success: false, error: error.message }
+    }
+}
+
+export async function getAdminCommercialForecast(filters: CommercialForecastFilters = {}) {
+    try {
+        const cookieStore = await cookies()
+        const supabase = createClient(cookieStore)
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        const { data: profile, error: roleError } = await (supabase
+            .from('profiles') as any)
+            .select('role')
+            .eq('id', user.id)
+            .single()
+
+        if (roleError || !profile) {
+            return { success: false, error: 'No se pudo verificar el rol' }
+        }
+        if (profile.role !== 'admin') {
+            return { success: false, error: 'No tienes permisos para acceder a estos datos' }
+        }
+
+        let dbClient: any
+        try {
+            dbClient = createAdminClient()
+        } catch (envError: any) {
+            return {
+                success: false,
+                error: 'No se pudo inicializar el cliente admin para pronósticos globales. Configura SUPABASE_SERVICE_ROLE_KEY.'
+            }
+        }
+
+        const [
+            { data: clients, error: clientError },
+            { data: companies, error: companyError },
+            { data: meetings, error: meetingError },
+            { data: crmEvents, error: crmEventsError },
+            { data: rescheduleEvents, error: rescheduleError }
+        ] = await Promise.all([
+            dbClient.from('clientes').select('*') as any,
+            dbClient.from('empresas').select('id, nombre, industria, ubicacion, tamano, created_at') as any,
+            dbClient.from('meetings').select('*') as any,
+            dbClient.from('crm_events').select('event_type, entity_id, metadata, created_at') as any,
+            dbClient.from('meeting_reschedule_events').select('meeting_id, old_start_time, new_start_time, created_at') as any
+        ])
+
+        if (clientError) throw clientError
+        if (companyError) throw companyError
+        if (meetingError) throw meetingError
+        if (crmEventsError && crmEventsError.code !== '42P01') throw crmEventsError
+        if (rescheduleError && rescheduleError.code !== '42P01') throw rescheduleError
+
+        const dateFrom = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null
+        const dateTo = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null
+
+        const companyById = new Map<string, any>((companies || []).map((comp: any) => [comp.id, comp]))
+        const meetingsByLeadId = (meetings || []).reduce((acc: Record<number, any[]>, meeting: any) => {
+            const leadId = Number(meeting.lead_id)
+            if (!leadId) return acc
+            if (!acc[leadId]) acc[leadId] = []
+            acc[leadId].push(meeting)
+            return acc
+        }, {})
+
+        const leadCreatedEvents = (crmEvents || []).filter((evt: any) => evt.event_type === 'lead_created')
+        const leadSourceById = new Map<number, 'pre_lead' | 'direct'>()
+        leadCreatedEvents.forEach((evt: any) => {
+            const leadId = Number(evt.entity_id)
+            if (!leadId) return
+            const sourceRaw = String(evt.metadata?.source || '').toLowerCase()
+            leadSourceById.set(leadId, sourceRaw.includes('pre') ? 'pre_lead' : 'direct')
+        })
+
+        const rescheduledMeetingIds = new Set<string>()
+        ;(rescheduleEvents || []).forEach((evt: any) => {
+            if (evt.meeting_id) rescheduledMeetingIds.add(evt.meeting_id)
+        })
+        ;(crmEvents || []).forEach((evt: any) => {
+            if (evt.event_type === 'meeting_rescheduled' && evt.entity_id) {
+                rescheduledMeetingIds.add(String(evt.entity_id))
+            }
+        })
+
+        const leadRows = (clients || []).map((lead: any) => {
+            const company = lead.empresa_id ? companyById.get(lead.empresa_id) : null
+            const leadMeetings = meetingsByLeadId[lead.id] || []
+            const sourceChannel = leadSourceById.get(lead.id) || (lead.original_pre_lead_id ? 'pre_lead' : 'direct')
+            const leadCreatedAt = lead.created_at ? new Date(lead.created_at) : null
+
+            return {
+                lead,
+                company,
+                leadMeetings,
+                sourceChannel,
+                leadCreatedAt
+            }
+        }).filter((row: any) => !!row.company)
+
+        const filteredLeadRows = leadRows.filter((row: any) => {
+            const company = row.company
+            if (!company) return false
+            if (filters.size && filters.size !== 'all' && String(company.tamano || '') !== filters.size) return false
+            if (filters.industry && filters.industry !== 'all' && norm(company.industria) !== norm(filters.industry)) return false
+            if (filters.location && filters.location !== 'all' && norm(company.ubicacion) !== norm(filters.location)) return false
+            if (filters.sourceChannel && filters.sourceChannel !== 'all' && row.sourceChannel !== filters.sourceChannel) return false
+            if (dateFrom && row.leadCreatedAt && row.leadCreatedAt < dateFrom) return false
+            if (dateTo && row.leadCreatedAt && row.leadCreatedAt > dateTo) return false
+            return true
+        })
+
+        // 1) Forecast: meetings needed to close (won leads only)
+        const wonLeadRows = filteredLeadRows.filter((row: any) => isWonStage(row.lead.etapa))
+        const meetingsCounts = wonLeadRows.map((row: any) => row.leadMeetings.length)
+        const meetingsAvg = meetingsCounts.length > 0
+            ? meetingsCounts.reduce((acc: number, value: number) => acc + value, 0) / meetingsCounts.length
+            : 0
+
+        const meetingsToCloseForecast = {
+            averageMeetings: meetingsAvg,
+            p25: getPercentile(meetingsCounts, 0.25),
+            p75: getPercentile(meetingsCounts, 0.75),
+            sampleSize: meetingsCounts.length,
+            confidence: getConfidenceLabel(meetingsCounts.length),
+            insufficientSample: meetingsCounts.length < 10
+        }
+
+        // 2) Postponement probability (rescheduled meetings / total meetings)
+        const candidateMeetings = filteredLeadRows.flatMap((row: any) =>
+            row.leadMeetings.map((meeting: any) => ({
+                meeting,
+                company: row.company
+            }))
+        )
+
+        const postponeTotal = candidateMeetings.length
+        const postponeHits = candidateMeetings.filter((row: any) => rescheduledMeetingIds.has(String(row.meeting.id))).length
+        const postponeGlobal = postponeTotal > 0 ? postponeHits / postponeTotal : 0
+
+        const groupPostpone = (getKey: (row: any) => string) => {
+            const map: Record<string, { total: number, rescheduled: number }> = {}
+            candidateMeetings.forEach((row: any) => {
+                const key = getKey(row)
+                if (!map[key]) map[key] = { total: 0, rescheduled: 0 }
+                map[key].total++
+                if (rescheduledMeetingIds.has(String(row.meeting.id))) map[key].rescheduled++
+            })
+            return Object.entries(map).map(([label, stats]) => ({
+                label,
+                n: stats.total,
+                probability: stats.total > 0 ? stats.rescheduled / stats.total : 0,
+                liftVsGlobal: stats.total > 0 ? (stats.rescheduled / stats.total) - postponeGlobal : 0
+            }))
+        }
+
+        const postponeByIndustry = groupPostpone((row) => row.company?.industria || 'Sin clasificar')
+        const postponeBySize = groupPostpone((row) => row.company?.tamano ? `Tamaño ${row.company.tamano}` : 'Sin tamaño')
+        const postponeByLocation = groupPostpone((row) => row.company?.ubicacion || 'Sin ubicación')
+
+        const topPostponeFactors = [
+            ...postponeByIndustry.map((item) => ({ dimension: 'industria', ...item })),
+            ...postponeBySize.map((item) => ({ dimension: 'tamano', ...item })),
+            ...postponeByLocation.map((item) => ({ dimension: 'ubicacion', ...item }))
+        ]
+            .filter((item) => item.n >= 5)
+            .sort((a, b) => Math.abs(b.liftVsGlobal) - Math.abs(a.liftVsGlobal))
+            .slice(0, 8)
+
+        const postponementForecast = {
+            globalProbability: postponeGlobal,
+            sampleSize: postponeTotal,
+            rescheduledMeetings: postponeHits,
+            confidence: getConfidenceLabel(postponeTotal),
+            insufficientSample: postponeTotal < 20,
+            byIndustry: postponeByIndustry,
+            bySize: postponeBySize,
+            byLocation: postponeByLocation,
+            topFactors: topPostponeFactors
+        }
+
+        // 3) Projects expected per new company
+        const filteredCompanies = (companies || []).filter((company: any) => {
+            if (filters.size && filters.size !== 'all' && String(company.tamano || '') !== filters.size) return false
+            if (filters.industry && filters.industry !== 'all' && norm(company.industria) !== norm(filters.industry)) return false
+            if (filters.location && filters.location !== 'all' && norm(company.ubicacion) !== norm(filters.location)) return false
+            const createdAt = company.created_at ? new Date(company.created_at) : null
+            if (dateFrom && createdAt && createdAt < dateFrom) return false
+            if (dateTo && createdAt && createdAt > dateTo) return false
+            return true
+        })
+
+        const leadsByCompanyId = (clients || []).reduce((acc: Record<string, number>, lead: any) => {
+            if (!lead.empresa_id) return acc
+            acc[lead.empresa_id] = (acc[lead.empresa_id] || 0) + 1
+            return acc
+        }, {})
+
+        const projectCounts = filteredCompanies.map((company: any) => leadsByCompanyId[company.id] || 0)
+        const projectAvg = projectCounts.length > 0
+            ? projectCounts.reduce((acc: number, value: number) => acc + value, 0) / projectCounts.length
+            : 0
+
+        const bucketCount = {
+            zero: projectCounts.filter((count: number) => count === 0).length,
+            one: projectCounts.filter((count: number) => count === 1).length,
+            twoPlus: projectCounts.filter((count: number) => count >= 2).length
+        }
+
+        const safeProb = (count: number, total: number) => total > 0 ? count / total : 0
+        const companySample = projectCounts.length
+
+        const groupProjects = (getKey: (company: any) => string) => {
+            const grouped: Record<string, number[]> = {}
+            filteredCompanies.forEach((company: any) => {
+                const key = getKey(company)
+                if (!grouped[key]) grouped[key] = []
+                grouped[key].push(leadsByCompanyId[company.id] || 0)
+            })
+            return Object.entries(grouped).map(([label, counts]) => {
+                const avg = counts.length > 0 ? counts.reduce((acc, value) => acc + value, 0) / counts.length : 0
+                return {
+                    label,
+                    n: counts.length,
+                    avgProjects: avg,
+                    pZero: safeProb(counts.filter((c) => c === 0).length, counts.length),
+                    pOne: safeProb(counts.filter((c) => c === 1).length, counts.length),
+                    pTwoPlus: safeProb(counts.filter((c) => c >= 2).length, counts.length)
+                }
+            })
+        }
+
+        const projectsForecast = {
+            avgProjectsPerNewCompany: projectAvg,
+            sampleSizeCompanies: companySample,
+            confidence: getConfidenceLabel(companySample),
+            insufficientSample: companySample < 10,
+            distribution: {
+                p0: safeProb(bucketCount.zero, companySample),
+                p1: safeProb(bucketCount.one, companySample),
+                p2plus: safeProb(bucketCount.twoPlus, companySample)
+            },
+            byIndustry: groupProjects((company) => company.industria || 'Sin clasificar'),
+            bySize: groupProjects((company) => company.tamano ? `Tamaño ${company.tamano}` : 'Sin tamaño'),
+            byLocation: groupProjects((company) => company.ubicacion || 'Sin ubicación')
+        }
+
+        return {
+            success: true,
+            data: {
+                filtersApplied: {
+                    dateFrom: filters.dateFrom || null,
+                    dateTo: filters.dateTo || null,
+                    size: filters.size || 'all',
+                    industry: filters.industry || 'all',
+                    location: filters.location || 'all',
+                    sourceChannel: filters.sourceChannel || 'all'
+                },
+                meetingsToCloseForecast,
+                postponementForecast,
+                projectsForecast,
+                options: {
+                    sizes: Array.from(new Set((companies || []).map((c: any) => c.tamano).filter((v: any) => v !== null))).sort((a: any, b: any) => Number(a) - Number(b)),
+                    industries: Array.from(new Set((companies || []).map((c: any) => c.industria).filter((v: any) => !!v))).sort(),
+                    locations: Array.from(new Set((companies || []).map((c: any) => c.ubicacion).filter((v: any) => !!v))).sort()
+                }
+            }
+        }
+    } catch (error: any) {
+        console.error('[AdminCommercialForecast] Error:', error)
+        return { success: false, error: error.message || 'Error calculando pronósticos comerciales' }
     }
 }
 

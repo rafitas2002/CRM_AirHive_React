@@ -146,8 +146,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                 placeholder='Buscar por nombre, correo o rol...'
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                                style={{ color: 'var(--text-primary)' }}
+                                className='ah-search-input rounded-2xl text-sm font-bold'
                             />
                         </div>
 

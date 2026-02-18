@@ -37,6 +37,20 @@ export default function TareasPage() {
     const [taskToToggle, setTaskToToggle] = useState<Task | null>(null)
     const [search, setSearch] = useState('')
 
+    const emitTrackingEvent = async (payload: {
+        eventType: 'task_created' | 'task_updated' | 'task_deleted' | 'task_status_changed'
+        entityType: 'task'
+        entityId?: string | number
+        metadata?: Record<string, any>
+    }) => {
+        try {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent(payload as any)
+        } catch (trackError) {
+            console.error('[Tareas] Tracking error (non-blocking):', trackError)
+        }
+    }
+
     const fetchTasks = async () => {
         const isInitial = tasks.length === 0
         if (isInitial) setLoading(true)
@@ -75,17 +89,36 @@ export default function TareasPage() {
     const handleSave = async (data: any) => {
         try {
             if (modalMode === 'create') {
-                const { error } = await supabase.from('tareas').insert({
+                const { data: createdTask, error } = await (supabase.from('tareas') as any).insert({
                     ...data,
                     vendedor_id: auth.user?.id
-                })
+                }).select('id, lead_id, prioridad').single()
                 if (error) throw error
+                void emitTrackingEvent({
+                    eventType: 'task_created',
+                    entityType: 'task',
+                    entityId: createdTask?.id,
+                    metadata: {
+                        lead_id: createdTask?.lead_id,
+                        prioridad: createdTask?.prioridad
+                    }
+                })
             } else {
                 const { error } = await (supabase
                     .from('tareas') as any)
                     .update(data)
                     .eq('id', currentTask?.id)
                 if (error) throw error
+                void emitTrackingEvent({
+                    eventType: 'task_updated',
+                    entityType: 'task',
+                    entityId: currentTask?.id,
+                    metadata: {
+                        lead_id: data.lead_id || currentTask?.lead_id,
+                        estado: data.estado || currentTask?.estado,
+                        prioridad: data.prioridad || currentTask?.prioridad
+                    }
+                })
             }
             setIsModalOpen(false)
             fetchTasks()
@@ -110,6 +143,11 @@ export default function TareasPage() {
                 await fetchTasks()
                 throw error
             }
+            void emitTrackingEvent({
+                eventType: 'task_deleted',
+                entityType: 'task',
+                entityId: taskIdToDelete
+            })
         } catch (error: any) {
             alert('Error al eliminar: ' + error.message)
         }
@@ -129,6 +167,16 @@ export default function TareasPage() {
                 .update({ estado: newStatus })
                 .eq('id', taskToToggle.id)
             if (error) throw error
+            void emitTrackingEvent({
+                eventType: 'task_status_changed',
+                entityType: 'task',
+                entityId: taskToToggle.id,
+                metadata: {
+                    from: taskToToggle.estado,
+                    to: newStatus,
+                    lead_id: taskToToggle.lead_id
+                }
+            })
             setIsStatusModalOpen(false)
             setTaskToToggle(null)
             fetchTasks()
@@ -210,7 +258,7 @@ export default function TareasPage() {
 
                 {/* Search Bar Standardized */}
                 <div className='relative w-full max-w-2xl mx-auto'>
-                    <div className='absolute left-5 top-1/2 -translate-y-1/2 text-gray-400'>
+                    <div className='absolute left-5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]'>
                         <Search size={20} />
                     </div>
                     <input
@@ -218,8 +266,7 @@ export default function TareasPage() {
                         placeholder="Buscar por título, cliente, empresa o descripción..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className='w-full pl-14 pr-6 py-4 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-[22px] text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                        style={{ color: 'var(--text-primary)' }}
+                        className='ah-search-input rounded-[22px] text-sm font-bold pl-14 pr-6'
                     />
                 </div>
 
