@@ -75,10 +75,9 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                 <div className='flex items-center gap-8'>
                     <div className='flex items-center gap-6'>
                         <div
-                            className='w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                            className='w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0 ah-window-title-icon-shell'
                         >
-                            <ShieldCheck size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                            <ShieldCheck size={34} className='ah-window-title-icon' strokeWidth={1.9} />
                         </div>
                         <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -149,8 +148,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                 placeholder='Buscar por nombre, correo o rol...'
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className='w-full pl-12 pr-4 py-3.5 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl text-sm font-bold placeholder:text-gray-500/50 transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none shadow-sm'
-                                style={{ color: 'var(--text-primary)' }}
+                                className='ah-search-input rounded-2xl text-sm font-bold'
                             />
                         </div>
 

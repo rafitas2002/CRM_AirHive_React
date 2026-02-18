@@ -17,6 +17,7 @@ import {
 import SellerRace from '@/components/SellerRace'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import { rankRaceItems } from '@/lib/raceRanking'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -119,6 +120,7 @@ export default function AdminDashboard() {
     if (loading) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
+    const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.negotiationPipeline)
 
     return (
         <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
@@ -201,11 +203,13 @@ export default function AdminDashboard() {
                                     <Users className='w-4 h-4 text-gray-300' />
                                 </div>
                                 <div className='space-y-4'>
-                                    {stats.sellers.slice(0, 5).map((s, i) => (
+                                    {rankedSellers.slice(0, 5).map((entry) => {
+                                        const s = entry.item
+                                        return (
                                         <div key={s.name} className='flex items-center justify-between group'>
                                             <div className='flex items-center gap-3'>
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${i === 0 ? 'bg-amber-100 text-amber-600' : 'bg-gray-50 text-gray-400'}`}>
-                                                    {i + 1}
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${entry.medal === 'gold' ? 'bg-amber-100 text-amber-600' : entry.medal === 'silver' ? 'bg-slate-100 text-slate-500' : entry.medal === 'bronze' ? 'bg-orange-100 text-orange-600' : 'bg-gray-50 text-gray-400'}`}>
+                                                    {entry.rank}
                                                 </div>
                                                 <span className='font-bold text-sm text-[#0A1635]'>{s.name}</span>
                                             </div>
@@ -214,7 +218,8 @@ export default function AdminDashboard() {
                                                 <p className='text-[8px] font-bold text-gray-400 uppercase'>Ajustado</p>
                                             </div>
                                         </div>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
                                 <button className='w-full mt-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest hover:bg-gray-50 transition-colors flex items-center justify-center gap-2'>
                                     Ver Detalle Completo <ChevronRight className='w-3 h-3' />

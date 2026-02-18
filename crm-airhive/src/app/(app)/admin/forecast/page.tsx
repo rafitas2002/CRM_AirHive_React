@@ -252,10 +252,9 @@ export default function ForecastDashboard() {
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
                             <div
-                                className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden shrink-0'
-                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                                className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden shrink-0 ah-window-title-icon-shell'
                             >
-                                <TrendingUp size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                                <TrendingUp size={34} className='ah-window-title-icon' strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>

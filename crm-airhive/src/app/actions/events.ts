@@ -6,14 +6,17 @@ import { cookies } from 'next/headers'
 
 export type EventType =
     | 'login' | 'logout' | 'session_start' | 'session_end'
-    | 'lead_created' | 'lead_updated' | 'lead_stage_change' | 'lead_assigned' | 'lead_closed'
+    | 'lead_created' | 'lead_updated' | 'lead_stage_change' | 'lead_assigned' | 'lead_closed' | 'lead_deleted'
     | 'meeting_scheduled' | 'meeting_started' | 'meeting_finished' | 'meeting_no_show' | 'meeting_rescheduled'
     | 'call_started' | 'call_finished'
     | 'forecast_registered' | 'forecast_frozen'
+    | 'pre_lead_created' | 'pre_lead_updated' | 'pre_lead_converted' | 'pre_lead_deleted'
+    | 'task_created' | 'task_updated' | 'task_deleted' | 'task_status_changed'
+    | 'company_deleted'
 
 export interface TrackEventParams {
     eventType: EventType
-    entityType?: 'user' | 'lead' | 'meeting' | 'call' | 'forecast'
+    entityType?: 'user' | 'lead' | 'meeting' | 'call' | 'forecast' | 'task' | 'pre_lead' | 'company'
     entityId?: string | number
     metadata?: Record<string, any>
     userId?: string

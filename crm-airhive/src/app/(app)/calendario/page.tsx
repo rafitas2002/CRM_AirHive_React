@@ -173,8 +173,8 @@ export default function CalendarioPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <CalendarDays size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
+                                <CalendarDays size={36} strokeWidth={1.5} className="ah-window-title-icon" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -245,8 +245,8 @@ export default function CalendarioPage() {
                     <div className='max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0'>
                         {meetings.length === 0 ? (
                             <div className='flex-1 flex flex-col items-center justify-center rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <div className='w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-6'>
-                                    <CalendarDays size={42} strokeWidth={2} className='text-[#2048FF]' />
+                                <div className='w-24 h-24 rounded-[28px] flex items-center justify-center mb-6 ah-window-title-icon-shell'>
+                                    <CalendarDays size={42} strokeWidth={1.8} className='ah-window-title-icon' />
                                 </div>
                                 <h3 className='text-3xl font-black mb-3' style={{ color: 'var(--text-primary)' }}>No hay juntas programadas</h3>
                                 <p className='mb-8 font-medium max-w-sm' style={{ color: 'var(--text-secondary)' }}>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>

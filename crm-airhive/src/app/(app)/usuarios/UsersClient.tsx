@@ -6,6 +6,7 @@ import DetailedUserModal from '@/components/DetailedUserModal'
 import RoleBadge from '@/components/RoleBadge'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { getRoleMeta } from '@/lib/roleUtils'
+import { useTheme } from '@/lib/ThemeContext'
 
 interface UsersClientProps {
     initialUsers: any[]
@@ -36,22 +37,114 @@ function getUserAreaIds(user: any): string[] {
     return Array.from(normalized)
 }
 
-function getUniqueAreaColor(index: number): AreaColorMeta {
-    // Golden-angle distribution over hue wheel gives visually distinct colors.
-    const hue = (index * 137.508) % 360
+function hashSeed(seed: string): number {
+    let hash = 0
+    for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+    return hash
+}
+
+function positiveMod(value: number, base: number): number {
+    return ((value % base) + base) % base
+}
+
+function normalizeAreaName(areaName: string): string {
+    return areaName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+}
+
+function getSemanticAreaHue(areaName?: string): number | null {
+    if (!areaName) return null
+    const normalized = normalizeAreaName(areaName)
+    const has = (token: string) => normalized.includes(token)
+
+    if (has('finanza')) return 132
+    if (has('recursos humanos') || has('recurso humano') || normalized === 'rh') return 50 // amarillo
+    if (has('comercial') || has('ventas') || has('venta')) return 152 // verde-menta
+    if (has('marketing')) return 322 // fuchsia
+    if (has('legal')) return 6 // rojo
+    if (has('tecnolog') || has('desarrollo') || has('developers') || has('developer')) return 212 // azul
+    if (has('diseno')) return 276 // morado
+    if (has('producto')) return 292 // lila
+    if (has('operacion')) return 24 // naranja/melon
+    if (has('soporte')) return 188 // cyan
+    if (has('administracion')) return 32 // ambar
+    if (has('direccion')) return 232 // indigo
+    if (has('datos') || has('/ bi') || has('bi')) return 248 // violeta-azulado
+    if (has('innovacion')) return 168 // turquesa
+    if (has('proyecto')) return 20 // salmon
+    if (has('customer success')) return 342 // rosa-salmon
+    if (has('otro')) return 30 // taupe warm
+
+    if (has('directores')) return 258 // violeta
+    if (has('equipo de marketing')) return 314 // magenta fuerte
+    if (has('equipo de ventas')) return 144 // verde brillante
+    if (has('equipo de developers')) return 206 // azul acero
+
+    return null
+}
+
+function getAreaColorFromSeed(seed: string, theme: 'claro' | 'gris' | 'oscuro', areaName?: string): AreaColorMeta {
+    const hash = hashSeed(seed)
+    const huePalette = [
+        4, 18, 30, 42, 54, 66, 78, 92, 108, 124, 140, 156, 172, 188, 204, 220, 236, 252, 268, 284, 300, 316, 332, 348
+    ]
+    const semanticHue = getSemanticAreaHue(areaName)
+    const semanticOffset = (hash % 2 === 0) ? -6 : 8
+    const hue = semanticHue !== null ? positiveMod(semanticHue + semanticOffset, 360) : huePalette[hash % huePalette.length]
+    const toneVariant = positiveMod(hash >>> 4, 4)
+    const satVariant = positiveMod(hash >>> 7, 3)
+
+    if (theme === 'claro') {
+        const lightThemeTones = [
+            { bgL: 95, borderL: 64, textL: 24, sat: 78 },
+            { bgL: 92, borderL: 58, textL: 22, sat: 84 },
+            { bgL: 90, borderL: 54, textL: 20, sat: 88 },
+            { bgL: 96, borderL: 68, textL: 28, sat: 72 }
+        ]
+        const tone = lightThemeTones[toneVariant]
+        const sat = tone.sat + satVariant * 4
+        return {
+            bg: `hsl(${hue} ${sat}% ${tone.bgL}%)`,
+            border: `hsl(${hue} ${Math.max(56, sat - 14)}% ${tone.borderL}%)`,
+            text: `hsl(${hue} ${Math.max(62, sat - 10)}% ${tone.textL}%)`
+        }
+    }
+
+    if (theme === 'gris') {
+        const grayThemeTones = [
+            { bgL: 24, borderL: 58, textL: 87, sat: 78, alpha: 0.42 },
+            { bgL: 20, borderL: 64, textL: 90, sat: 84, alpha: 0.44 },
+            { bgL: 28, borderL: 54, textL: 84, sat: 72, alpha: 0.40 },
+            { bgL: 18, borderL: 68, textL: 91, sat: 88, alpha: 0.46 }
+        ]
+        const tone = grayThemeTones[toneVariant]
+        const sat = tone.sat + satVariant * 4
+        return {
+            bg: `hsl(${hue} ${sat}% ${tone.bgL}% / ${tone.alpha})`,
+            border: `hsl(${hue} ${Math.max(66, sat - 8)}% ${tone.borderL}% / 0.82)`,
+            text: `hsl(${hue} ${Math.max(82, sat - 2)}% ${tone.textL}%)`
+        }
+    }
+
+    const darkThemeTones = [
+        { bgL: 20, borderL: 50, textL: 83, sat: 78, alpha: 0.46 },
+        { bgL: 16, borderL: 58, textL: 88, sat: 84, alpha: 0.50 },
+        { bgL: 24, borderL: 46, textL: 80, sat: 72, alpha: 0.44 },
+        { bgL: 14, borderL: 62, textL: 90, sat: 88, alpha: 0.52 }
+    ]
+    const tone = darkThemeTones[toneVariant]
+    const sat = tone.sat + satVariant * 4
     return {
-        bg: `hsl(${hue} 92% 96%)`,
-        border: `hsl(${hue} 70% 78%)`,
-        text: `hsl(${hue} 75% 32%)`
+        bg: `hsl(${hue} ${sat}% ${tone.bgL}% / ${tone.alpha})`,
+        border: `hsl(${hue} ${Math.max(66, sat - 8)}% ${tone.borderL}% / 0.84)`,
+        text: `hsl(${hue} ${Math.max(82, sat - 2)}% ${tone.textL}%)`
     }
 }
 
-function fallbackAreaColor(seed: string): AreaColorMeta {
-    const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    return getUniqueAreaColor(hash)
-}
-
 export default function UsersClient({ initialUsers }: UsersClientProps) {
+    const { theme } = useTheme()
     const [users] = useState(initialUsers)
     const [search, setSearch] = useState('')
     const [selectedArea, setSelectedArea] = useState<string | null>(null)
@@ -90,9 +183,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         return item ? item.name : ''
     }
 
-    const areaColorMap: Record<string, AreaColorMeta> = ((catalogs.areas || []) as { id: string }[])
-        .reduce((acc: Record<string, AreaColorMeta>, area, index) => {
-            if (area?.id) acc[area.id] = getUniqueAreaColor(index)
+    const areaColorMap: Record<string, AreaColorMeta> = ((catalogs.areas || []) as { id: string, name?: string }[])
+        .reduce((acc: Record<string, AreaColorMeta>, area) => {
+            if (area?.id) acc[area.id] = getAreaColorFromSeed(area.id, theme, area.name)
             return acc
         }, {})
 
@@ -102,10 +195,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="flex items-center gap-6">
                     <div
-                        className="w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0"
-                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                        className="w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0 ah-window-title-icon-shell"
                     >
-                        <Users size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                        <Users size={34} className='ah-window-title-icon' strokeWidth={1.9} />
                     </div>
                     <div>
                         <h1 className="text-4xl font-black text-[var(--text-primary)] tracking-tight">
@@ -120,7 +212,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     <input
                         type="text"
                         placeholder="Buscar por nombre, puesto o área..."
-                        className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-[var(--text-primary)] focus:ring-2 focus:ring-[#2048FF]/20 focus:border-[#2048FF] outline-none transition-all shadow-sm"
+                        className="ah-search-input rounded-2xl text-sm font-bold"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
@@ -133,7 +225,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]">Área:</span>
                     <button
                         onClick={() => setSelectedArea(null)}
-                        className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${!selectedArea
+                        className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 cursor-pointer ${!selectedArea
                             ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
                             : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
                             }`}
@@ -141,16 +233,35 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                         Todas
                     </button>
                     {(catalogs.areas || []).map(area => (
-                        <button
-                            key={area.id}
-                            onClick={() => setSelectedArea(area.id)}
-                            className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${selectedArea === area.id
-                                ? 'bg-[#2048FF] border-[#2048FF] text-white shadow-lg shadow-blue-500/20'
-                                : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:border-[#2048FF]/30'
-                                }`}
-                        >
-                            {area.name}
-                        </button>
+                        (() => {
+                            const colorMeta = areaColorMap[area.id] || getAreaColorFromSeed(area.id || area.name, theme, area.name)
+                            const isSelected = selectedArea === area.id
+
+                            return (
+                                <button
+                                    key={area.id}
+                                    onClick={() => setSelectedArea(area.id)}
+                                    className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 cursor-pointer ${isSelected
+                                        ? 'shadow-lg'
+                                        : 'bg-[var(--card-bg)] border-[var(--card-border)] text-[var(--text-secondary)] hover:bg-[var(--area-hover-bg)] hover:text-[var(--area-hover-text)] hover:border-[var(--area-hover-border)]'
+                                        }`}
+                                    style={isSelected
+                                        ? {
+                                            background: colorMeta.bg,
+                                            borderColor: colorMeta.border,
+                                            color: colorMeta.text,
+                                            boxShadow: `0 14px 30px -20px ${colorMeta.border}`
+                                        }
+                                        : {
+                                            ['--area-hover-bg' as string]: colorMeta.bg,
+                                            ['--area-hover-border' as string]: colorMeta.border,
+                                            ['--area-hover-text' as string]: colorMeta.text
+                                        }}
+                                >
+                                    {area.name}
+                                </button>
+                            )
+                        })()
                     ))}
                 </div>
 
@@ -204,12 +315,18 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                 setSelectedUser(user)
                                 setIsModalOpen(true)
                             }}
-                            className="group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 hover:border-[#2048FF] transition-all cursor-pointer hover:shadow-2xl hover:shadow-blue-500/5 relative overflow-hidden active:scale-[0.98]"
+                            className="group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 transition-all duration-300 cursor-pointer hover:shadow-2xl hover:-translate-y-1 hover:border-[var(--role-border-color)] hover:border-[2.5px] relative overflow-hidden active:scale-[0.98]"
+                            style={{
+                                ['--role-border-color' as string]: roleMeta.borderColor,
+                                boxShadow: `0 20px 45px -26px ${roleMeta.borderColor}`
+                            }}
                         >
                             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
 
                             <div className="flex flex-col items-center text-center space-y-4">
-                                <div className="w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] group-hover:border-[#2048FF] overflow-hidden transition-colors shadow-lg">
+                                <div
+                                    className="w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] overflow-hidden transition-colors shadow-lg group-hover:border-[var(--role-border-color)] group-hover:border-[3px]"
+                                >
                                     {user.avatar_url ? (
                                         <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
                                     ) : (
@@ -223,7 +340,10 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                 </div>
 
                                 <div>
-                                    <h3 className="text-lg font-black text-[var(--text-primary)] group-hover:text-[#2048FF] transition-colors line-clamp-1">
+                                    <h3
+                                        className="text-lg font-black text-[var(--text-primary)] transition-colors line-clamp-1 group-hover:brightness-110"
+                                        style={{ color: roleMeta.textColor }}
+                                    >
                                         {user.full_name}
                                     </h3>
                                     <p className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mt-1">
@@ -236,7 +356,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                     {areaItems.length > 0 ? (
                                         <div className="flex flex-wrap items-center justify-center gap-1.5">
                                             {areaItems.map(area => {
-                                                const colorMeta = areaColorMap[area.id] || fallbackAreaColor(area.id || area.name)
+                                                const colorMeta = areaColorMap[area.id] || getAreaColorFromSeed(area.id || area.name, theme, area.name)
                                                 return (
                                                     <span
                                                         key={`${user.id}-${area.id}`}

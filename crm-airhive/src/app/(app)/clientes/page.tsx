@@ -33,6 +33,26 @@ const normalizeLead = (lead: Lead) => ({
 
 import { useAuth } from '@/lib/auth'
 
+function parseSupabaseError(error: any, fallback: string) {
+    if (!error) return fallback
+    if (typeof error === 'string') return error
+    if (error?.message) return error.message as string
+
+    const fragments = [error?.code, error?.details, error?.hint].filter(Boolean)
+    if (fragments.length > 0) {
+        return fragments.join(' | ')
+    }
+
+    try {
+        const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error))
+        if (serialized && serialized !== '{}') return serialized
+    } catch {
+        // ignore serialization failures and use fallback
+    }
+
+    return fallback
+}
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
@@ -398,18 +418,38 @@ export default function LeadsPage() {
 
     const confirmDelete = async () => {
         if (!clientToDelete) return
+        const leadId = clientToDelete
+        const leadToDelete = leads.find((lead) => lead.id === leadId)
 
         const { error } = await (supabase
             .from('clientes') as any)
             .delete()
-            .eq('id', clientToDelete)
+            .eq('id', leadId)
 
         if (error) {
-            console.error('Error deleting lead:', error)
-            alert('Error al eliminar el lead')
+            console.error('Error deleting lead:', {
+                code: (error as any)?.code,
+                message: (error as any)?.message,
+                details: (error as any)?.details,
+                hint: (error as any)?.hint,
+                raw: error
+            })
+            alert(`Error al eliminar el lead: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
         } else {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent({
+                eventType: 'lead_deleted',
+                entityType: 'lead',
+                entityId: leadId,
+                metadata: {
+                    empresa: leadToDelete?.empresa || null,
+                    etapa: leadToDelete?.etapa || null,
+                    owner_id: leadToDelete?.owner_id || null
+                }
+            })
+
             // Clear selected lead if it's the one being deleted
-            if (selectedLead?.id === clientToDelete) {
+            if (selectedLead?.id === leadId) {
                 setSelectedLead(null)
                 setIsDetailViewOpen(false)
             }
@@ -448,8 +488,8 @@ export default function LeadsPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <Users size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
+                                <Users size={36} strokeWidth={1.5} className="ah-window-title-icon" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -466,9 +506,9 @@ export default function LeadsPage() {
                         <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
                                     ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
-                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
+                                    : 'bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
                                     borderColor: 'var(--card-border)',
@@ -477,7 +517,7 @@ export default function LeadsPage() {
                             >
                                 <div className='flex items-center gap-2'>
                                     {isEditingMode ? (
-                                        <span>Bloquear Edición</span>
+                                        <span>Terminar Edición</span>
                                     ) : (
                                         <>
                                             <span>Editar Vista</span>

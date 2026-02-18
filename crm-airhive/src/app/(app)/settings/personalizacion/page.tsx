@@ -51,7 +51,7 @@ export default function PersonalizacionPage() {
                             <button
                                 key={t.id}
                                 onClick={() => setTheme(t.id)}
-                                className='relative p-6 rounded-xl border-2 transition-all hover:scale-105 group'
+                                className='relative p-6 rounded-xl border-2 transition-all hover:scale-105 group ah-accent-hover-surface'
                                 style={{
                                     borderColor: isActive ? '#2048FF' : 'var(--card-border)',
                                     background: 'var(--card-bg)',

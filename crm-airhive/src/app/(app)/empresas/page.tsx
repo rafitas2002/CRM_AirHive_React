@@ -22,6 +22,24 @@ export type CompanyWithProjects = CompanyData & {
     projectAntiquityDate: string | null
 }
 
+function parseSupabaseError(error: any, fallback: string) {
+    if (!error) return fallback
+    if (typeof error === 'string') return error
+    if (error?.message) return error.message as string
+
+    const fragments = [error?.code, error?.details, error?.hint].filter(Boolean)
+    if (fragments.length > 0) return fragments.join(' | ')
+
+    try {
+        const serialized = JSON.stringify(error, Object.getOwnPropertyNames(error))
+        if (serialized && serialized !== '{}') return serialized
+    } catch {
+        // ignore serialization failures and use fallback
+    }
+
+    return fallback
+}
+
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
@@ -189,16 +207,36 @@ export default function EmpresasPage() {
 
     const confirmDelete = async () => {
         if (!companyToDelete) return
+        const companyId = companyToDelete
+        const companyToDeleteData = companies.find((company) => company.id === companyId)
 
         const { error } = await supabase
             .from('empresas')
             .delete()
-            .eq('id', companyToDelete)
+            .eq('id', companyId)
 
         if (error) {
-            console.error('Error deleting company:', error)
-            alert('Error al eliminar la empresa')
+            console.error('Error deleting company:', {
+                code: (error as any)?.code,
+                message: (error as any)?.message,
+                details: (error as any)?.details,
+                hint: (error as any)?.hint,
+                raw: error
+            })
+            alert(`Error al eliminar la empresa: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
         } else {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent({
+                eventType: 'company_deleted',
+                entityType: 'company',
+                entityId: companyId,
+                metadata: {
+                    nombre: companyToDeleteData?.nombre || null,
+                    industria: companyToDeleteData?.industria || null,
+                    ubicacion: companyToDeleteData?.ubicacion || null
+                }
+            })
+
             await fetchCompanies()
         }
 
@@ -277,8 +315,8 @@ export default function EmpresasPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <Building2 size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
+                                <Building2 size={36} strokeWidth={1.5} className="ah-window-title-icon" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -295,9 +333,9 @@ export default function EmpresasPage() {
                         <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
                                     ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
-                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
+                                    : 'bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
                                     borderColor: 'var(--card-border)',

@@ -20,6 +20,7 @@ import SellerRace from '@/components/SellerRace'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
 import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 import MyTasksWidget from '@/components/MyTasksWidget'
+import { rankRaceItems } from '@/lib/raceRanking'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type History = {
@@ -120,12 +121,13 @@ function AdminDashboardView({ username }: { username: string }) {
     const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
+    const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.negotiationPipeline)
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-10'>
                 {/* Welcome Header - Unified CRM Design */}
-                <div className='relative overflow-hidden p-8 md:p-10 rounded-[40px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                <div className='relative overflow-hidden p-8 md:p-10 rounded-[40px] border shadow-xl' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
                     <div className='absolute -top-24 -right-16 w-80 h-80 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute -bottom-24 -left-20 w-72 h-72 rounded-full blur-3xl opacity-15 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute inset-0 pointer-events-none opacity-55' style={{ background: 'linear-gradient(125deg, transparent 0%, rgba(255,255,255,0.1) 38%, transparent 75%)' }} />
@@ -194,7 +196,7 @@ function AdminDashboardView({ username }: { username: string }) {
 
                 {/* KPI Bar */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Forecast Real (Adjusted)</label>
                             <Zap className='w-5 h-5 text-purple-500 group-hover:animate-pulse' />
@@ -205,7 +207,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Ponderado por score histórico</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Calidad de Datos</label>
                             <AlertCircle className='w-5 h-5 text-amber-500 group-hover:shake' />
@@ -214,7 +216,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Leads sin valor estimado</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Progreso Semanal</label>
                             <Target className='w-5 h-5 text-emerald-500' />
@@ -250,7 +252,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         />
 
                         {/* Top Performance Table Redesigned */}
-                        <div className='rounded-[40px] border shadow-xl overflow-hidden cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[40px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex justify-between items-center px-8 py-5 border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
                                 <h3 className='font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
                                     <Trophy size={14} strokeWidth={2.2} className='text-amber-500' />
@@ -259,15 +261,17 @@ function AdminDashboardView({ username }: { username: string }) {
                                 <Users className='w-4 h-4' style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
                             </div>
                             <div className='p-4 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4'>
-                                {stats.sellers.slice(0, 6).map((s, i) => (
+                                {rankedSellers.slice(0, 6).map((entry) => {
+                                    const s = entry.item
+                                    return (
                                     <div key={s.name} className='flex items-center justify-between p-4 rounded-2xl transition-all group' style={{ background: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                                         <div className='flex items-center gap-4'>
-                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${i === 0 ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' :
-                                                i === 1 ? 'bg-slate-500/20 text-slate-500 border border-slate-500/30' :
-                                                    i === 2 ? 'bg-orange-500/20 text-orange-600 border border-orange-500/30' :
+                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm transition-transform group-hover:scale-110 ${entry.medal === 'gold' ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30' :
+                                                entry.medal === 'silver' ? 'bg-slate-500/20 text-slate-500 border border-slate-500/30' :
+                                                    entry.medal === 'bronze' ? 'bg-orange-500/20 text-orange-600 border border-orange-500/30' :
                                                         'bg-gray-500/10 text-gray-500 border border-gray-500/20'
                                                 }`}>
-                                                {i + 1}
+                                                {entry.rank}
                                             </div>
                                             <div>
                                                 <p className='font-black text-sm group-hover:text-[#1700AC] transition-colors' style={{ color: 'var(--text-primary)' }}>{s.name}</p>
@@ -284,7 +288,8 @@ function AdminDashboardView({ username }: { username: string }) {
                                             <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Forecast Adj</p>
                                         </div>
                                     </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     </div>
@@ -294,7 +299,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <PipelineVisualizer data={stats.funnel} />
 
                         {/* Audit Recommendation Card */}
-                        <div className='p-8 rounded-[40px] overflow-hidden relative border shadow-sm cursor-pointer' style={{ background: 'var(--home-audit-bg)', borderColor: 'var(--home-audit-border)' }}>
+                        <div className='p-8 rounded-[40px] overflow-hidden relative border shadow-sm' style={{ background: 'var(--home-audit-bg)', borderColor: 'var(--home-audit-border)' }}>
                             <div className='absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-20' style={{ background: 'var(--home-audit-title)' }}></div>
                             <h4 className='text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2' style={{ color: 'var(--home-audit-title)' }}>
                                 <AlertCircle size={14} />
@@ -364,7 +369,7 @@ function SellerHomeView({ username }: { username: string }) {
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Welcome Header */}
-                <div className='relative overflow-hidden p-8 rounded-[34px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                <div className='relative overflow-hidden p-8 rounded-[34px] border shadow-xl' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
                     <div className='absolute -top-20 -right-12 w-64 h-64 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute inset-0 pointer-events-none opacity-40' style={{ background: 'linear-gradient(120deg, transparent 0%, rgba(32,72,255,0.08) 45%, transparent 80%)' }} />
 
@@ -400,19 +405,19 @@ function SellerHomeView({ username }: { username: string }) {
 
                 {/* Stats Cards */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Leads Activos</label>
                         <p className='text-4xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{stats.activeLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>En tu pipeline</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>En Negociación</label>
                         <p className='text-4xl font-black text-amber-600 mt-2'>{stats.negotiationLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Requieren seguimiento</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Forecast Ponderado</label>
                         <p className='text-4xl font-black text-emerald-600 mt-2'>
                             ${stats.totalValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
@@ -430,7 +435,7 @@ function SellerHomeView({ username }: { username: string }) {
 
                     {/* Right Column - Quick Actions */}
                     <div className='lg:col-span-2 space-y-6'>
-                        <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                                 🎯 Acciones Rápidas
                             </h2>
@@ -470,7 +475,7 @@ function SellerHomeView({ username }: { username: string }) {
                             </div>
                         </div>
 
-                        <div className='p-6 rounded-2xl border-2 cursor-pointer' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl border-2' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <h3 className='text-lg font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
                                 💡 Tip del Día
                             </h3>
