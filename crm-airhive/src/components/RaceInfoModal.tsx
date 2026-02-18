@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Trophy, Medal, Info, History, RefreshCw, Award } from 'lucide-react'
+import { X, Trophy, Info, History, RefreshCw, Award } from 'lucide-react'
 import { getRaceStats, getPastRaces, syncRaceResults } from '@/app/actions/race'
 
 interface RaceInfoModalProps {
@@ -28,12 +28,6 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
     const [loading, setLoading] = useState(false)
     const [syncing, setSyncing] = useState(false)
 
-    useEffect(() => {
-        if (isOpen && activeTab !== 'info') {
-            loadData()
-        }
-    }, [isOpen, activeTab])
-
     const loadData = async () => {
         setLoading(true)
         const [statsRes, historyRes] = await Promise.all([getRaceStats(), getPastRaces()])
@@ -52,6 +46,12 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
         }
         setLoading(false)
     }
+
+    useEffect(() => {
+        if (isOpen && activeTab !== 'info') {
+            loadData()
+        }
+    }, [isOpen, activeTab])
 
     const handleSync = async () => {
         setSyncing(true)
@@ -88,7 +88,7 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                     </div>
 
                     {/* Tabs */}
-                    <div className='flex border-b px-8 flex-shrink-0'>
+                    <div className='flex border-b px-8 flex-shrink-0' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                         {[
                             { id: 'info', label: 'Leyenda Emojis', icon: Info },
                             { id: 'medals', label: 'Medallero Histórico', icon: Award },
@@ -98,9 +98,10 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as any)}
                                 className={`flex items-center gap-2 px-6 py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === tab.id
-                                    ? 'border-[#2048FF] text-[#2048FF]'
-                                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                                    ? 'border-[var(--input-focus)]'
+                                    : 'border-transparent'
                                     }`}
+                                style={{ color: activeTab === tab.id ? 'var(--input-focus)' : 'var(--text-secondary)' }}
                             >
                                 <tab.icon size={16} />
                                 {tab.label}
@@ -109,17 +110,21 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                     </div>
 
                     {/* Content */}
-                    <div className='flex-1 overflow-y-auto p-8'>
+                    <div className='flex-1 overflow-y-auto p-8' style={{ background: 'var(--card-bg)' }}>
                         {/* Info Tab */}
                         {activeTab === 'info' && (
                             <div className='grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300'>
                                 {EMOJI_SCALE.map((item, idx) => (
-                                    <div key={idx} className='flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:shadow-md transition-all'>
+                                    <div
+                                        key={idx}
+                                        className='flex items-center gap-4 p-4 rounded-xl border hover:shadow-md transition-all'
+                                        style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+                                    >
                                         <div className='text-4xl filter drop-shadow-sm'>{item.emoji}</div>
                                         <div>
-                                            <h4 className='font-bold text-[#0A1635] text-lg'>{item.label}</h4>
-                                            <p className='text-xs font-bold text-[#2048FF] uppercase tracking-wider mb-1'>{item.range}</p>
-                                            <p className='text-sm text-gray-500'>{item.desc}</p>
+                                            <h4 className='font-bold text-lg' style={{ color: 'var(--text-primary)' }}>{item.label}</h4>
+                                            <p className='text-xs font-bold uppercase tracking-wider mb-1' style={{ color: 'var(--input-focus)' }}>{item.range}</p>
+                                            <p className='text-sm' style={{ color: 'var(--text-secondary)' }}>{item.desc}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -130,11 +135,15 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                         {activeTab === 'medals' && (
                             <div className='animate-in fade-in duration-300'>
                                 {loading && stats.length === 0 ? (
-                                    <div className='text-center py-10 text-gray-400'>Cargando medallero...</div>
+                                    <div className='text-center py-10' style={{ color: 'var(--text-secondary)' }}>Cargando medallero...</div>
                                 ) : stats.length === 0 ? (
-                                    <div className='text-center py-10 text-gray-400 flex flex-col items-center gap-4'>
+                                    <div className='text-center py-10 flex flex-col items-center gap-4' style={{ color: 'var(--text-secondary)' }}>
                                         <p>No hay medallas registradas aún.</p>
-                                        <button onClick={handleSync} className='bg-blue-100 text-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-200 transition-colors'>
+                                        <button
+                                            onClick={handleSync}
+                                            className='px-4 py-2 rounded-lg text-sm font-bold transition-colors'
+                                            style={{ background: 'color-mix(in srgb, var(--input-focus) 14%, var(--card-bg))', color: 'var(--input-focus)' }}
+                                        >
                                             Sincronizar Datos Históricos
                                         </button>
                                     </div>
@@ -142,7 +151,7 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                     <div className='space-y-4'>
                                         {/* Podium Top 3 Highlight could go here, but simple list for now */}
                                         {stats.map((stat, idx) => (
-                                            <div key={idx} className='flex items-center p-4 rounded-xl border border-gray-100 bg-white hover:shadow-md transition-all'>
+                                            <div key={idx} className='flex items-center p-4 rounded-xl border hover:shadow-md transition-all' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black mr-4 ${idx === 0 ? 'bg-amber-100 text-amber-600' :
                                                     idx === 1 ? 'bg-gray-100 text-gray-600' :
                                                         idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-gray-50 text-gray-400'
@@ -150,7 +159,7 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                                     {idx + 1}
                                                 </div>
                                                 <div className='flex-1'>
-                                                    <h3 className='font-bold text-[#0A1635] text-lg'>{stat.name}</h3>
+                                                    <h3 className='font-bold text-lg' style={{ color: 'var(--text-primary)' }}>{stat.name}</h3>
                                                 </div>
                                                 <div className='flex gap-4 items-center'>
                                                     {stat.gold > 0 && (
@@ -182,25 +191,26 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                         {/* History Tab */}
                         {activeTab === 'history' && (
                             <div className='animate-in fade-in duration-300 space-y-6'>
-                                <div className='flex justify-end sticky top-0 bg-white z-10 py-2'>
+                                <div className='flex justify-end sticky top-0 z-10 py-2' style={{ background: 'var(--card-bg)' }}>
                                     <button
                                         onClick={handleSync}
                                         disabled={syncing}
-                                        className='text-xs font-bold flex items-center gap-2 text-[#2048FF] hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors border border-blue-100'
+                                        className='text-xs font-bold flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors border'
+                                        style={{ color: 'var(--input-focus)', borderColor: 'color-mix(in srgb, var(--input-focus) 30%, var(--card-border))', background: 'color-mix(in srgb, var(--input-focus) 8%, var(--card-bg))' }}
                                     >
                                         <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
                                         {syncing ? 'Sincronizando...' : 'Actualizar Historial'}
                                     </button>
                                 </div>
                                 {loading && !syncing ? (
-                                    <div className='text-center py-10 text-gray-400'>Cargando historial...</div>
+                                    <div className='text-center py-10' style={{ color: 'var(--text-secondary)' }}>Cargando historial...</div>
                                 ) : Object.keys(pastRaces).length === 0 ? (
-                                    <div className='text-center py-10 space-y-4 bg-gray-50 rounded-xl p-8'>
-                                        <p className='text-gray-400'>No hay carreras pasadas registradas.</p>
+                                    <div className='text-center py-10 space-y-4 rounded-xl p-8 border' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                        <p style={{ color: 'var(--text-secondary)' }}>No hay carreras pasadas registradas.</p>
                                         <button onClick={handleSync} className='bg-[#2048FF] text-white px-6 py-2 rounded-lg shadow-lg hover:shadow-xl hover:bg-[#1700AC] transition-all text-sm font-bold'>
                                             Generar Historial desde Ventas
                                         </button>
-                                        <p className='text-xs text-gray-400 max-w-sm mx-auto'>
+                                        <p className='text-xs max-w-sm mx-auto' style={{ color: 'var(--text-secondary)' }}>
                                             Esto analizará todas las ventas cerradas y generará los resultados históricos.
                                         </p>
                                     </div>
@@ -218,16 +228,16 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                                 const top3 = runners.slice(0, 3)
 
                                                 return (
-                                                    <div key={period} className='border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow'>
-                                                        <div className='bg-gradient-to-r from-gray-50 to-white px-6 py-3 border-b border-gray-100 flex justify-between items-center'>
-                                                            <h4 className='font-black text-[#0A1635] capitalize text-lg tracking-tight'>{monthName}</h4>
-                                                            <span className='text-xs font-bold text-gray-400 bg-white px-2 py-1 rounded-md border'>
+                                                    <div key={period} className='border rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                                        <div className='px-6 py-3 border-b flex justify-between items-center' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                            <h4 className='font-black capitalize text-lg tracking-tight' style={{ color: 'var(--text-primary)' }}>{monthName}</h4>
+                                                            <span className='text-xs font-bold px-2 py-1 rounded-md border' style={{ color: 'var(--text-secondary)', borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                                                                 {runners.length} Participantes
                                                             </span>
                                                         </div>
-                                                        <div className='divide-y divide-gray-50'>
+                                                        <div className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
                                                             {top3.map((runner: any, idx: number) => (
-                                                                <div key={idx} className='px-6 py-4 flex items-center justify-between hover:bg-blue-50/30 transition-colors'>
+                                                                <div key={idx} className='px-6 py-4 flex items-center justify-between transition-colors' style={{ background: 'transparent' }}>
                                                                     <div className='flex items-center gap-4'>
                                                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-sm border
                                                                         ${idx === 0 ? 'bg-yellow-100 border-yellow-200 text-yellow-700' :
@@ -236,13 +246,13 @@ export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
                                                                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
                                                                         </div>
                                                                         <div>
-                                                                            <span className='text-sm font-bold text-[#0A1635] block'>{runner.name}</span>
-                                                                            <span className='text-[10px] text-gray-400 font-bold uppercase tracking-wider'>
+                                                                            <span className='text-sm font-bold block' style={{ color: 'var(--text-primary)' }}>{runner.name}</span>
+                                                                            <span className='text-[10px] font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>
                                                                                 {idx === 0 ? '1er Lugar' : idx === 1 ? '2do Lugar' : '3er Lugar'}
                                                                             </span>
                                                                         </div>
                                                                     </div>
-                                                                    <span className='text-sm font-mono font-bold text-[#2048FF] bg-blue-50 px-3 py-1 rounded-lg'>
+                                                                    <span className='text-sm font-mono font-bold px-3 py-1 rounded-lg' style={{ color: 'var(--input-focus)', background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))' }}>
                                                                         ${Number(runner.total_sales).toLocaleString('es-MX')}
                                                                     </span>
                                                                 </div>

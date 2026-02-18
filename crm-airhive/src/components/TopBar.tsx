@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, UserRound, Settings, LogOut, type LucideIcon } from 'lucide-react'
+import { Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, UserRound, Settings, LogOut, LineChart, Sparkles, type LucideIcon } from 'lucide-react'
 
 export default function TopBar() {
     const pathname = usePathname()
@@ -224,20 +224,53 @@ export default function TopBar() {
 
                     {/* Menú CORRELACIONES (solo admin) */}
                     {isAdmin && (
-                        <Link
-                            href='/admin/correlaciones'
-                            className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
-                        >
-                            Correlaciones
-                            <span
-                                className={[
-                                    'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
-                                    'transition-all duration-300 ease-out',
-                                    pathname === '/admin/correlaciones' ? 'w-full opacity-100' : 'w-0 opacity-0',
-                                    'group-hover:w-full group-hover:opacity-100'
-                                ].join(' ')}
-                            />
-                        </Link>
+                        <div className='relative group h-full flex items-center'>
+                            <Link
+                                href='/admin/correlaciones'
+                                className='relative text-white font-semibold text-base px-2 py-2 group flex items-center gap-1.5'
+                            >
+                                Correlaciones
+                                <span
+                                    className={[
+                                        'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                        'transition-all duration-300 ease-out',
+                                        pathname.startsWith('/admin/correlaciones') ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                        'group-hover:w-full group-hover:opacity-100'
+                                    ].join(' ')}
+                                />
+                            </Link>
+
+                            <div className='absolute top-[100%] left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 min-w-[220px] translate-y-2 group-hover:translate-y-0'>
+                                <div className='bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1.5'>
+                                    {[
+                                        { href: '/admin/correlaciones', label: 'Resumen', icon: BarChart3 },
+                                        { href: '/admin/correlaciones/grafica', label: 'Gráfica', icon: LineChart },
+                                        { href: '/admin/correlaciones/pronostico', label: 'Pronóstico', icon: Sparkles }
+                                    ].map((item) => {
+                                        const Icon = item.icon as LucideIcon
+                                        const isActive = pathname === item.href
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                className='relative flex items-center gap-3 px-4 py-3 text-white font-semibold text-sm hover:bg-white/5 transition-colors group/item rounded-lg overflow-hidden'
+                                            >
+                                                <Icon className={dropdownIconClass} strokeWidth={2.2} />
+                                                {item.label}
+                                                <span
+                                                    className={[
+                                                        'absolute left-0 bottom-0 h-[2px] bg-[#2048FF]',
+                                                        'transition-all duration-300 ease-out',
+                                                        isActive ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                                        'group-hover/item:w-full group-hover/item:opacity-100'
+                                                    ].join(' ')}
+                                                />
+                                            </Link>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </nav>
 

@@ -48,6 +48,20 @@ export default function PreLeadsPage() {
     const [connectedGoogleEmail, setConnectedGoogleEmail] = useState<string | null>(null)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
 
+    const emitTrackingEvent = async (payload: {
+        eventType: 'pre_lead_created' | 'pre_lead_updated' | 'pre_lead_converted' | 'pre_lead_deleted' | 'lead_created'
+        entityType: 'pre_lead' | 'lead'
+        entityId?: string | number
+        metadata?: Record<string, any>
+    }) => {
+        try {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent(payload as any)
+        } catch (trackError) {
+            console.error('[PreLeads] Tracking error (non-blocking):', trackError)
+        }
+    }
+
     const fetchPreLeads = async () => {
         const isInitial = preLeads.length === 0
         if (isInitial) setLoading(true)
@@ -156,8 +170,19 @@ export default function PreLeadsPage() {
             }
 
             if (modalMode === 'create') {
-                const { error } = await table.insert(preLeadData)
+                const { data: createdPreLead, error } = await table.insert(preLeadData).select('id').single()
                 if (error) throw error
+
+                void emitTrackingEvent({
+                    eventType: 'pre_lead_created',
+                    entityType: 'pre_lead',
+                    entityId: createdPreLead?.id,
+                    metadata: {
+                        industria_id: preLeadData.industria_id,
+                        tamano: preLeadData.tamano,
+                        empresa_id: preLeadData.empresa_id
+                    }
+                })
 
                 // Show success message with company info
                 if (companyResult.isNew) {
@@ -170,6 +195,17 @@ export default function PreLeadsPage() {
                     .update(preLeadData)
                     .eq('id', currentPreLead.id)
                 if (error) throw error
+
+                void emitTrackingEvent({
+                    eventType: 'pre_lead_updated',
+                    entityType: 'pre_lead',
+                    entityId: currentPreLead.id,
+                    metadata: {
+                        industria_id: preLeadData.industria_id,
+                        tamano: preLeadData.tamano,
+                        empresa_id: preLeadData.empresa_id
+                    }
+                })
                 alert('✅ Pre-Lead actualizado exitosamente.')
             }
 
@@ -223,14 +259,25 @@ export default function PreLeadsPage() {
                 converted_by: auth.user?.id
             } : {}
 
-            const { error: insertError } = await (supabase.from('clientes') as any).insert({
+            const { data: createdLead, error: insertError } = await (supabase.from('clientes') as any).insert({
                 ...data,
                 owner_id: auth.user?.id,
                 owner_username: auth.profile?.full_name || auth.username,
                 ...traceability
-            })
+            }).select('id').single()
 
             if (insertError) throw insertError
+
+            void emitTrackingEvent({
+                eventType: 'lead_created',
+                entityType: 'lead',
+                entityId: createdLead?.id,
+                metadata: {
+                    source: clientModalMode === 'convert' ? 'pre_lead_conversion' : 'pre_lead_page',
+                    etapa: data.etapa,
+                    valor_estimado: data.valor_estimado
+                }
+            })
 
             // 2. If conversion, mark the pre-lead as converted
             if (clientModalMode === 'convert' && sourcePreLead?.id) {
@@ -242,6 +289,16 @@ export default function PreLeadsPage() {
                         converted_by: auth.user?.id || null
                     })
                     .eq('id', sourcePreLead.id)
+
+                void emitTrackingEvent({
+                    eventType: 'pre_lead_converted',
+                    entityType: 'pre_lead',
+                    entityId: sourcePreLead.id,
+                    metadata: {
+                        lead_id: createdLead?.id,
+                        previous_vendedor_id: sourcePreLead.vendedor_id
+                    }
+                })
             }
 
             setIsClientModalOpen(false)
@@ -255,8 +312,18 @@ export default function PreLeadsPage() {
     const handleDelete = async () => {
         if (!deleteId) return
         try {
+            const deletedPreLead = preLeads.find((pl) => pl.id === deleteId)
             const { error } = await (supabase.from('pre_leads') as any).delete().eq('id', deleteId)
             if (error) throw error
+            void emitTrackingEvent({
+                eventType: 'pre_lead_deleted',
+                entityType: 'pre_lead',
+                entityId: deleteId,
+                metadata: {
+                    vendedor_id: deletedPreLead?.vendedor_id,
+                    empresa_id: deletedPreLead?.empresa_id
+                }
+            })
             setIsDeleteModalOpen(false)
             fetchPreLeads()
         } catch (error: any) {
@@ -321,8 +388,8 @@ export default function PreLeadsPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <Target size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
+                                <Target size={36} strokeWidth={1.5} className="ah-window-title-icon" />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -339,9 +406,9 @@ export default function PreLeadsPage() {
                         <div className='flex gap-3'>
                             <button
                                 onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
+                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
                                     ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
-                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
+                                    : 'bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
                                     }`}
                                 style={!isEditingMode ? {
                                     borderColor: 'var(--card-border)',
@@ -350,7 +417,7 @@ export default function PreLeadsPage() {
                             >
                                 <div className='flex items-center gap-2'>
                                     {isEditingMode ? (
-                                        <span>Bloquear Edición</span>
+                                        <span>Terminar Edición</span>
                                     ) : (
                                         <>
                                             <span>Editar Vista</span>
@@ -420,60 +487,61 @@ export default function PreLeadsPage() {
                                         className='ah-search-input'
                                     />
                                 </div>
-                                        <select
-                                            value={vendedorFilter}
-                                            onChange={(e) => setVendedorFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Vendedor: Todos</option>
-                                            {uniqueVendedores.map(v => (
-                                                <option key={v as string} value={v as string}>{v as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={industryFilter}
-                                            onChange={(e) => setIndustryFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Industria: Todas</option>
-                                            {uniqueIndustries.map(ind => (
-                                                <option key={ind as string} value={ind as string}>{ind as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={locationFilter}
-                                            onChange={(e) => setLocationFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Ubicación: Todas</option>
-                                            {uniqueLocations.map(loc => (
-                                                <option key={loc as string} value={loc as string}>{loc as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={sortBy}
-                                            onChange={(e) => setSortBy(e.target.value)}
-                                            className='ah-select-control ah-select-control-order'
-                                        >
-                                            <option value="recent">Orden: Reciente</option>
-                                            <option value="name">Orden: Alfabético</option>
-                                        </select>
 
-                                        {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || sortBy !== 'recent') && (
-                                            <button
-                                                onClick={() => {
-                                                    setSearch('')
-                                                    setVendedorFilter('All')
-                                                    setIndustryFilter('All')
-                                                    setLocationFilter('All')
-                                                    setSortBy('recent')
-                                                }}
-                                                className='ah-reset-filter-btn group'
-                                                title='Limpiar Filtros'
-                                            >
-                                                <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
-                                            </button>
-                                        )}
+                                <select
+                                    value={vendedorFilter}
+                                    onChange={(e) => setVendedorFilter(e.target.value)}
+                                    className='ah-select-control'
+                                >
+                                    <option value="All">Vendedor: Todos</option>
+                                    {uniqueVendedores.map(v => (
+                                        <option key={v as string} value={v as string}>{v as string}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={industryFilter}
+                                    onChange={(e) => setIndustryFilter(e.target.value)}
+                                    className='ah-select-control'
+                                >
+                                    <option value="All">Industria: Todas</option>
+                                    {uniqueIndustries.map(ind => (
+                                        <option key={ind as string} value={ind as string}>{ind as string}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={locationFilter}
+                                    onChange={(e) => setLocationFilter(e.target.value)}
+                                    className='ah-select-control'
+                                >
+                                    <option value="All">Ubicación: Todas</option>
+                                    {uniqueLocations.map(loc => (
+                                        <option key={loc as string} value={loc as string}>{loc as string}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    className='ah-select-control ah-select-control-order'
+                                >
+                                    <option value="recent">Orden: Reciente</option>
+                                    <option value="name">Orden: Nombre</option>
+                                </select>
+
+                                {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || sortBy !== 'recent') && (
+                                    <button
+                                        onClick={() => {
+                                            setSearch('')
+                                            setVendedorFilter('All')
+                                            setIndustryFilter('All')
+                                            setLocationFilter('All')
+                                            setSortBy('recent')
+                                        }}
+                                        className='ah-reset-filter-btn group'
+                                        title='Limpiar Filtros'
+                                    >
+                                        <RotateCw size={16} className='group-active:rotate-180 transition-transform' />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
