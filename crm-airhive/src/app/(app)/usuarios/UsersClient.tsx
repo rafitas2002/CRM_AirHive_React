@@ -5,7 +5,7 @@ import { Search, Briefcase, Filter, Users, User, Building2 } from 'lucide-react'
 import DetailedUserModal from '@/components/DetailedUserModal'
 import RoleBadge from '@/components/RoleBadge'
 import { getCatalogs } from '@/app/actions/catalogs'
-import { getRoleMeta } from '@/lib/roleUtils'
+import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useTheme } from '@/lib/ThemeContext'
 
 interface UsersClientProps {
@@ -35,6 +35,25 @@ function getUserAreaIds(user: any): string[] {
 
     const fallbackAreaId = user?.details?.area_id
     if (typeof fallbackAreaId === 'string' && fallbackAreaId.trim()) normalized.add(fallbackAreaId.trim())
+
+    return Array.from(normalized)
+}
+
+function getUserJobPositionIds(user: any): string[] {
+    const detailPositions = user?.details?.job_position_ids ?? user?.details?.job_positions
+    const normalized = new Set<string>()
+
+    if (Array.isArray(detailPositions)) {
+        detailPositions.forEach(position => {
+            if (typeof position === 'string' && position.trim()) normalized.add(position.trim())
+            if (position && typeof position === 'object' && typeof position.id === 'string' && position.id.trim()) normalized.add(position.id.trim())
+        })
+    } else if (typeof detailPositions === 'string' && detailPositions.trim()) {
+        detailPositions.split(',').map(v => v.trim()).filter(Boolean).forEach(v => normalized.add(v))
+    }
+
+    const fallbackPositionId = user?.details?.job_position_id
+    if (typeof fallbackPositionId === 'string' && fallbackPositionId.trim()) normalized.add(fallbackPositionId.trim())
 
     return Array.from(normalized)
 }
@@ -212,11 +231,12 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         const role = (user.role || '').toLowerCase()
         const areaNames = getUserAreaIds(user).map(id => resolve('areas', id)).filter(Boolean)
         const department = areaNames.join(' ').toLowerCase()
-        const position = (user.details?.job_position_id ? resolve('job_positions', user.details.job_position_id) : '').toLowerCase()
+        const positionNames = getUserJobPositionIds(user).map(id => resolve('job_positions', id)).filter(Boolean)
+        const position = positionNames.join(' ').toLowerCase()
 
         const matchesSearch = fullName.includes(searchLower) || role.includes(searchLower) || department.includes(searchLower) || position.includes(searchLower)
         const matchesArea = !selectedArea || getUserAreaIds(user).includes(selectedArea)
-        const matchesPosition = !selectedPosition || user.details?.job_position_id === selectedPosition
+        const matchesPosition = !selectedPosition || getUserJobPositionIds(user).includes(selectedPosition)
 
         return matchesSearch && matchesArea && matchesPosition
     })
@@ -336,7 +356,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                 {filteredUsers.map(user => {
                     const roleMeta = getRoleMeta(user.role)
                     const isAdmin = user.role === 'admin'
-                    const silhouetteColor = isAdmin ? '#F59E0B' : roleMeta.textColor
+                    const silhouetteColor = getRoleSilhouetteColor(user.role)
                     const cardHoverClass = isAdmin
                         ? 'hover:border-amber-400 hover:shadow-amber-500/10'
                         : 'hover:border-emerald-400 hover:shadow-emerald-500/10'
@@ -347,6 +367,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                         ? 'group-hover:text-amber-300'
                         : 'group-hover:text-emerald-300'
                     const areaIds = getUserAreaIds(user)
+                    const jobPositionNames = getUserJobPositionIds(user).map(id => resolve('job_positions', id)).filter(Boolean)
                     const areaItems = areaIds
                         .map(areaId => {
                             const name = resolve('areas', areaId)
@@ -384,7 +405,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                         {user.full_name}
                                     </h3>
                                     <p className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mt-1">
-                                        {resolve('job_positions', user.details?.job_position_id) || roleMeta.label}
+                                        {jobPositionNames.length > 0 ? jobPositionNames.join(' / ') : roleMeta.label}
                                     </p>
                                     <RoleBadge role={user.role} className='mt-2' compact />
                                 </div>

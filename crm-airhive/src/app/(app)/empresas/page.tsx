@@ -20,6 +20,10 @@ export type CompanyWithProjects = CompanyData & {
     lostProjects: number
     antiquityDate: string
     projectAntiquityDate: string | null
+    lifecycle_stage?: 'pre_lead' | 'lead' | string | null
+    source_channel?: string | null
+    pre_leads_count?: number | null
+    leads_count?: number | null
 }
 
 function parseSupabaseError(error: any, fallback: string) {
@@ -61,6 +65,7 @@ export default function EmpresasPage() {
     const [filterIndustry, setFilterIndustry] = useState('All')
     const [filterSize, setFilterSize] = useState('All')
     const [filterLocation, setFilterLocation] = useState('All')
+    const [filterLifecycle, setFilterLifecycle] = useState<'All' | 'lead' | 'pre_lead'>('All')
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
 
     const supabase = createClient()
@@ -88,8 +93,20 @@ export default function EmpresasPage() {
             const matchesIndustry = filterIndustry === 'All' || companyIndustries.includes(filterIndustry)
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
             const matchesLocation = filterLocation === 'All' || company.ubicacion?.toLowerCase().includes(filterLocation.toLowerCase())
+            const lifecycle = (company.lifecycle_stage || '').toLowerCase()
+            const sourceChannel = (company.source_channel || '').toLowerCase()
+            const preLeadsCount = Number(company.pre_leads_count || 0)
+            const leadsCount = Number(company.leads_count || 0)
+            const isPreLeadCompany =
+                lifecycle === 'pre_lead' ||
+                sourceChannel === 'pre_lead' ||
+                (preLeadsCount > 0 && leadsCount === 0)
+            const matchesLifecycle =
+                filterLifecycle === 'All' ||
+                (filterLifecycle === 'pre_lead' && isPreLeadCompany) ||
+                (filterLifecycle === 'lead' && !isPreLeadCompany)
 
-            return matchesSearch && matchesIndustry && matchesSize && matchesLocation
+            return matchesSearch && matchesIndustry && matchesSize && matchesLocation && matchesLifecycle
         })
 
         // Sorting
@@ -107,7 +124,7 @@ export default function EmpresasPage() {
         })
 
         return result
-    }, [companies, filterSearch, filterIndustry, filterSize, filterLocation, sortBy])
+    }, [companies, filterSearch, filterIndustry, filterSize, filterLocation, filterLifecycle, sortBy])
 
     // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
@@ -488,6 +505,36 @@ export default function EmpresasPage() {
                                         <span className='ah-count-chip-subtitle'>Encontrados</span>
                                     </div>
                                 </div>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>
+                                        {filteredCompanies.filter((c) => {
+                                            const lifecycle = (c.lifecycle_stage || '').toLowerCase()
+                                            const source = (c.source_channel || '').toLowerCase()
+                                            const preCount = Number(c.pre_leads_count || 0)
+                                            const leadCount = Number(c.leads_count || 0)
+                                            return lifecycle === 'pre_lead' || source === 'pre_lead' || (preCount > 0 && leadCount === 0)
+                                        }).length}
+                                    </span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Pre-leads</span>
+                                        <span className='ah-count-chip-subtitle'>Empresas</span>
+                                    </div>
+                                </div>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>
+                                        {filteredCompanies.filter((c) => {
+                                            const lifecycle = (c.lifecycle_stage || '').toLowerCase()
+                                            const source = (c.source_channel || '').toLowerCase()
+                                            const preCount = Number(c.pre_leads_count || 0)
+                                            const leadCount = Number(c.leads_count || 0)
+                                            return !(lifecycle === 'pre_lead' || source === 'pre_lead' || (preCount > 0 && leadCount === 0))
+                                        }).length}
+                                    </span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Leads</span>
+                                        <span className='ah-count-chip-subtitle'>Empresas</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -523,6 +570,15 @@ export default function EmpresasPage() {
                                         {uniqueLocations.map(loc => (
                                             <option key={loc} value={loc}>{loc}</option>
                                         ))}
+                                    </select>
+                                    <select
+                                        value={filterLifecycle}
+                                        onChange={(e) => setFilterLifecycle(e.target.value as 'All' | 'lead' | 'pre_lead')}
+                                        className='ah-select-control'
+                                    >
+                                        <option value="All">Tipo: Todos</option>
+                                        <option value="lead">Tipo: Lead</option>
+                                        <option value="pre_lead">Tipo: Pre-lead</option>
                                     </select>
                                     <select
                                         value={filterSize}

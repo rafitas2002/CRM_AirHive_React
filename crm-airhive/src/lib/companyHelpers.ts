@@ -44,7 +44,7 @@ export async function createCompanyFromPreLead(
     },
     userId: string
 ): Promise<{ id: string; nombre: string } | null> {
-    const companyData = {
+    const baseData = {
         nombre: preLead.nombre_empresa.trim(),
         ubicacion: preLead.ubicacion || null,
         descripcion: preLead.notas || null,
@@ -53,21 +53,49 @@ export async function createCompanyFromPreLead(
         industria_id: preLead.industria_id || null,
         tamano: preLead.tamano || 1,
         website: preLead.website || null,
-        logo_url: preLead.logo_url || null
+        logo_url: preLead.logo_url || null,
+        source_channel: 'pre_lead',
+        lifecycle_stage: 'pre_lead',
+        created_by: userId,
+        updated_by: userId,
+        pre_leads_count: 1,
+        leads_count: 0,
+        first_pre_lead_at: new Date().toISOString(),
+        last_pre_lead_at: new Date().toISOString()
     }
 
-    const { data, error } = await (supabase.from('empresas') as any).insert(companyData).select('id, nombre').single()
+    const insertVariants = [
+        baseData,
+        // DB without lifecycle/source audit columns
+        (() => {
+            const v = { ...baseData } as any
+            delete v.source_channel
+            delete v.lifecycle_stage
+            delete v.created_by
+            delete v.updated_by
+            delete v.pre_leads_count
+            delete v.leads_count
+            delete v.first_pre_lead_at
+            delete v.last_pre_lead_at
+            return v
+        })(),
+        // Legacy minimal fallback
+        {
+            nombre: baseData.nombre,
+            ubicacion: baseData.ubicacion,
+            descripcion: baseData.descripcion,
+            owner_id: baseData.owner_id,
+            industria: baseData.industria
+        }
+    ]
 
-    if (error) {
-        console.error('Error in createCompanyFromPreLead [Full Object]:', error)
-        console.error('Error Message:', error.message)
-        console.error('Error Code:', error.code)
-        console.error('Error Details:', error.details)
-        console.error('Data attempted to insert:', companyData)
-        return null
+    for (const variant of insertVariants) {
+        const { data, error } = await (supabase.from('empresas') as any).insert(variant).select('id, nombre').single()
+        if (!error && data) return data
     }
 
-    return data
+    console.error('Error in createCompanyFromPreLead: could not insert with any variant')
+    return null
 }
 
 /**

@@ -664,3 +664,15 @@ select:disabled {
 .theme-gris .bg-blue-500\/10 {
   background-color: rgb(30 64 175 / 0.24) !important;
 }
+
+/* Light mode icon experiment: title icon shell clear, glyph blue */
+.theme-claro .ah-icon-card {
+  background: linear-gradient(145deg, #f8fbff 0%, #eef4ff 100%) !important;
+  border-color: rgb(32 72 255 / 0.5) !important;
+  box-shadow: 0 10px 22px rgb(37 99 235 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.9) !important;
+}
+
+.theme-claro .ah-icon-card > svg {
+  color: #0A1635 !important;
+  stroke: #0A1635 !important;
+}

@@ -9,6 +9,8 @@ import TasksList from './TasksList'
 import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { useTheme } from '@/lib/ThemeContext'
+import { BarChart3, Building2, CalendarDays, Camera, CheckSquare, Mail, MessageCircle, PencilLine, Plus, User, NotebookPen, Link2 } from 'lucide-react'
 
 type ClientData = {
     id: number
@@ -73,6 +75,7 @@ export default function ClientDetailView({
     userEmail
 }: ClientDetailViewProps) {
     useBodyScrollLock(isOpen)
+    const { theme } = useTheme()
     const [company, setCompany] = useState<CompanyData | null>(null)
     const [loadingCompany, setLoadingCompany] = useState(false)
     const [supabase] = useState(() => createClient())
@@ -157,10 +160,25 @@ export default function ClientDetailView({
 
     if (!isOpen || !client) return null
 
+    const headerTheme = {
+        claro: {
+            background: 'linear-gradient(135deg, #0A1635 0%, #0f2352 56%, #17306b 100%)',
+            border: 'rgba(255,255,255,0.12)'
+        },
+        gris: {
+            background: 'linear-gradient(135deg, #111827 0%, #1F2937 56%, #0F172A 100%)',
+            border: 'rgba(255,255,255,0.08)'
+        },
+        oscuro: {
+            background: 'linear-gradient(135deg, #070B14 0%, #0B1220 56%, #111827 100%)',
+            border: 'rgba(255,255,255,0.08)'
+        }
+    }[theme]
+
     return (
         <div className='fixed inset-x-0 bottom-0 top-[70px] z-[130] bg-[var(--background)] flex flex-col animate-in slide-in-from-bottom duration-300'>
             {/* Header */}
-            <div className='bg-[#0A1635] px-8 py-5 flex items-center justify-between shadow-xl shrink-0 border-b border-white/5'>
+            <div className='px-8 py-5 flex items-center justify-between shadow-xl shrink-0 border-b' style={{ background: headerTheme.background, borderBottomColor: headerTheme.border }}>
                 <div className='space-y-0.5'>
                     <h1 className='text-2xl font-black text-white tracking-tight leading-none'>
                         {client.nombre}
@@ -170,16 +188,16 @@ export default function ClientDetailView({
                 <div className='flex gap-4'>
                     <button
                         onClick={() => onEditClient(client)}
-                        className='h-11 px-6 bg-[#2048FF] text-white rounded-2xl font-black hover:bg-[#1700AC] transition-all shadow-xl shadow-blue-500/20 flex items-center gap-2 transform active:scale-95 uppercase text-[10px] tracking-widest'
+                        className='h-11 px-6 bg-[#2048FF] text-white rounded-2xl font-black hover:bg-[#1700AC] transition-all shadow-xl shadow-blue-500/20 flex items-center gap-2 transform active:scale-95 uppercase text-[10px] tracking-widest cursor-pointer'
                     >
-                        <span>✏️</span> Editar Lead
+                        <PencilLine size={14} /> Editar Lead
                     </button>
                     {company && (
                         <button
                             onClick={() => onEditCompany(company)}
-                            className='h-11 px-6 bg-white/5 text-white rounded-2xl font-black hover:bg-white/10 transition-all border border-white/10 flex items-center gap-2 uppercase text-[10px] tracking-widest'
+                            className='h-11 px-6 bg-white/5 text-white rounded-2xl font-black hover:bg-white/10 transition-all border border-white/10 flex items-center gap-2 uppercase text-[10px] tracking-widest cursor-pointer'
                         >
-                            <span>🏢</span> Catálogo
+                            <Building2 size={14} /> Catálogo
                         </button>
                     )}
                     <button
@@ -200,8 +218,8 @@ export default function ClientDetailView({
                     {/* Column 1: Lead Information */}
                     <div className='space-y-8'>
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
-                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
-                                👤 Información del Lead
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4 flex items-center gap-2'>
+                                <User size={14} style={{ color: 'var(--input-focus)' }} /> Información del Lead
                             </h2>
 
                             <div className='space-y-8'>
@@ -211,7 +229,7 @@ export default function ClientDetailView({
                                 </div>
 
                                 <div>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Contacto Directo</label>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Contacto Directo</label>
                                     <div className='flex flex-wrap gap-2'>
                                         {client.email && (
                                             <button
@@ -226,9 +244,10 @@ export default function ClientDetailView({
                                                         })
                                                     })
                                                 }}
-                                                className='px-4 py-2.5 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2'
+                                                className='px-4 py-2.5 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 hover:brightness-95 cursor-pointer'
+                                                style={{ background: 'color-mix(in srgb, #3b82f6 10%, var(--card-bg))', color: '#2563eb', borderColor: 'color-mix(in srgb, #3b82f6 24%, var(--card-border))' }}
                                             >
-                                                📧 {client.email}
+                                                <Mail size={14} /> {client.email}
                                             </button>
                                         )}
                                         {client.telefono && (
@@ -254,17 +273,18 @@ export default function ClientDetailView({
                                                         }, 2000)
                                                     })
                                                 }}
-                                                className='px-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2'
+                                                className='px-4 py-2.5 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2 hover:brightness-95 cursor-pointer'
+                                                style={{ background: 'color-mix(in srgb, #10b981 10%, var(--card-bg))', color: '#059669', borderColor: 'color-mix(in srgb, #10b981 24%, var(--card-border))' }}
                                             >
-                                                💬 {client.telefono}
+                                                <MessageCircle size={14} /> {client.telefono}
                                             </button>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className='grid grid-cols-2 gap-6 pt-4 border-t border-gray-50'>
+                                <div className='grid grid-cols-2 gap-6 pt-4 border-t border-[var(--card-border)]'>
                                     <div className='space-y-1.5'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Etapa Actual</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block'>Etapa Actual</label>
                                         <div className='inline-block'>
                                             <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2
                                                 ${client.etapa === 'Cerrado Ganado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
@@ -276,10 +296,10 @@ export default function ClientDetailView({
                                         </div>
                                     </div>
                                     <div className='space-y-1.5'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block'>Calificación</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block'>Calificación</label>
                                         <div className='text-lg font-bold flex gap-0.5'>
                                             {[1, 2, 3, 4, 5].map((star) => (
-                                                <span key={star} className={star <= (client.calificacion || 0) ? 'text-amber-400' : 'text-gray-200'}>
+                                                <span key={star} style={{ color: star <= (client.calificacion || 0) ? '#f59e0b' : 'var(--card-border)' }}>
                                                     ★
                                                 </span>
                                             ))}
@@ -287,9 +307,9 @@ export default function ClientDetailView({
                                     </div>
                                 </div>
 
-                                <div className='space-y-3 pt-4 border-t border-gray-50'>
+                                <div className='space-y-3 pt-4 border-t border-[var(--card-border)]'>
                                     <div className='flex justify-between items-end'>
-                                        <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest'>Confianza de Cierre</label>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>Confianza de Cierre</label>
                                         <span
                                             className='text-xl font-black'
                                             style={{ color: getForecastColor((client as any).probabilidad || 0) }}
@@ -297,7 +317,7 @@ export default function ClientDetailView({
                                             {(client as any).probabilidad || 0}%
                                         </span>
                                     </div>
-                                    <div className='h-3 bg-gray-100 rounded-full overflow-hidden p-0.5 border border-gray-50 shadow-inner'>
+                                    <div className='h-3 rounded-full overflow-hidden p-0.5 border shadow-inner' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                                         <div
                                             className='h-full rounded-full transition-all duration-1000'
                                             style={{
@@ -319,8 +339,8 @@ export default function ClientDetailView({
                         </div>
 
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
-                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
-                                🗒️ Notas y Estrategia
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4 flex items-center gap-2'>
+                                <NotebookPen size={14} style={{ color: 'var(--input-focus)' }} /> Notas y Estrategia
                             </h2>
                             <div className='space-y-6'>
                                 <div>
@@ -328,13 +348,13 @@ export default function ClientDetailView({
                                     <p className='text-xs font-bold text-[var(--text-primary)] leading-relaxed bg-[var(--hover-bg)] p-4 rounded-3xl border border-[var(--card-border)]'>{client.oportunidad || 'Sin descripción de oportunidad.'}</p>
                                 </div>
                                 <div className='relative'>
-                                    <label className='text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2'>Notas Internas</label>
-                                    <div className='p-4 bg-[#FFF9E6] rounded-3xl border border-[#F5E6B3]'>
-                                        <p className='text-[11px] font-bold text-[#856404] italic leading-loose whitespace-pre-wrap'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Notas Internas</label>
+                                    <div className='p-4 rounded-3xl border' style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--card-bg))', borderColor: 'color-mix(in srgb, #f59e0b 22%, var(--card-border))' }}>
+                                        <p className='text-[11px] font-bold italic leading-loose whitespace-pre-wrap' style={{ color: 'color-mix(in srgb, #b45309 72%, var(--text-primary))' }}>
                                             {client.notas || 'No se han agregado notas adicionales aún.'}
                                         </p>
                                     </div>
-                                    <span className='absolute top-2 right-4 text-xl opacity-20'>✍️</span>
+                                    <NotebookPen size={16} className='absolute top-3 right-4 opacity-35' style={{ color: 'var(--text-secondary)' }} />
                                 </div>
                             </div>
                         </div>
@@ -344,14 +364,15 @@ export default function ClientDetailView({
                     <div className='space-y-8'>
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] flex flex-col'>
                             <div className='flex justify-between items-center mb-8 border-b border-[var(--card-border)] pb-4'>
-                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em]'>
-                                    📅 Juntas Agendadas
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
+                                    <CalendarDays size={14} style={{ color: 'var(--input-focus)' }} /> Juntas Agendadas
                                 </h2>
                                 <button
                                     onClick={() => setIsMeetingModalOpen(true)}
-                                    className='w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105 shadow-sm'
+                                    className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
+                                    style={{ background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))', color: 'var(--input-focus)' }}
                                 >
-                                    ➕
+                                    <Plus size={18} />
                                 </button>
                             </div>
 
@@ -365,14 +386,15 @@ export default function ClientDetailView({
 
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] flex flex-col'>
                             <div className='flex justify-between items-center mb-8 border-b border-[var(--card-border)] pb-4'>
-                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em]'>
-                                    ✅ Tareas Pendientes
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
+                                    <CheckSquare size={14} style={{ color: 'var(--input-focus)' }} /> Tareas Pendientes
                                 </h2>
                                 <button
                                     onClick={() => setIsTaskModalOpen(true)}
-                                    className='w-10 h-10 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center hover:bg-purple-600 hover:text-white transition-all transform hover:scale-105 shadow-sm'
+                                    className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
+                                    style={{ background: 'color-mix(in srgb, #8b5cf6 10%, var(--card-bg))', color: '#8b5cf6' }}
                                 >
-                                    ➕
+                                    <Plus size={18} />
                                 </button>
                             </div>
 
@@ -389,14 +411,14 @@ export default function ClientDetailView({
                     <div className='space-y-8'>
                         {/* Company Card */}
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] overflow-hidden'>
-                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
-                                🏢 Perfil Corporativo
+                            <h2 className='text-xs font-black text-[var(--text-secondary)] mb-8 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4 flex items-center gap-2'>
+                                <Building2 size={14} style={{ color: 'var(--input-focus)' }} /> Perfil Corporativo
                             </h2>
 
                             {loadingCompany ? (
                                 <div className='py-12 flex flex-col items-center justify-center gap-4'>
                                     <div className='w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
-                                    <p className='text-[10px] font-black text-gray-400 uppercase animate-pulse'>Sincronizando...</p>
+                                    <p className='text-[10px] font-black text-[var(--text-secondary)] uppercase animate-pulse'>Sincronizando...</p>
                                 </div>
                             ) : company ? (
                                 <div className='space-y-8'>
@@ -405,7 +427,7 @@ export default function ClientDetailView({
                                             {company.logo_url ? (
                                                 <img src={company.logo_url} alt={company.nombre} className='w-full h-full object-cover' />
                                             ) : (
-                                                <span className='text-4xl'>🏢</span>
+                                                <Building2 size={36} style={{ color: 'var(--input-focus)' }} />
                                             )}
                                         </div>
                                         <div className='space-y-1'>
@@ -424,7 +446,7 @@ export default function ClientDetailView({
                                                 </div>
                                             )}
                                             {company.website && (
-                                                <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target='_blank' className='text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-colors block'>🔗 {company.website}</a>
+                                                <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target='_blank' className='text-[10px] font-bold transition-colors flex items-center gap-1.5 w-fit cursor-pointer' style={{ color: 'var(--text-secondary)' }} onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--input-focus)')} onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}><Link2 size={12} /> {company.website}</a>
                                             )}
                                         </div>
                                     </div>
@@ -457,9 +479,10 @@ export default function ClientDetailView({
                             ) : (
                                 <button
                                     onClick={() => onEditClient(client)}
-                                    className='w-full py-12 flex flex-col items-center justify-center gap-4 bg-[#F8FAFC] rounded-[40px] border-2 border-dashed border-gray-100 text-gray-300 hover:bg-blue-50/50 hover:border-blue-100 hover:text-blue-500 transition-all group'
+                                    className='w-full py-12 flex flex-col items-center justify-center gap-4 rounded-[40px] border-2 border-dashed transition-all group cursor-pointer'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
                                 >
-                                    <div className='w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform'>🏢</div>
+                                    <div className='w-16 h-16 bg-[var(--card-bg)] rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform'><Building2 size={30} style={{ color: 'var(--input-focus)' }} /></div>
                                     <span className='text-[10px] font-black uppercase tracking-[0.3em]'>Vincular Empresa</span>
                                 </button>
                             )}
@@ -469,8 +492,8 @@ export default function ClientDetailView({
                         {client.forecast_scored_at && (
                             <div className='bg-gradient-to-br from-[#0F2A44] to-[#1700AC] p-8 rounded-[40px] shadow-2xl shadow-blue-900/40 border border-white/10 text-white relative overflow-hidden group'>
                                 <div className='absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/10 transition-all'></div>
-                                <h2 className='text-xs font-black mb-8 border-b border-white/10 pb-4 uppercase tracking-[0.3em]'>
-                                    📊 Análisis de IA
+                                <h2 className='text-xs font-black mb-8 border-b border-white/10 pb-4 uppercase tracking-[0.3em] flex items-center gap-2'>
+                                    <BarChart3 size={14} className='text-blue-300' /> Análisis de IA
                                 </h2>
                                 <div className='space-y-8'>
                                     <div className='flex justify-between items-center'>
@@ -509,8 +532,8 @@ export default function ClientDetailView({
                         {/* Snapshots Columnar */}
                         {snapshots.length > 0 && (
                             <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
-                                <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4'>
-                                    📸 Snapshots
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4 flex items-center gap-2'>
+                                    <Camera size={14} style={{ color: 'var(--input-focus)' }} /> Snapshots
                                 </h2>
                                 <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
                                     {snapshots.map((snapshot) => (

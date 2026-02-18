@@ -22,6 +22,246 @@ export default function CompaniesTable({
     onEdit,
     onDelete
 }: CompaniesTableProps) {
+    const getCompanyLifecycle = (company: CompanyWithProjects): 'pre_lead' | 'lead' => {
+        const lifecycle = String((company as any).lifecycle_stage || '').toLowerCase()
+        const sourceChannel = String((company as any).source_channel || '').toLowerCase()
+        const preLeadsCount = Number((company as any).pre_leads_count || 0)
+        const leadsCount = Number((company as any).leads_count || 0)
+        if (lifecycle === 'pre_lead' || sourceChannel === 'pre_lead' || (preLeadsCount > 0 && leadsCount === 0)) return 'pre_lead'
+        return 'lead'
+    }
+
+    const groupedCompanies = {
+        lead: companies.filter((company) => getCompanyLifecycle(company) === 'lead'),
+        pre_lead: companies.filter((company) => getCompanyLifecycle(company) === 'pre_lead')
+    }
+
+    const columnCount = isEditingMode ? 12 : 10
+
+    const renderCompanyRow = (company: CompanyWithProjects) => (
+        <tr
+            key={company.id}
+            onClick={() => !isEditingMode && onRowClick?.(company)}
+            className={`transition-colors group ${isEditingMode ? '' : 'hover:bg-black/5 cursor-pointer'}`}
+        >
+            {isEditingMode && (
+                <td className='px-2 py-5 text-center'>
+                    {checkPermission(company, currentUserProfile) ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onEdit?.(company)
+                            }}
+                            className='p-2 rounded-xl border border-transparent text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400 transition-all cursor-pointer'
+                            title='Editar empresa'
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
+                        </button>
+                    ) : (
+                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
+                    )}
+                </td>
+            )}
+
+            <td className='px-8 py-5 text-center'>
+                <div className='flex items-center gap-4 justify-center'>
+                    <div className='w-10 h-10 rounded-full flex items-center justify-center overflow-hidden shadow-md' style={{ background: 'var(--accent-primary, #2048FF)' }}>
+                        {company.logo_url ? (
+                            <Image
+                                src={company.logo_url}
+                                alt={company.nombre}
+                                width={40}
+                                height={40}
+                                className='object-cover'
+                            />
+                        ) : (
+                            <span className='text-white font-black text-sm'>
+                                {company.nombre.charAt(0).toUpperCase()}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='flex flex-col gap-1.5'>
+                    <p className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                        {company.nombre}
+                    </p>
+                    <span
+                        className='inline-flex w-fit items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border'
+                        style={{
+                            background: getCompanyLifecycle(company) === 'pre_lead' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                            borderColor: getCompanyLifecycle(company) === 'pre_lead' ? 'rgba(37, 99, 235, 0.28)' : 'rgba(16, 185, 129, 0.28)',
+                            color: getCompanyLifecycle(company) === 'pre_lead' ? '#2563eb' : '#047857'
+                        }}
+                    >
+                        {getCompanyLifecycle(company) === 'pre_lead' ? 'Pre-lead' : 'Lead'}
+                    </span>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='flex flex-col gap-1'>
+                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                        {company.industria || 'N/A'}
+                    </span>
+                    {!!company.industrias?.length && (
+                        <span className='text-[10px] font-black uppercase tracking-wider text-blue-500'>
+                            {company.industrias.length > 1
+                                ? `+${company.industrias.length - 1} industrias`
+                                : 'Industria única'}
+                        </span>
+                    )}
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='ah-cell-icon-text'>
+                    <MapPin className='ah-cell-icon text-rose-500' />
+                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                        {company.ubicacion || 'No especificada'}
+                    </span>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='flex items-center gap-2 whitespace-nowrap'>
+                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                        style={{
+                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--hover-bg)',
+                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)',
+                            color: company.activeProjects > 0 ? 'var(--tier-1-text)' : 'var(--project-count-empty)'
+                        }}>
+                        {company.activeProjects}
+                    </span>
+                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                        {company.activeProjects === 1 ? 'Activo' : 'Activos'}
+                    </span>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='flex items-center gap-2 whitespace-nowrap'>
+                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                        style={{
+                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.25)' : 'var(--hover-bg)',
+                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.4)' : 'var(--card-border)',
+                            color: company.processProjects > 0 ? 'var(--tier-4-text)' : 'var(--project-count-empty)'
+                        }}>
+                        {company.processProjects}
+                    </span>
+                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                        En proceso
+                    </span>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                <div className='flex items-center gap-2 whitespace-nowrap'>
+                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
+                        style={{
+                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.25)' : 'var(--hover-bg)',
+                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.4)' : 'var(--card-border)',
+                            color: company.lostProjects > 0 ? '#991b1b' : 'var(--project-count-empty)'
+                        }}>
+                        {company.lostProjects}
+                    </span>
+                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
+                        {company.lostProjects === 1 ? 'Perdido' : 'Perdidos'}
+                    </span>
+                </div>
+            </td>
+
+            <td className='px-8 py-5'>
+                {renderSizeBadge(company.tamano || 0)}
+            </td>
+
+            <td className='px-8 py-5'>
+                {company.website ? (
+                    <a
+                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs transition-all shadow-sm cursor-pointer'
+                        style={{
+                            backgroundColor: 'var(--website-badge-bg)',
+                            color: 'var(--website-badge-text)'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
+                            e.currentTarget.style.color = '#ffffff'
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'var(--website-badge-bg)'
+                            e.currentTarget.style.color = 'var(--website-badge-text)'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <Globe className='ah-cell-icon' />
+                        {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </a>
+                ) : (
+                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>-</span>
+                )}
+            </td>
+
+            {isEditingMode && (
+                <td className='px-2 py-5 text-center'>
+                    {checkPermission(company, currentUserProfile) ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onDelete?.(company.id!)
+                            }}
+                            className='p-2 rounded-xl border border-transparent text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400 transition-all cursor-pointer'
+                            title='Eliminar empresa'
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 6h18" />
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                            </svg>
+                        </button>
+                    ) : (
+                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
+                    )}
+                </td>
+            )}
+        </tr>
+    )
+
+    const renderLifecycleSection = (title: string, type: 'lead' | 'pre_lead', sectionCompanies: CompanyWithProjects[]) => {
+        if (sectionCompanies.length === 0) return null
+        return (
+            <>
+                <tr>
+                    <td colSpan={columnCount} className='px-8 py-3 border-t border-b' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                        <div className='flex items-center justify-between gap-4'>
+                            <span
+                                className='inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border'
+                                style={{
+                                    background: type === 'pre_lead' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                    borderColor: type === 'pre_lead' ? 'rgba(37, 99, 235, 0.28)' : 'rgba(16, 185, 129, 0.28)',
+                                    color: type === 'pre_lead' ? '#2563eb' : '#047857'
+                                }}
+                            >
+                                {title}
+                            </span>
+                            <span className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
+                                {sectionCompanies.length} empresa{sectionCompanies.length === 1 ? '' : 's'}
+                            </span>
+                        </div>
+                    </td>
+                </tr>
+                {sectionCompanies.map(renderCompanyRow)}
+            </>
+        )
+    }
+
     if (!companies || companies.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white rounded-2xl border border-gray-200 shadow-sm'>
@@ -51,199 +291,8 @@ export default function CompaniesTable({
                     </tr>
                 </thead>
                 <tbody>
-                    {companies.map((company) => (
-                        <tr
-                            key={company.id}
-                            onClick={() => !isEditingMode && onRowClick?.(company)}
-                            className={`transition-colors group ${isEditingMode ? '' : 'hover:bg-black/5 cursor-pointer'}`}
-                        >
-                            {isEditingMode && (
-                                <td className='px-2 py-5 text-center'>
-                                    {checkPermission(company, currentUserProfile) ? (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                onEdit?.(company)
-                                            }}
-                                            className='p-2 rounded-xl border border-transparent text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400 transition-all cursor-pointer'
-                                            title='Editar empresa'
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M12 20h9" />
-                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                            </svg>
-                                        </button>
-                                    ) : (
-                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
-                                    )}
-                                </td>
-                            )}
-
-                            {/* Logo */}
-                            <td className='px-8 py-5 text-center'>
-                                <div className='flex items-center gap-4 justify-center'>
-                                    <div className='w-10 h-10 rounded-full flex items-center justify-center overflow-hidden shadow-md' style={{ background: 'var(--accent-primary, #2048FF)' }}>
-                                        {company.logo_url ? (
-                                            <Image
-                                                src={company.logo_url}
-                                                alt={company.nombre}
-                                                width={40}
-                                                height={40}
-                                                className='object-cover'
-                                            />
-                                        ) : (
-                                            <span className='text-white font-black text-sm'>
-                                                {company.nombre.charAt(0).toUpperCase()}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </td>
-
-                            {/* Nombre */}
-                            <td className='px-8 py-5'>
-                                <p className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
-                                    {company.nombre}
-                                </p>
-                            </td>
-
-                            {/* Industria */}
-                            <td className='px-8 py-5'>
-                                <div className='flex flex-col gap-1'>
-                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                        {company.industria || 'N/A'}
-                                    </span>
-                                    {!!company.industrias?.length && (
-                                        <span className='text-[10px] font-black uppercase tracking-wider text-blue-500'>
-                                            {company.industrias.length > 1
-                                                ? `+${company.industrias.length - 1} industrias`
-                                                : 'Industria única'}
-                                        </span>
-                                    )}
-                                </div>
-                            </td>
-
-                            {/* Ubicación */}
-                            <td className='px-8 py-5'>
-                                <div className='ah-cell-icon-text'>
-                                    <MapPin className='ah-cell-icon text-rose-500' />
-                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                        {company.ubicacion || 'No especificada'}
-                                    </span>
-                                </div>
-                            </td>
-
-                            {/* Proyectos Activos */}
-                            <td className='px-8 py-5'>
-                                <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
-                                        style={{
-                                            background: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.25)' : 'var(--hover-bg)',
-                                            borderColor: company.activeProjects > 0 ? 'rgba(16, 185, 129, 0.4)' : 'var(--card-border)',
-                                            color: company.activeProjects > 0 ? 'var(--tier-1-text)' : 'var(--project-count-empty)'
-                                        }}>
-                                        {company.activeProjects}
-                                    </span>
-                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
-                                        {company.activeProjects === 1 ? 'Activo' : 'Activos'}
-                                    </span>
-                                </div>
-                            </td>
-
-                            {/* Proyectos en Proceso */}
-                            <td className='px-8 py-5'>
-                                <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
-                                        style={{
-                                            background: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.25)' : 'var(--hover-bg)',
-                                            borderColor: company.processProjects > 0 ? 'rgba(245, 158, 11, 0.4)' : 'var(--card-border)',
-                                            color: company.processProjects > 0 ? 'var(--tier-4-text)' : 'var(--project-count-empty)'
-                                        }}>
-                                        {company.processProjects}
-                                    </span>
-                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
-                                        En proceso
-                                    </span>
-                                </div>
-                            </td>
-
-                            {/* Proyectos Perdidos */}
-                            <td className='px-8 py-5'>
-                                <div className='flex items-center gap-2 whitespace-nowrap'>
-                                    <span className='w-7 h-7 flex items-center justify-center rounded-full text-[13px] font-black border transition-all duration-300'
-                                        style={{
-                                            background: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.25)' : 'var(--hover-bg)',
-                                            borderColor: company.lostProjects > 0 ? 'rgba(244, 63, 94, 0.4)' : 'var(--card-border)',
-                                            color: company.lostProjects > 0 ? '#991b1b' : 'var(--project-count-empty)'
-                                        }}>
-                                        {company.lostProjects}
-                                    </span>
-                                    <span className='text-[10px] font-black tracking-widest uppercase' style={{ color: 'var(--text-secondary)' }}>
-                                        {company.lostProjects === 1 ? 'Perdido' : 'Perdidos'}
-                                    </span>
-                                </div>
-                            </td>
-
-                            {/* Tamaño */}
-                            <td className='px-8 py-5'>
-                                {renderSizeBadge(company.tamano || 0)}
-                            </td>
-
-                            {/* Website */}
-                            <td className='px-8 py-5'>
-                                {company.website ? (
-                                    <a
-                                        href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                                        target='_blank'
-                                        rel='noopener noreferrer'
-                                        className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold text-xs transition-all shadow-sm'
-                                        style={{
-                                            backgroundColor: 'var(--website-badge-bg)',
-                                            color: 'var(--website-badge-text)'
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'var(--accent-primary)'
-                                            e.currentTarget.style.color = '#ffffff'
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'var(--website-badge-bg)'
-                                            e.currentTarget.style.color = 'var(--website-badge-text)'
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <Globe className='ah-cell-icon' />
-                                        {company.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                                    </a>
-                                ) : (
-                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)', opacity: 0.3 }}>-</span>
-                                )}
-                            </td>
-
-                            {/* Acciones (Delete) */}
-                            {isEditingMode && (
-                                <td className='px-2 py-5 text-center'>
-                                    {checkPermission(company, currentUserProfile) ? (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                onDelete?.(company.id!)
-                                            }}
-                                            className='p-2 rounded-xl border border-transparent text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400 transition-all cursor-pointer'
-                                            title='Eliminar empresa'
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M3 6h18" />
-                                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                                            </svg>
-                                        </button>
-                                    ) : (
-                                        <span className='text-gray-300 p-2' title='Sin permisos'>🔒</span>
-                                    )}
-                                </td>
-                            )}
-                        </tr>
-                    ))}
+                    {renderLifecycleSection('Empresas en Lead', 'lead', groupedCompanies.lead)}
+                    {renderLifecycleSection('Empresas en Pre-lead', 'pre_lead', groupedCompanies.pre_lead)}
                 </tbody>
             </table>
         </div>

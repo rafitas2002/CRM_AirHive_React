@@ -12,7 +12,7 @@ export type EventType =
     | 'forecast_registered' | 'forecast_frozen'
     | 'pre_lead_created' | 'pre_lead_updated' | 'pre_lead_converted' | 'pre_lead_deleted'
     | 'task_created' | 'task_updated' | 'task_deleted' | 'task_status_changed'
-    | 'company_deleted'
+    | 'company_created' | 'company_updated' | 'company_deleted'
 
 export interface TrackEventParams {
     eventType: EventType

@@ -1,7 +1,11 @@
 'use client'
 
 import { useTheme, Theme } from '@/lib/ThemeContext'
+import { useAuth } from '@/lib/auth'
+import { useEffect, useState } from 'react'
 import { Palette, Lightbulb, Check } from 'lucide-react'
+import { bootstrapLegacyQuotesIfEmpty, getAllQuotesForAdmin } from '@/app/actions/quotes'
+import QuoteManagementPanel from '@/components/QuoteManagementPanel'
 
 const themes: Array<{ id: Theme; name: string; description: string; preview: { bg: string; text: string } }> = [
     {
@@ -26,6 +30,41 @@ const themes: Array<{ id: Theme; name: string; description: string; preview: { b
 
 export default function PersonalizacionPage() {
     const { theme, setTheme } = useTheme()
+    const { profile } = useAuth()
+    const [adminQuotes, setAdminQuotes] = useState<any[]>([])
+    const [quotesLoadError, setQuotesLoadError] = useState<string>('')
+
+    useEffect(() => {
+        if (profile?.role !== 'admin') return
+
+        let cancelled = false
+        const loadQuotes = async () => {
+            const result = await getAllQuotesForAdmin()
+            if (!cancelled && result.success) {
+                const rows = result.data || []
+                if (rows.length === 0) {
+                    const seedResult = await bootstrapLegacyQuotesIfEmpty()
+                    if (seedResult.success) {
+                        const refreshed = await getAllQuotesForAdmin()
+                        if (!cancelled && refreshed.success) {
+                            setAdminQuotes(refreshed.data || [])
+                            setQuotesLoadError('')
+                            return
+                        }
+                    } else if (!cancelled) {
+                        setQuotesLoadError(seedResult.error || 'No se pudo cargar el repertorio base de frases')
+                    }
+                }
+                setAdminQuotes(rows)
+                setQuotesLoadError('')
+            } else if (!cancelled) {
+                setQuotesLoadError(result.error || 'No se pudo cargar el catálogo de frases')
+            }
+        }
+
+        loadQuotes()
+        return () => { cancelled = true }
+    }, [profile?.role])
 
     return (
         <div className='p-8 max-w-5xl'>
@@ -111,6 +150,10 @@ export default function PersonalizacionPage() {
                     </span>
                 </p>
             </div>
+
+            {profile?.role === 'admin' && (
+                <QuoteManagementPanel initialQuotes={adminQuotes} initialLoadError={quotesLoadError} />
+            )}
         </div>
     )
 }

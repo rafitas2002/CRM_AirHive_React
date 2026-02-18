@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
-import { findOrCreateCompany } from '@/lib/companyHelpers'
+import { createCompanyFromPreLead } from '@/lib/companyHelpers'
 import PreLeadsTable from '@/components/PreLeadsTable'
 import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
@@ -47,10 +47,22 @@ export default function PreLeadsPage() {
     const [emailRecipient, setEmailRecipient] = useState({ email: '', name: '' })
     const [connectedGoogleEmail, setConnectedGoogleEmail] = useState<string | null>(null)
     const [isCalendarConnected, setIsCalendarConnected] = useState(false)
+    const [preLeadColumns, setPreLeadColumns] = useState<Record<string, boolean>>({
+        industria_id: true,
+        tamano: true,
+        website: true,
+        logo_url: true,
+        empresa_id: true,
+        created_by: true,
+        updated_by: true
+    })
+    const [leadColumns, setLeadColumns] = useState<Record<string, boolean>>({
+        created_by: true
+    })
 
     const emitTrackingEvent = async (payload: {
-        eventType: 'pre_lead_created' | 'pre_lead_updated' | 'pre_lead_converted' | 'pre_lead_deleted' | 'lead_created'
-        entityType: 'pre_lead' | 'lead'
+        eventType: 'pre_lead_created' | 'pre_lead_updated' | 'pre_lead_converted' | 'pre_lead_deleted' | 'lead_created' | 'company_created' | 'company_updated'
+        entityType: 'pre_lead' | 'lead' | 'company'
         entityId?: string | number
         metadata?: Record<string, any>
     }) => {
@@ -59,6 +71,48 @@ export default function PreLeadsPage() {
             await trackEvent(payload as any)
         } catch (trackError) {
             console.error('[PreLeads] Tracking error (non-blocking):', trackError)
+        }
+    }
+
+    const detectPreLeadColumns = async () => {
+        const candidates = ['industria_id', 'tamano', 'website', 'logo_url', 'empresa_id', 'created_by', 'updated_by']
+        const result: Record<string, boolean> = {}
+
+        for (const column of candidates) {
+            const { error } = await (supabase.from('pre_leads') as any).select(column).limit(1)
+            const missing = error && (error.code === '42703' || String(error.message || '').toLowerCase().includes(`'${column}'`))
+            result[column] = !missing
+        }
+
+        setPreLeadColumns(result)
+    }
+
+    const detectLeadColumns = async () => {
+        const { error } = await (supabase.from('clientes') as any).select('created_by').limit(1)
+        const missing = error && (error.code === '42703' || String(error.message || '').toLowerCase().includes(`'created_by'`))
+        setLeadColumns({ created_by: !missing })
+    }
+
+    const promoteCompanyToLeadStage = async (companyId?: string) => {
+        if (!companyId || !auth.user?.id) return
+        const updatePayload = {
+            lifecycle_stage: 'lead',
+            source_channel: 'lead',
+            updated_by: auth.user.id,
+            first_lead_at: new Date().toISOString(),
+            last_lead_at: new Date().toISOString()
+        }
+
+        // Try rich payload first; silently fallback if columns don't exist yet.
+        const richAttempt = await (supabase.from('empresas') as any).update(updatePayload).eq('id', companyId)
+        if (!richAttempt.error) return
+
+        const fallbackAttempt = await (supabase.from('empresas') as any).update({
+            owner_id: auth.user.id
+        }).eq('id', companyId)
+
+        if (fallbackAttempt.error) {
+            console.warn('[PreLeads] Could not update company lead stage metadata:', fallbackAttempt.error.message)
         }
     }
 
@@ -85,6 +139,8 @@ export default function PreLeadsPage() {
             fetchPreLeads()
             fetchCompanies()
             checkCalendarConnection()
+            detectPreLeadColumns()
+            detectLeadColumns()
         }
     }, [auth.loading, auth.loggedIn])
 
@@ -127,32 +183,63 @@ export default function PreLeadsPage() {
                 throw new Error('Sesión inválida. Vuelve a iniciar sesión.')
             }
 
-            // Step 1: Find or create company
-            const companyResult = await findOrCreateCompany(
-                supabase,
-                {
-                    nombre_empresa: data.nombre_empresa,
-                    telefonos: data.telefonos,
-                    correos: data.correos,
-                    ubicacion: data.ubicacion,
-                    notas: data.notas,
-                    // New fields
-                    industria: data.industria,
-                    industria_id: data.industria_id,
-                    tamano: data.tamano,
-                    website: data.website,
-                    logo_url: data.logo_url
-                },
-                auth.user.id
-            )
+            // Step 1: Create company for each new pre-lead to keep full funnel traceability.
+            let companyResult: { id: string, nombre: string } | null = null
+            if (modalMode === 'create') {
+                companyResult = await createCompanyFromPreLead(
+                    supabase,
+                    {
+                        nombre_empresa: data.nombre_empresa,
+                        telefonos: data.telefonos,
+                        correos: data.correos,
+                        ubicacion: data.ubicacion,
+                        notas: data.notas,
+                        industria: data.industria,
+                        industria_id: data.industria_id,
+                        tamano: data.tamano,
+                        website: data.website,
+                        logo_url: data.logo_url
+                    },
+                    auth.user.id
+                )
+                if (!companyResult) throw new Error('No se pudo crear la empresa para este pre-lead')
 
-            if (!companyResult) {
-                throw new Error('No se pudo crear o encontrar la empresa')
+                void emitTrackingEvent({
+                    eventType: 'company_created',
+                    entityType: 'company',
+                    entityId: companyResult.id,
+                    metadata: {
+                        source: 'pre_lead',
+                        created_by: auth.user.id,
+                        created_at: new Date().toISOString(),
+                        company_name: companyResult.nombre
+                    }
+                })
+            } else if (currentPreLead?.empresa_id) {
+                companyResult = { id: currentPreLead.empresa_id, nombre: currentPreLead.nombre_empresa }
+            } else {
+                companyResult = await createCompanyFromPreLead(
+                    supabase,
+                    {
+                        nombre_empresa: data.nombre_empresa,
+                        telefonos: data.telefonos,
+                        correos: data.correos,
+                        ubicacion: data.ubicacion,
+                        notas: data.notas,
+                        industria: data.industria,
+                        industria_id: data.industria_id,
+                        tamano: data.tamano,
+                        website: data.website,
+                        logo_url: data.logo_url
+                    },
+                    auth.user.id
+                )
+                if (!companyResult) throw new Error('No se pudo crear la empresa para este pre-lead')
             }
 
             // Step 2: Save pre-lead with empresa_id
             const table = supabase.from('pre_leads') as any
-            const preLeadData = {
+            const preLeadData: Record<string, any> = {
                 nombre_empresa: data.nombre_empresa,
                 nombre_contacto: data.nombre_contacto,
                 correos: data.correos,
@@ -160,14 +247,17 @@ export default function PreLeadsPage() {
                 ubicacion: data.ubicacion,
                 notas: data.notas,
                 giro_empresa: data.industria || data.giro_empresa || 'Sin clasificar',
-                industria_id: data.industria_id || null,
-                tamano: data.tamano || 1,
-                website: data.website || null,
-                logo_url: data.logo_url || null,
                 vendedor_id: auth.user?.id,
                 vendedor_name: auth.profile?.full_name || auth.username,
                 empresa_id: companyResult.id
             }
+            if (preLeadColumns.industria_id) preLeadData.industria_id = data.industria_id || null
+            if (preLeadColumns.tamano) preLeadData.tamano = data.tamano || 1
+            if (preLeadColumns.website) preLeadData.website = data.website || null
+            if (preLeadColumns.logo_url) preLeadData.logo_url = data.logo_url || null
+            if (!preLeadColumns.empresa_id) delete preLeadData.empresa_id
+            if (preLeadColumns.created_by && modalMode === 'create') preLeadData.created_by = auth.user.id
+            if (preLeadColumns.updated_by) preLeadData.updated_by = auth.user.id
 
             if (modalMode === 'create') {
                 const { data: createdPreLead, error } = await table.insert(preLeadData).select('id').single()
@@ -178,18 +268,15 @@ export default function PreLeadsPage() {
                     entityType: 'pre_lead',
                     entityId: createdPreLead?.id,
                     metadata: {
-                        industria_id: preLeadData.industria_id,
-                        tamano: preLeadData.tamano,
-                        empresa_id: preLeadData.empresa_id
+                        industria_id: preLeadData.industria_id || null,
+                        tamano: preLeadData.tamano || null,
+                        empresa_id: preLeadData.empresa_id || null,
+                        created_by: auth.user.id,
+                        created_at: new Date().toISOString()
                     }
                 })
 
-                // Show success message with company info
-                if (companyResult.isNew) {
-                    alert(`✅ Pre-Lead creado exitosamente.\n🏢 Nueva empresa "${companyResult.nombre}" registrada.`)
-                } else {
-                    alert(`✅ Pre-Lead creado exitosamente.\n🏢 Vinculado a empresa existente "${companyResult.nombre}".`)
-                }
+                alert(`✅ Pre-Lead creado exitosamente.\n🏢 Empresa registrada: "${companyResult.nombre}".`)
             } else {
                 const { error } = await table
                     .update(preLeadData)
@@ -201,9 +288,11 @@ export default function PreLeadsPage() {
                     entityType: 'pre_lead',
                     entityId: currentPreLead.id,
                     metadata: {
-                        industria_id: preLeadData.industria_id,
-                        tamano: preLeadData.tamano,
-                        empresa_id: preLeadData.empresa_id
+                        industria_id: preLeadData.industria_id || null,
+                        tamano: preLeadData.tamano || null,
+                        empresa_id: preLeadData.empresa_id || null,
+                        updated_by: auth.user.id,
+                        updated_at: new Date().toISOString()
                     }
                 })
                 alert('✅ Pre-Lead actualizado exitosamente.')
@@ -259,12 +348,15 @@ export default function PreLeadsPage() {
                 converted_by: auth.user?.id
             } : {}
 
-            const { data: createdLead, error: insertError } = await (supabase.from('clientes') as any).insert({
+            const leadInsertPayload: Record<string, any> = {
                 ...data,
                 owner_id: auth.user?.id,
                 owner_username: auth.profile?.full_name || auth.username,
                 ...traceability
-            }).select('id').single()
+            }
+            if (leadColumns.created_by) leadInsertPayload.created_by = auth.user.id
+
+            const { data: createdLead, error: insertError } = await (supabase.from('clientes') as any).insert(leadInsertPayload).select('id').single()
 
             if (insertError) throw insertError
 
@@ -297,6 +389,18 @@ export default function PreLeadsPage() {
                     metadata: {
                         lead_id: createdLead?.id,
                         previous_vendedor_id: sourcePreLead.vendedor_id
+                    }
+                })
+
+                await promoteCompanyToLeadStage(sourcePreLead.empresa_id)
+                void emitTrackingEvent({
+                    eventType: 'company_updated',
+                    entityType: 'company',
+                    entityId: sourcePreLead.empresa_id,
+                    metadata: {
+                        source: 'lead_conversion',
+                        updated_by: auth.user.id,
+                        updated_at: new Date().toISOString()
                     }
                 })
             }

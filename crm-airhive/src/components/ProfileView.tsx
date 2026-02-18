@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { getCatalogs, getIndustriesForBadges } from '@/app/actions/catalogs'
 import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity, Award, Sparkles, TrendingUp, Lock, X, Building2, Flag, Layers, Ruler, Trophy, Medal, Shield, Flame, Gem } from 'lucide-react'
 import RoleBadge from '@/components/RoleBadge'
-import { getRoleMeta } from '@/lib/roleUtils'
+import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap, type BadgeVisual } from '@/lib/industryBadgeVisuals'
 import { useAuth } from '@/lib/auth'
@@ -195,6 +195,25 @@ export default function ProfileView({ userId }: ProfileViewProps) {
         return names.length > 0 ? names.join(', ') : '-'
     }
 
+    const getJobPositionNames = () => {
+        const rawPositions = details?.job_position_ids ?? details?.job_positions
+        const jobPositionIds = new Set<string>()
+
+        if (Array.isArray(rawPositions)) {
+            rawPositions.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) jobPositionIds.add(item.trim())
+                if (item && typeof item === 'object' && typeof item.id === 'string' && item.id.trim()) jobPositionIds.add(item.id.trim())
+            })
+        } else if (typeof rawPositions === 'string' && rawPositions.trim()) {
+            rawPositions.split(',').map((v: string) => v.trim()).filter(Boolean).forEach((v: string) => jobPositionIds.add(v))
+        }
+
+        if (typeof details?.job_position_id === 'string' && details.job_position_id.trim()) jobPositionIds.add(details.job_position_id.trim())
+
+        const names = Array.from(jobPositionIds).map(id => resolve('job_positions', id)).filter(v => v && v !== '-')
+        return names.length > 0 ? names.join(', ') : '-'
+    }
+
     const industryVisualMap = useMemo(() => {
         const extrasFromBadges = badges
             .filter((b) => b?.industria_id)
@@ -241,8 +260,14 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             <div className='rounded-2xl border p-8 flex items-center gap-8 relative overflow-hidden bg-[var(--card-bg)] border-[var(--card-border)] shadow-[0_10px_30px_rgba(0,0,0,0.18)]'>
                 <div className='absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-[#2048FF]/10 to-transparent rounded-bl-full -mr-16 -mt-16 pointer-events-none' />
 
-                <div className='w-24 h-24 rounded-2xl border-2 flex items-center justify-center shadow-xl z-10' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
-                    <User size={42} strokeWidth={1.9} style={{ color: roleMeta.textColor }} />
+                <div
+                    className='w-24 h-24 rounded-2xl border-2 flex items-center justify-center shadow-xl z-10'
+                    style={{
+                        borderColor: `color-mix(in srgb, ${getRoleSilhouetteColor(profile.role)} 70%, var(--card-border))`,
+                        background: 'var(--hover-bg)'
+                    }}
+                >
+                    <User size={42} strokeWidth={1.9} style={{ color: getRoleSilhouetteColor(profile.role) }} />
                 </div>
 
                 <div className='flex-1 z-10'>
@@ -394,7 +419,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                             <Briefcase size={16} /> Posición
                         </h3>
                         <div className='space-y-4'>
-                            <InfoRow label="Puesto" value={resolve('job_positions', details.job_position_id)} />
+                            <InfoRow label="Puesto" value={getJobPositionNames()} />
                             <InfoRow label="Área" value={getAreaNames()} />
                             <InfoRow label="Seniority" value={resolve('seniority_levels', details.seniority_id)} highlight />
                         </div>

@@ -1,28 +1,31 @@
 'use client'
 
-import { useState } from 'react'
-import { UserPlus, Search, Edit2, Ban, Eye, ShieldCheck, ListFilter, RotateCw, User, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { UserPlus, Search, Edit2, Ban, Eye, ShieldCheck, ListFilter, RotateCw, User, Users, Link2Off, Link2 } from 'lucide-react'
 import EmployeeModal from '@/components/EmployeeModal'
 import RoleBadge from '@/components/RoleBadge'
-import { createEmployee, updateEmployee, toggleEmployeeStatus } from '@/app/actions/employees'
+import { createEmployee, updateEmployee, toggleEmployeeStatus, setRhMasterEnabled } from '@/app/actions/employees'
 import { useRouter } from 'next/navigation'
-import { getRoleMeta } from '@/lib/roleUtils'
+import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 
 interface EmployeesClientProps {
     initialEmployees: any[]
     currentUserRole: string
+    rhMasterEnabled: boolean
 }
 
-function getRoleIconColor(role?: string) {
-    return getRoleMeta(role).textColor
-}
-
-export default function EmployeesClient({ initialEmployees, currentUserRole }: EmployeesClientProps) {
+export default function EmployeesClient({ initialEmployees, currentUserRole, rhMasterEnabled }: EmployeesClientProps) {
     const router = useRouter()
     const [searchTerm, setSearchTerm] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
+    const [rhMasterState, setRhMasterState] = useState(rhMasterEnabled)
+    const [savingRhMaster, setSavingRhMaster] = useState(false)
+
+    useEffect(() => {
+        setRhMasterState(rhMasterEnabled)
+    }, [rhMasterEnabled])
 
     // Filter employees locally
     const filteredEmployees = initialEmployees.filter(emp =>
@@ -32,6 +35,9 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
     )
 
     const handleCreate = async (data: any) => {
+        if (rhMasterState) {
+            throw new Error('Edición bloqueada: RH maestro está activo. Gestiona usuarios desde el módulo de RH.')
+        }
         const result = await createEmployee(data)
         if (!result.success) {
             throw new Error(result.error)
@@ -42,6 +48,9 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
 
     const handleUpdate = async (data: any) => {
         if (!selectedEmployee) return false
+        if (rhMasterState) {
+            throw new Error('Edición bloqueada: RH maestro está activo. Gestiona usuarios desde el módulo de RH.')
+        }
         const result = await updateEmployee(selectedEmployee.id, data)
         if (!result.success) {
             throw new Error(result.error)
@@ -51,6 +60,10 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
     }
 
     const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+        if (rhMasterState) {
+            alert('Acción bloqueada: RH maestro está activo.')
+            return
+        }
         if (!confirm(`¿Estás seguro de que deseas ${currentStatus ? 'desactivar' : 'activar'} este usuario?`)) return
 
         setLoadingAction(id)
@@ -68,8 +81,38 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
         }
     }
 
+    const handleToggleRhMaster = async () => {
+        if (savingRhMaster) return
+
+        const nextValue = !rhMasterState
+        const confirmMessage = nextValue
+            ? 'Activar RH maestro bloqueará edición de usuarios en CRM. ¿Deseas continuar?'
+            : 'Desactivar RH maestro volverá a permitir edición de usuarios en CRM. ¿Deseas continuar?'
+
+        if (!confirm(confirmMessage)) return
+
+        setSavingRhMaster(true)
+        const result = await setRhMasterEnabled(nextValue)
+        setSavingRhMaster(false)
+
+        if (!result.success) {
+            alert(`Error al actualizar RH maestro: ${result.error}`)
+            return
+        }
+
+        setRhMasterState(nextValue)
+        router.refresh()
+    }
+
     return (
         <div className='space-y-10'>
+            {rhMasterState && (
+                <div className='rounded-2xl border px-5 py-4 bg-amber-500/10 border-amber-500/35'>
+                    <p className='text-sm font-bold text-amber-300'>
+                        RH maestro activo: edición y cambios de estado bloqueados en CRM. Los datos de usuarios deben gestionarse desde el módulo RH.
+                    </p>
+                </div>
+            )}
             {/* External Header - Page Level */}
             <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                 <div className='flex items-center gap-8'>
@@ -104,8 +147,27 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                         </div>
                     </button>
                     <button
-                        onClick={() => { setSelectedEmployee(null); setIsModalOpen(true) }}
-                        className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer'
+                        onClick={handleToggleRhMaster}
+                        disabled={savingRhMaster}
+                        className={`px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2
+                            ${rhMasterState
+                                ? 'border-amber-400/55 text-amber-300 bg-amber-500/10 hover:bg-amber-500/18'
+                                : 'border-emerald-400/45 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/16'
+                            }
+                            disabled:opacity-55`}
+                        title='Activar o desactivar RH maestro'
+                    >
+                        {rhMasterState ? <Link2Off size={13} /> : <Link2 size={13} />}
+                        <span>{savingRhMaster ? 'Guardando...' : rhMasterState ? 'RH Maestro: ON' : 'RH Maestro: OFF'}</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (rhMasterState) return
+                            setSelectedEmployee(null)
+                            setIsModalOpen(true)
+                        }}
+                        disabled={rhMasterState}
+                        className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:hover:scale-100 disabled:hover:bg-[#2048FF]'
                     >
                         <UserPlus size={16} />
                         Nuevo Miembro
@@ -182,12 +244,26 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                 >
                                     <td className='px-8 py-5'>
                                         <div className='flex items-center gap-4'>
+                                            {(() => {
+                                                const silhouetteColor = getRoleSilhouetteColor(emp.role)
+                                                const avatarBorderColor = `color-mix(in srgb, ${silhouetteColor} 70%, var(--card-border))`
+                                                return (
                                             <div
                                                 className='w-12 h-12 rounded-2xl border-2 flex items-center justify-center shadow-sm'
-                                                style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+                                                style={{ borderColor: avatarBorderColor, background: 'var(--hover-bg)' }}
                                             >
-                                                <User size={20} strokeWidth={1.9} style={{ color: getRoleIconColor(emp.role) }} />
+                                                {emp.avatar_url ? (
+                                                    <img
+                                                        src={emp.avatar_url}
+                                                        alt={emp.full_name || 'Avatar'}
+                                                        className='w-full h-full object-cover rounded-[14px]'
+                                                    />
+                                                ) : (
+                                                    <User size={20} strokeWidth={1.9} style={{ color: silhouetteColor }} />
+                                                )}
                                             </div>
+                                                )
+                                            })()}
                                             <div>
                                                 <p className='text-sm font-black truncate max-w-[200px]' style={{ color: 'var(--text-primary)' }}>{emp.full_name || 'Sin Nombre'}</p>
                                                 <p className='text-[10px] font-bold opacity-50' style={{ color: 'var(--text-secondary)' }}>{emp.username || 'Sin usuario'}</p>
@@ -198,10 +274,18 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                         <RoleBadge role={emp.role} />
                                     </td>
                                     <td className='px-8 py-5'>
-                                        <span className='inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border-2 border-emerald-100'>
-                                            <div className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse' />
-                                            Activo
-                                        </span>
+                                        <div className='flex items-center gap-2 flex-wrap'>
+                                            <span className='inline-flex items-center gap-2 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border-2 border-emerald-100'>
+                                                <div className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse' />
+                                                Activo
+                                            </span>
+                                            {rhMasterState && (
+                                                <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider border border-amber-400/45 text-amber-300 bg-amber-500/10'>
+                                                    <Link2Off size={11} />
+                                                    RH Maestro
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className='px-8 py-5'>
                                         <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>
@@ -219,6 +303,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                             </button>
                                             <button
                                                 onClick={() => { setSelectedEmployee(emp); setIsModalOpen(true) }}
+                                                disabled={rhMasterState}
                                                 className='w-10 h-10 flex items-center justify-center bg-[var(--background)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-emerald-500 hover:border-emerald-500 rounded-xl transition-all shadow-sm'
                                                 title='Editar'
                                             >
@@ -226,7 +311,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                                             </button>
                                             <button
                                                 onClick={() => handleToggleStatus(emp.id, true)}
-                                                disabled={loadingAction === emp.id}
+                                                disabled={loadingAction === emp.id || rhMasterState}
                                                 className='w-10 h-10 flex items-center justify-center bg-[var(--background)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-rose-500 hover:border-rose-500 rounded-xl transition-all shadow-sm disabled:opacity-50'
                                                 title='Desactivar / Banear'
                                             >
@@ -256,6 +341,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                 onClose={() => setIsModalOpen(false)}
                 onSave={selectedEmployee ? handleUpdate : handleCreate}
                 employee={selectedEmployee}
+                readOnlyMode={rhMasterState}
             />
         </div>
     )
