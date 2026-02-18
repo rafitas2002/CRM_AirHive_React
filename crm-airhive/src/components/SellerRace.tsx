@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, User, Info } from 'lucide-react'
+import { Trophy, TrendingUp, Info } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
 
 interface SellerRaceData {
@@ -22,8 +22,34 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
     // Sort by value for the "race" look
     const sortedSellers = [...sellers].sort((a, b) => b.value - a.value)
 
+    const sellerPositions = useMemo(() => {
+        const positions = new Map<string, number>()
+        const positiveValues = sortedSellers
+            .map((s) => s.value)
+            .filter((value) => value > 0)
+
+        const uniquePositiveValues = Array.from(new Set(positiveValues)).sort((a, b) => b - a)
+        const positiveRankByValue = new Map<number, number>()
+        uniquePositiveValues.forEach((value, idx) => {
+            // Competition ranking for positives (1,2,2,4...)
+            const rank = positiveValues.filter((v) => v > value).length + 1
+            positiveRankByValue.set(value, rank || idx + 1)
+        })
+
+        sortedSellers.forEach((seller) => {
+            if (seller.value <= 0) {
+                // Business rule: users with $0 start at position 4.
+                positions.set(seller.name, 4)
+            } else {
+                positions.set(seller.name, positiveRankByValue.get(seller.value) ?? 1)
+            }
+        })
+
+        return positions
+    }, [sortedSellers])
+
     return (
-        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex justify-between items-end'>
                 <div>
                     <div className='flex items-center gap-3'>
@@ -33,7 +59,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                         </h3>
                         <button
                             onClick={() => setIsINFOOpen(true)}
-                            className='w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors'
+                            className='w-7 h-7 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] hover:bg-blue-500/10 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-105'
                             title="Ver Detalles y Medallero"
                         >
                             <Info size={14} />
@@ -56,13 +82,14 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
 
                 {sortedSellers.map((seller, index) => {
                     const progress = (seller.value / maxGoal) * 100
+                    const position = sellerPositions.get(seller.name) ?? 4
 
                     return (
                         <div key={seller.name} className='relative group'>
                             <div className='flex justify-between items-center mb-2'>
                                 <div className='flex items-center gap-2'>
-                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${index === 0 ? 'bg-amber-500/20 text-amber-600' : 'text-[var(--text-secondary)]'}`} style={{ background: index === 0 ? undefined : 'var(--hover-bg)' }}>
-                                        {index + 1}
+                                    <span className={`text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center ${position === 1 ? 'bg-amber-500/20 text-amber-600' : 'text-[var(--text-secondary)]'}`} style={{ background: position === 1 ? undefined : 'var(--hover-bg)' }}>
+                                        {position}
                                     </span>
                                     <span className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{seller.name}</span>
                                 </div>
@@ -80,8 +107,8 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, progress)}%` }}
                                         transition={{ duration: 1.5, delay: index * 0.1, ease: 'easeOut' }}
-                                        className={`h-full rounded-full shadow-lg relative ${index === 0 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
-                                            index === 1 ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
+                                        className={`h-full rounded-full shadow-lg relative ${position === 1 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
+                                            position === 2 ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
                                                 'bg-gradient-to-r from-gray-400 to-gray-500'
                                             }`}
                                     >
@@ -122,7 +149,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
 
                             {/* Hover Details */}
                             <div className='absolute -right-2 top-0 bottom-0 flex items-center transition-all duration-300 transform group-hover:translate-x-2'>
-                                {index === 0 && <TrendingUp className='w-4 h-4 text-emerald-500' />}
+                                {position === 1 && <TrendingUp className='w-4 h-4 text-emerald-500' />}
                             </div>
                         </div>
                     )

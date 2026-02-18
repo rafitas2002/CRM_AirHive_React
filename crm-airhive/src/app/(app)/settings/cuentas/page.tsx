@@ -91,10 +91,14 @@ export default function CuentasPage() {
     return (
         <div className='p-8 max-w-5xl'>
             <div className='mb-8'>
-                <h1 className='text-3xl font-bold mb-2 flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
-                    <Link2 size={26} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
-                    Conectar Cuentas
-                </h1>
+                <div className='flex items-center gap-4 mb-2'>
+                    <div className='ah-icon-card ah-icon-card-sm'>
+                        <Link2 size={20} strokeWidth={2.2} />
+                    </div>
+                    <h1 className='text-3xl font-bold' style={{ color: 'var(--text-primary)' }}>
+                        Conectar Cuentas
+                    </h1>
+                </div>
                 <p className='text-base' style={{ color: 'var(--text-secondary)' }}>
                     Conecta tus cuentas externas para sincronizar calendarios, correos y más
                 </p>
@@ -111,8 +115,8 @@ export default function CuentasPage() {
                 >
                     <div className='flex items-start justify-between mb-4'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-md'>
-                                <Chrome size={28} strokeWidth={2} className='text-[#2048FF]' />
+                            <div className='ah-icon-card'>
+                                <Chrome size={26} strokeWidth={2} />
                             </div>
                             <div>
                                 <h3 className='text-xl font-bold' style={{ color: 'var(--text-primary)' }}>
@@ -143,15 +147,21 @@ export default function CuentasPage() {
                         </h4>
                         <ul className='space-y-1 text-sm' style={{ color: 'var(--text-secondary)' }}>
                             <li className='flex items-center gap-2'>
-                                <CalendarDays size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                                <span className='ah-icon-card ah-icon-card-sm' style={{ width: '1.6rem', height: '1.6rem', borderRadius: '0.55rem' }}>
+                                    <CalendarDays size={12} strokeWidth={2.2} />
+                                </span>
                                 Sincronización automática con Google Calendar
                             </li>
                             <li className='flex items-center gap-2'>
-                                <Mail size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                                <span className='ah-icon-card ah-icon-card-sm' style={{ width: '1.6rem', height: '1.6rem', borderRadius: '0.55rem' }}>
+                                    <Mail size={12} strokeWidth={2.2} />
+                                </span>
                                 Envío de invitaciones por Gmail
                             </li>
                             <li className='flex items-center gap-2'>
-                                <Bell size={14} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
+                                <span className='ah-icon-card ah-icon-card-sm' style={{ width: '1.6rem', height: '1.6rem', borderRadius: '0.55rem' }}>
+                                    <Bell size={12} strokeWidth={2.2} />
+                                </span>
                                 Notificaciones de eventos
                             </li>
                         </ul>

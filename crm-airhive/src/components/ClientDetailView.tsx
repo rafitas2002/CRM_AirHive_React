@@ -8,6 +8,7 @@ import TaskModal from './TaskModal'
 import TasksList from './TasksList'
 import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 type ClientData = {
     id: number
@@ -45,6 +46,9 @@ type CompanyData = {
     ubicacion: string
     logo_url: string
     industria: string
+    industria_id?: string
+    industria_ids?: string[]
+    industrias?: string[]
     website: string
     descripcion: string
 }
@@ -68,6 +72,7 @@ export default function ClientDetailView({
     onEmailClick,
     userEmail
 }: ClientDetailViewProps) {
+    useBodyScrollLock(isOpen)
     const [company, setCompany] = useState<CompanyData | null>(null)
     const [loadingCompany, setLoadingCompany] = useState(false)
     const [supabase] = useState(() => createClient())
@@ -406,6 +411,18 @@ export default function ClientDetailView({
                                         <div className='space-y-1'>
                                             <h3 className='text-xl font-black text-[var(--text-primary)] leading-tight tracking-tight'>{company.nombre}</h3>
                                             <p className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>{company.industria}</p>
+                                            {!!company.industrias?.length && (
+                                                <div className='flex flex-wrap gap-1.5'>
+                                                    {company.industrias.map((industry) => (
+                                                        <span
+                                                            key={industry}
+                                                            className='px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                                                        >
+                                                            {industry}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                             {company.website && (
                                                 <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target='_blank' className='text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-colors block'>🔗 {company.website}</a>
                                             )}

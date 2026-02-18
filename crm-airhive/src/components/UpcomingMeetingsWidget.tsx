@@ -62,7 +62,7 @@ export default function UpcomingMeetingsWidget() {
 
     if (loading) {
         return (
-            <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     <span className='inline-flex items-center gap-2'>
                         <CalendarDays size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
@@ -76,7 +76,7 @@ export default function UpcomingMeetingsWidget() {
 
     if (meetings.length === 0) {
         return (
-            <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                 <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                     <span className='inline-flex items-center gap-2'>
                         <CalendarDays size={20} strokeWidth={2.2} className='text-[var(--accent-secondary)]' />
@@ -92,7 +92,7 @@ export default function UpcomingMeetingsWidget() {
     }
 
     return (
-        <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex items-center justify-between mb-4'>
                 <h2 className='text-lg font-bold' style={{ color: 'var(--text-primary)' }}>
                     <span className='inline-flex items-center gap-2'>
@@ -118,7 +118,7 @@ export default function UpcomingMeetingsWidget() {
                     return (
                         <div
                             key={meeting.id}
-                            className={`p-3 rounded-lg border-2 ${urgency.border} ${urgency.bg} hover:shadow-md transition-all cursor-pointer`}
+                            className={`p-3 rounded-lg border-2 ${urgency.border} ${urgency.bg} hover:shadow-md transition-all`}
                         >
                             <div className='flex items-start justify-between gap-3'>
                                 <div className='flex-1 min-w-0'>

@@ -2,6 +2,7 @@
 
 import TopBar from '@/components/TopBar'
 import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
+import GlobalBadgeCelebration from '@/components/GlobalBadgeCelebration'
 import EventTracker from '@/components/EventTracker'
 import VisualIdentityBackground from '@/components/VisualIdentityBackground'
 import { useAuth } from '@/lib/auth'
@@ -32,6 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider>
             <GlobalMeetingHandler />
+            <GlobalBadgeCelebration />
             <EventTracker />
             <div className='h-screen flex flex-col relative overflow-hidden' style={{ background: 'var(--background)' }}>
                 {/* Decorative background identity layer */}

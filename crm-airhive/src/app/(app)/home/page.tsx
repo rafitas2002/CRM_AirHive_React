@@ -125,7 +125,7 @@ function AdminDashboardView({ username }: { username: string }) {
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-10'>
                 {/* Welcome Header - Unified CRM Design */}
-                <div className='relative overflow-hidden p-8 md:p-10 rounded-[40px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                <div className='relative overflow-hidden p-8 md:p-10 rounded-[40px] border shadow-xl' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
                     <div className='absolute -top-24 -right-16 w-80 h-80 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute -bottom-24 -left-20 w-72 h-72 rounded-full blur-3xl opacity-15 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute inset-0 pointer-events-none opacity-55' style={{ background: 'linear-gradient(125deg, transparent 0%, rgba(255,255,255,0.1) 38%, transparent 75%)' }} />
@@ -194,7 +194,7 @@ function AdminDashboardView({ username }: { username: string }) {
 
                 {/* KPI Bar */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Forecast Real (Adjusted)</label>
                             <Zap className='w-5 h-5 text-purple-500 group-hover:animate-pulse' />
@@ -205,7 +205,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Ponderado por score histórico</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Calidad de Datos</label>
                             <AlertCircle className='w-5 h-5 text-amber-500 group-hover:shake' />
@@ -214,7 +214,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <p className='text-[10px] font-bold mt-2 uppercase tracking-tight' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Leads sin valor estimado</p>
                     </div>
 
-                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-8 rounded-[32px] border-2 shadow-sm transition-all hover:shadow-md group' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center justify-between mb-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Progreso Semanal</label>
                             <Target className='w-5 h-5 text-emerald-500' />
@@ -250,7 +250,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         />
 
                         {/* Top Performance Table Redesigned */}
-                        <div className='rounded-[40px] border shadow-xl overflow-hidden cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[40px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex justify-between items-center px-8 py-5 border-b' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
                                 <h3 className='font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-2' style={{ color: 'var(--text-secondary)' }}>
                                     <Trophy size={14} strokeWidth={2.2} className='text-amber-500' />
@@ -294,7 +294,7 @@ function AdminDashboardView({ username }: { username: string }) {
                         <PipelineVisualizer data={stats.funnel} />
 
                         {/* Audit Recommendation Card */}
-                        <div className='p-8 rounded-[40px] overflow-hidden relative border shadow-sm cursor-pointer' style={{ background: 'var(--home-audit-bg)', borderColor: 'var(--home-audit-border)' }}>
+                        <div className='p-8 rounded-[40px] overflow-hidden relative border shadow-sm' style={{ background: 'var(--home-audit-bg)', borderColor: 'var(--home-audit-border)' }}>
                             <div className='absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-20' style={{ background: 'var(--home-audit-title)' }}></div>
                             <h4 className='text-xs font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2' style={{ color: 'var(--home-audit-title)' }}>
                                 <AlertCircle size={14} />
@@ -364,7 +364,7 @@ function SellerHomeView({ username }: { username: string }) {
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-8'>
                 {/* Welcome Header */}
-                <div className='relative overflow-hidden p-8 rounded-[34px] border shadow-xl cursor-pointer' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
+                <div className='relative overflow-hidden p-8 rounded-[34px] border shadow-xl' style={{ background: 'var(--home-hero-bg)', borderColor: 'var(--home-hero-border)' }}>
                     <div className='absolute -top-20 -right-12 w-64 h-64 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute inset-0 pointer-events-none opacity-40' style={{ background: 'linear-gradient(120deg, transparent 0%, rgba(32,72,255,0.08) 45%, transparent 80%)' }} />
 
@@ -400,19 +400,19 @@ function SellerHomeView({ username }: { username: string }) {
 
                 {/* Stats Cards */}
                 <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Leads Activos</label>
                         <p className='text-4xl font-black mt-2' style={{ color: 'var(--text-primary)' }}>{stats.activeLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>En tu pipeline</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>En Negociación</label>
                         <p className='text-4xl font-black text-amber-600 mt-2'>{stats.negotiationLeads}</p>
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Requieren seguimiento</p>
                     </div>
 
-                    <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <label className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>Forecast Ponderado</label>
                         <p className='text-4xl font-black text-emerald-600 mt-2'>
                             ${stats.totalValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
@@ -430,7 +430,7 @@ function SellerHomeView({ username }: { username: string }) {
 
                     {/* Right Column - Quick Actions */}
                     <div className='lg:col-span-2 space-y-6'>
-                        <div className='p-6 rounded-2xl shadow-sm border cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <h2 className='text-lg font-bold mb-4' style={{ color: 'var(--text-primary)' }}>
                                 🎯 Acciones Rápidas
                             </h2>
@@ -470,7 +470,7 @@ function SellerHomeView({ username }: { username: string }) {
                             </div>
                         </div>
 
-                        <div className='p-6 rounded-2xl border-2 cursor-pointer' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='p-6 rounded-2xl border-2' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <h3 className='text-lg font-bold mb-2' style={{ color: 'var(--text-primary)' }}>
                                 💡 Tip del Día
                             </h3>

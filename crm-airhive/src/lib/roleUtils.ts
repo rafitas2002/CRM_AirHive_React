@@ -13,9 +13,9 @@ export function getRoleMeta(role?: UserRole): RoleMeta {
     if (normalizedRole === 'admin') {
         return {
             label: 'Administrador',
-            textColor: '#2048FF',
-            bgColor: 'rgba(32, 72, 255, 0.10)',
-            borderColor: 'rgba(32, 72, 255, 0.30)'
+            textColor: '#B45309',
+            bgColor: 'rgba(245, 158, 11, 0.14)',
+            borderColor: 'rgba(245, 158, 11, 0.42)'
         }
     }
 
@@ -35,4 +35,3 @@ export function getRoleMeta(role?: UserRole): RoleMeta {
         borderColor: 'rgba(20, 184, 166, 0.30)'
     }
 }
-

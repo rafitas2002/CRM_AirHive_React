@@ -118,6 +118,23 @@ export async function getAdminCorrelationData() {
             (preLeads || []).map((pl: any) => [pl.id, pl])
         )
 
+        const pearson = (pairs: Array<{ x: number, y: number }>) => {
+            const valid = pairs.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+            const n = valid.length
+            if (n < 2) return 0
+
+            const sumX = valid.reduce((acc, p) => acc + p.x, 0)
+            const sumY = valid.reduce((acc, p) => acc + p.y, 0)
+            const sumXY = valid.reduce((acc, p) => acc + (p.x * p.y), 0)
+            const sumX2 = valid.reduce((acc, p) => acc + (p.x * p.x), 0)
+            const sumY2 = valid.reduce((acc, p) => acc + (p.y * p.y), 0)
+
+            const num = (n * sumXY) - (sumX * sumY)
+            const den = Math.sqrt(((n * sumX2) - (sumX * sumX)) * ((n * sumY2) - (sumY * sumY)))
+            if (!Number.isFinite(den) || den === 0) return 0
+            return num / den
+        }
+
         // 4. Combine Data - Iteramos sobre PROFILES para asegurar que todos aparezcan
         const masterData = (profiles || []).map((p: any) => {
             const emp = (employeeProfiles || []).find((e: any) => e.user_id === p.id) || {}
@@ -295,8 +312,8 @@ export async function getAdminCorrelationData() {
 
         const companyRegistry = (companies || [])
             .map((company: any) => ({
-                id: company.id,
-                nombre: company.nombre,
+                id: String(company.id),
+                nombre: company.nombre || '',
                 ownerId: company.owner_id || null,
                 ownerName: company.owner_id ? profileNameById.get(company.owner_id) || 'Desconocido' : 'Sin asignar',
                 createdAt: company.created_at,
@@ -305,11 +322,82 @@ export async function getAdminCorrelationData() {
             }))
             .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
+        const companyById = new Map<number, any>((companies || []).map((comp: any) => [comp.id, comp]))
+        const leadById = new Map<number, any>((clients || []).map((client: any) => [client.id, client]))
+
+        const sizeBucket: Record<number, { total: number, postponed: number, held: number }> = {
+            1: { total: 0, postponed: 0, held: 0 },
+            2: { total: 0, postponed: 0, held: 0 },
+            3: { total: 0, postponed: 0, held: 0 },
+            4: { total: 0, postponed: 0, held: 0 },
+            5: { total: 0, postponed: 0, held: 0 }
+        }
+
+        ;(meetings || []).forEach((m: any) => {
+            const lead = leadById.get(m.lead_id)
+            const company = lead?.empresa_id ? companyById.get(lead.empresa_id) : null
+            const size = Number(company?.tamano || 0)
+            if (!sizeBucket[size]) return
+
+            sizeBucket[size].total += 1
+            if (m.meeting_status === 'held') {
+                sizeBucket[size].held += 1
+            }
+            if (m.meeting_status === 'not_held' || m.meeting_status === 'cancelled') {
+                sizeBucket[size].postponed += 1
+            }
+        })
+
+        const postponeByCompanySize = [1, 2, 3, 4, 5].map((size) => {
+            const bucket = sizeBucket[size]
+            const total = bucket.total
+            const postponed = bucket.postponed
+            const held = bucket.held
+            return {
+                size,
+                totalMeetings: total,
+                postponedMeetings: postponed,
+                heldMeetings: held,
+                postponeProbability: total > 0 ? (postponed / total) * 100 : 0
+            }
+        })
+
+        const correlationData = masterData.map((row: any) => ({
+            name: row.name,
+            tenureMonths: Number(row.tenureMonths || 0),
+            totalSales: Number(row.totalSales || 0),
+            forecastAccuracy: Number(row.forecastAccuracy || 0),
+            meetingsPerClose: Number(row.meetingsPerClose || 0)
+        }))
+
+        const correlations = [
+            {
+                key: 'tenure_sales',
+                label: 'Antigüedad vs Ventas',
+                r: pearson(correlationData.map((d: any) => ({ x: d.tenureMonths, y: d.totalSales })))
+            },
+            {
+                key: 'tenure_accuracy',
+                label: 'Antigüedad vs Accuracy',
+                r: pearson(correlationData.map((d: any) => ({ x: d.tenureMonths, y: d.forecastAccuracy })))
+            },
+            {
+                key: 'effort_sales',
+                label: 'Meetings por Cierre vs Ventas',
+                r: pearson(correlationData.map((d: any) => ({ x: d.meetingsPerClose, y: d.totalSales })))
+            }
+        ]
+
         return {
             success: true,
             data: {
                 users: masterData,
-                companyRegistry
+                companyRegistry,
+                analytics: {
+                    correlationData,
+                    correlations,
+                    postponeByCompanySize
+                }
             }
         }
     } catch (error: any) {

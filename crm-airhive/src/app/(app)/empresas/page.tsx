@@ -10,7 +10,7 @@ import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Search, Table as TableIcon, Pencil, RotateCw, Building2 } from 'lucide-react'
+import { Search, Table as TableIcon, Pencil, Building2 } from 'lucide-react'
 
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
@@ -66,7 +66,8 @@ export default function EmpresasPage() {
                 company.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
                 company.ubicacion?.toLowerCase().includes(filterSearch.toLowerCase())
 
-            const matchesIndustry = filterIndustry === 'All' || company.industria === filterIndustry
+            const companyIndustries = company.industrias || (company.industria ? [company.industria] : [])
+            const matchesIndustry = filterIndustry === 'All' || companyIndustries.includes(filterIndustry)
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
             const matchesLocation = filterLocation === 'All' || company.ubicacion?.toLowerCase().includes(filterLocation.toLowerCase())
 
@@ -92,7 +93,11 @@ export default function EmpresasPage() {
 
     // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
-        const industries = new Set(companies.map(c => c.industria).filter((i): i is string => !!i))
+        const industries = new Set(
+            companies
+                .flatMap(c => c.industrias || (c.industria ? [c.industria] : []))
+                .filter((i): i is string => !!i)
+        )
         return Array.from(industries).sort()
     }, [companies])
 
@@ -120,19 +125,52 @@ export default function EmpresasPage() {
         }
 
         // Fetch all leads to associate
-        const { data: leadsData, error: leadsError } = await supabase
-            .from('clientes')
-            .select('empresa_id, etapa, created_at')
+        const [{ data: leadsData, error: leadsError }, companyIndustriesResult] = await Promise.all([
+            supabase
+                .from('clientes')
+                .select('empresa_id, etapa, created_at'),
+            supabase
+                .from('company_industries')
+                .select('empresa_id, industria_id, is_primary, industrias(name)')
+        ])
 
         const leads = (leadsData || []) as { empresa_id: string, etapa: string, created_at: string }[] // Fixed leads data typing
+        const companyIndustries = (companyIndustriesResult.data || []) as any[]
 
         if (leadsError) {
             console.error('Error fetching leads:', leadsError)
+        }
+        if (companyIndustriesResult.error) {
+            console.warn('company_industries is not available yet, using primary industry only:', companyIndustriesResult.error.message)
+        }
+
+        const industryMapByCompany: Record<string, { ids: string[], names: string[], primaryId?: string, primaryName?: string }> = {}
+        for (const rel of companyIndustries) {
+            const companyId = rel.empresa_id as string
+            if (!industryMapByCompany[companyId]) {
+                industryMapByCompany[companyId] = { ids: [], names: [] }
+            }
+            if (rel.industria_id) {
+                industryMapByCompany[companyId].ids.push(rel.industria_id)
+            }
+            const name = rel?.industrias?.name
+            if (name) {
+                industryMapByCompany[companyId].names.push(name)
+            }
+            if (rel.is_primary) {
+                industryMapByCompany[companyId].primaryId = rel.industria_id || undefined
+                industryMapByCompany[companyId].primaryName = name || undefined
+            }
         }
 
         const companies = (companiesData || []) as any[]
         const companiesWithProjects = companies.map(company => {
             const companyLeads = leads.filter(l => l.empresa_id === company.id)
+            const industriesForCompany = industryMapByCompany[company.id]
+            const industryNames = Array.from(new Set(industriesForCompany?.names || []))
+            const industryIds = Array.from(new Set(industriesForCompany?.ids || []))
+            const primaryIndustryName = industriesForCompany?.primaryName || company.industria || null
+            const primaryIndustryId = industriesForCompany?.primaryId || company.industria_id || null
 
             const activeProjects = companyLeads.filter(l => l.etapa === 'Cerrado Ganado').length
             const processProjects = companyLeads.filter(l =>
@@ -149,6 +187,10 @@ export default function EmpresasPage() {
 
             return {
                 ...company,
+                industria: primaryIndustryName,
+                industria_id: primaryIndustryId,
+                industria_ids: industryIds.length > 0 ? industryIds : (company.industria_id ? [company.industria_id] : []),
+                industrias: industryNames.length > 0 ? industryNames : (company.industria ? [company.industria] : []),
                 activeProjects,
                 processProjects,
                 lostProjects,
@@ -211,13 +253,52 @@ export default function EmpresasPage() {
         setIsCompanyModalOpen(true)
     }
 
+    const syncCompanyIndustries = async (companyId: string, companyData: CompanyData) => {
+        const fallbackPrimary = (companyData.industria_ids || [])[0] || ''
+        const primaryIndustryId = companyData.industria_id || fallbackPrimary
+        const allIndustryIds = Array.from(new Set([
+            ...(primaryIndustryId ? [primaryIndustryId] : []),
+            ...(companyData.industria_ids || [])
+        ])).filter(Boolean)
+
+        const { error: deleteError } = await supabase
+            .from('company_industries')
+            .delete()
+            .eq('empresa_id', companyId)
+
+        if (deleteError) {
+            throw deleteError
+        }
+
+        if (allIndustryIds.length === 0) {
+            return
+        }
+
+        const payload = allIndustryIds.map(industryId => ({
+            empresa_id: companyId,
+            industria_id: industryId,
+            is_primary: industryId === primaryIndustryId
+        }))
+
+        const { error: insertError } = await supabase
+            .from('company_industries')
+            .insert(payload as any)
+
+        if (insertError) {
+            throw insertError
+        }
+    }
+
     const handleSaveCompany = async (companyData: CompanyData) => {
         const isEditing = !!modalCompanyData
+        const companyPayload: any = { ...companyData }
+        delete companyPayload.industria_ids
+        delete companyPayload.industrias
 
         if (isEditing) {
             const { error } = await (supabase
                 .from('empresas') as any)
-                .update(companyData)
+                .update(companyPayload)
                 .eq('id', modalCompanyData.id)
 
             if (error) {
@@ -225,18 +306,36 @@ export default function EmpresasPage() {
                 alert('Error al actualizar la empresa')
                 return
             }
+
+            try {
+                await syncCompanyIndustries(modalCompanyData.id!, companyData)
+            } catch (industryError: any) {
+                console.error('Error updating company industries:', industryError)
+                alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
+            }
         } else {
-            const { error } = await (supabase
+            const { data: createdCompany, error } = await (supabase
                 .from('empresas') as any)
                 .insert([{
-                    ...companyData,
+                    ...companyPayload,
                     owner_id: auth.profile?.id
                 }])
+                .select('id')
+                .single()
 
             if (error) {
                 console.error('Error creating company:', error)
                 alert('Error al crear la empresa')
                 return
+            }
+
+            try {
+                if (createdCompany?.id) {
+                    await syncCompanyIndustries(createdCompany.id, companyData)
+                }
+            } catch (industryError: any) {
+                console.error('Error saving company industries:', industryError)
+                alert('La empresa se creó, pero no se pudieron guardar todas las industrias.')
             }
         }
 
@@ -277,8 +376,8 @@ export default function EmpresasPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <Building2 size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='ah-icon-card transition-all hover:scale-105'>
+                                <Building2 size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -292,53 +391,37 @@ export default function EmpresasPage() {
                     </div>
 
                     <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='flex gap-3'>
-                            <button
-                                onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
-                                    ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
-                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
-                                    }`}
-                                style={!isEditingMode ? {
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                } : {}}
-                            >
-                                <div className='flex items-center gap-2'>
-                                    {isEditingMode ? (
-                                        <span>Terminar Edición</span>
-                                    ) : (
-                                        <>
-                                            <span>Editar Catálogo</span>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
-                                                <path d="M12 20h9" />
-                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                            </svg>
-                                        </>
-                                    )}
-                                </div>
-                            </button>
-                            <button
-                                onClick={fetchCompanies}
-                                className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
-                                style={{
-                                    background: 'var(--card-bg)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <div className='flex items-center gap-2'>
-                                    <span>Actualizar</span>
-                                    <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
-                                </div>
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => setIsEditingMode(!isEditingMode)}
+                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
+                                ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
+                                : 'bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
+                                }`}
+                            style={!isEditingMode ? {
+                                borderColor: 'var(--card-border)',
+                                color: 'var(--text-primary)'
+                            } : {}}
+                        >
+                            <div className='flex items-center gap-2'>
+                                {isEditingMode ? (
+                                    <span>Terminar Edición</span>
+                                ) : (
+                                    <>
+                                        <span>Editar Catálogo</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-80">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                        </svg>
+                                    </>
+                                )}
+                            </div>
+                        </button>
                         <button
                             onClick={() => {
                                 setModalCompanyData(null)
                                 setIsCompanyModalOpen(true)
                             }}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
                             + Nueva Empresa
                         </button>
@@ -350,8 +433,8 @@ export default function EmpresasPage() {
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                    <TableIcon size={24} />
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <TableIcon size={22} strokeWidth={2} />
                                 </div>
                                 <div>
                                     <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Empresas</h2>
@@ -419,7 +502,7 @@ export default function EmpresasPage() {
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
-                                        className='ah-select-control ah-select-control-order'
+                                        className='ah-select-control'
                                     >
                                         <option value="alphabetical">Orden: Nombre</option>
                                         <option value="antiquity">Orden: Antigüedad</option>

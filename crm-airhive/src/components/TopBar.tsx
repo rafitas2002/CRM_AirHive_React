@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, UserRound, Settings, LogOut, type LucideIcon } from 'lucide-react'
+import { Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, type LucideIcon } from 'lucide-react'
 
 export default function TopBar() {
     const pathname = usePathname()
@@ -176,7 +176,7 @@ export default function TopBar() {
                                 href='/admin/forecast'
                                 className={[
                                     'relative text-white font-semibold text-base px-2 py-2 group flex items-center gap-1.5',
-                                    (pathname.includes('/admin/forecast')) ? 'active-insights' : ''
+                                    (pathname.includes('/admin/forecast') || pathname.includes('/admin/correlaciones') || pathname.includes('/admin/insights')) ? 'active-insights' : ''
                                 ].join(' ')}
                             >
                                 Insights
@@ -184,7 +184,7 @@ export default function TopBar() {
                                     className={[
                                         'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
                                         'transition-all duration-300 ease-out',
-                                        (pathname.includes('/admin/forecast')) ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                        (pathname.includes('/admin/forecast') || pathname.includes('/admin/correlaciones') || pathname.includes('/admin/insights')) ? 'w-full opacity-100' : 'w-0 opacity-0',
                                         'group-hover:w-full group-hover:opacity-100'
                                     ].join(' ')}
                                 />
@@ -194,7 +194,10 @@ export default function TopBar() {
                             <div className='absolute top-[100%] left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 min-w-[160px] translate-y-2 group-hover:translate-y-0'>
                                 <div className='bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1.5'>
                                     {[
-                                        { href: '/admin/forecast', label: 'Pronóstico', icon: BarChart3 }
+                                        { href: '/admin/forecast', label: 'Pronóstico', icon: BarChart3 },
+                                        { href: '/admin/correlaciones', label: 'Correlaciones', icon: LineChart },
+                                        { href: '/admin/insights/correlaciones', label: 'Gráfica Corr.', icon: LineChart },
+                                        { href: '/admin/insights/pronostico', label: 'Pronóstico Juntas', icon: BarChart3 }
                                     ].map((item) => {
                                         const Icon = item.icon as LucideIcon
                                         const isActive = pathname === item.href
@@ -220,24 +223,6 @@ export default function TopBar() {
                                 </div>
                             </div>
                         </div>
-                    )}
-
-                    {/* Menú CORRELACIONES (solo admin) */}
-                    {isAdmin && (
-                        <Link
-                            href='/admin/correlaciones'
-                            className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
-                        >
-                            Correlaciones
-                            <span
-                                className={[
-                                    'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
-                                    'transition-all duration-300 ease-out',
-                                    pathname === '/admin/correlaciones' ? 'w-full opacity-100' : 'w-0 opacity-0',
-                                    'group-hover:w-full group-hover:opacity-100'
-                                ].join(' ')}
-                            />
-                        </Link>
                     )}
                 </nav>
 

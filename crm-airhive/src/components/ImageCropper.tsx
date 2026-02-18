@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import Cropper from 'react-easy-crop'
 import getCroppedImg from '@/lib/cropUtils'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface ImageCropperProps {
     imageSrc: string
@@ -11,6 +12,7 @@ interface ImageCropperProps {
 }
 
 const ImageCropper: React.FC<ImageCropperProps> = ({ imageSrc, onCropComplete, onCancel }) => {
+    useBodyScrollLock(true)
     const [crop, setCrop] = useState({ x: 0, y: 0 })
     const [zoom, setZoom] = useState(1)
     const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)

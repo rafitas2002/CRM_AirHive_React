@@ -543,6 +543,142 @@ export type Database = {
                     created_at?: string
                 }
             }
+            badge_level_config: {
+                Row: {
+                    id: number
+                    level: number
+                    min_closures: number
+                    created_at: string
+                }
+                Insert: {
+                    id?: number
+                    level: number
+                    min_closures: number
+                    created_at?: string
+                }
+                Update: {
+                    id?: number
+                    level?: number
+                    min_closures?: number
+                    created_at?: string
+                }
+            }
+            company_industries: {
+                Row: {
+                    id: string
+                    empresa_id: string
+                    industria_id: string
+                    is_primary: boolean
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    empresa_id: string
+                    industria_id: string
+                    is_primary?: boolean
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    empresa_id?: string
+                    industria_id?: string
+                    is_primary?: boolean
+                    created_at?: string
+                }
+            }
+            seller_badge_closures: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    seller_id: string
+                    empresa_id: string
+                    closed_at: string
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    seller_id: string
+                    empresa_id: string
+                    closed_at?: string
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    seller_id?: string
+                    empresa_id?: string
+                    closed_at?: string
+                    created_at?: string
+                }
+            }
+            seller_industry_badges: {
+                Row: {
+                    id: string
+                    seller_id: string
+                    industria_id: string
+                    closures_count: number
+                    level: number
+                    next_level_threshold: number | null
+                    unlocked_at: string | null
+                    updated_at: string
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    seller_id: string
+                    industria_id: string
+                    closures_count?: number
+                    level?: number
+                    next_level_threshold?: number | null
+                    unlocked_at?: string | null
+                    updated_at?: string
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    seller_id?: string
+                    industria_id?: string
+                    closures_count?: number
+                    level?: number
+                    next_level_threshold?: number | null
+                    unlocked_at?: string | null
+                    updated_at?: string
+                    created_at?: string
+                }
+            }
+            seller_badge_events: {
+                Row: {
+                    id: string
+                    seller_id: string
+                    industria_id: string
+                    level: number
+                    event_type: 'unlocked' | 'upgraded'
+                    closures_count: number
+                    source_lead_id: number | null
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    seller_id: string
+                    industria_id: string
+                    level: number
+                    event_type: 'unlocked' | 'upgraded'
+                    closures_count: number
+                    source_lead_id?: number | null
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    seller_id?: string
+                    industria_id?: string
+                    level?: number
+                    event_type?: 'unlocked' | 'upgraded'
+                    closures_count?: number
+                    source_lead_id?: number | null
+                    created_at?: string
+                }
+            }
         }
     }
 }

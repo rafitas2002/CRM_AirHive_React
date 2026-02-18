@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 
@@ -13,6 +14,7 @@ export type ClientData = {
     nombre: string
     etapa: string
     valor_estimado: number
+    valor_real_cierre?: number | null
     oportunidad: string
     calificacion: number
     notas: string
@@ -44,11 +46,13 @@ export default function ClientModal({
     onNavigateToCompanies,
     companies = []
 }: ClientModalProps) {
+    useBodyScrollLock(isOpen)
     const [formData, setFormData] = useState<ClientData>({
         empresa: '',
         nombre: '',
         etapa: 'Prospección',
         valor_estimado: 0,
+        valor_real_cierre: null,
         oportunidad: '',
         calificacion: 3,
         notas: '',
@@ -76,6 +80,7 @@ export default function ClientModal({
             if (initialData) {
                 setFormData({
                     ...initialData,
+                    valor_real_cierre: initialData.valor_real_cierre ?? null,
                     email: initialData.email || '',
                     telefono: initialData.telefono || ''
                 })
@@ -88,6 +93,7 @@ export default function ClientModal({
                     nombre: '',
                     etapa: 'Prospección',
                     valor_estimado: 0,
+                    valor_real_cierre: null,
                     oportunidad: '',
                     calificacion: 3,
                     notas: '',
@@ -104,6 +110,12 @@ export default function ClientModal({
         }
         wasOpen.current = isOpen
     }, [isOpen, initialData, mode])
+
+    useEffect(() => {
+        if (formData.etapa === 'Cerrado Ganado' && (formData.valor_real_cierre === null || formData.valor_real_cierre === undefined)) {
+            setFormData((prev) => ({ ...prev, valor_real_cierre: prev.valor_estimado || 0 }))
+        }
+    }, [formData.etapa, formData.valor_estimado, formData.valor_real_cierre])
 
     const fetchCurrentUser = async () => {
         const { data: { user } } = await supabase.auth.getUser()
@@ -380,7 +392,9 @@ export default function ClientModal({
                         </div>
 
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Valor Estimado</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                Valor Estimado
+                            </label>
                             <div className='relative'>
                                 <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                 <input
@@ -392,7 +406,32 @@ export default function ClientModal({
                                     style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                 />
                             </div>
+                            <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
+                                Pronóstico de valor para el lead.
+                            </p>
                         </div>
+
+                        {formData.etapa === 'Cerrado Ganado' && (
+                            <div className='space-y-2'>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                    Valor Real de Cierre
+                                </label>
+                                <div className='relative'>
+                                    <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
+                                    <input
+                                        type='number'
+                                        min='0'
+                                        value={formData.valor_real_cierre ?? 0}
+                                        onChange={(e) => setFormData({ ...formData, valor_real_cierre: Number(e.target.value) })}
+                                        className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    />
+                                </div>
+                                <p className='text-[9px] font-bold uppercase tracking-wider text-blue-500'>
+                                    Se registrará contra el pronóstico de valor previo para scoring.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {/* SLIDERS */}

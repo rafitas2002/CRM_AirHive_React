@@ -65,7 +65,7 @@ export default function CompaniesTable({
                                                 e.stopPropagation()
                                                 onEdit?.(company)
                                             }}
-                                            className='p-2 hover:bg-yellow-500/10 rounded-xl transition-all'
+                                            className='p-2 rounded-xl border border-transparent text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400 transition-all cursor-pointer'
                                             title='Editar empresa'
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -109,9 +109,18 @@ export default function CompaniesTable({
 
                             {/* Industria */}
                             <td className='px-8 py-5'>
-                                <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                    {company.industria || 'N/A'}
-                                </span>
+                                <div className='flex flex-col gap-1'>
+                                    <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                                        {company.industria || 'N/A'}
+                                    </span>
+                                    {!!company.industrias?.length && (
+                                        <span className='text-[10px] font-black uppercase tracking-wider text-blue-500'>
+                                            {company.industrias.length > 1
+                                                ? `+${company.industrias.length - 1} industrias`
+                                                : 'Industria única'}
+                                        </span>
+                                    )}
+                                </div>
                             </td>
 
                             {/* Ubicación */}
@@ -219,7 +228,7 @@ export default function CompaniesTable({
                                                 e.stopPropagation()
                                                 onDelete?.(company.id!)
                                             }}
-                                            className='p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all'
+                                            className='p-2 rounded-xl border border-transparent text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400 transition-all cursor-pointer'
                                             title='Eliminar empresa'
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

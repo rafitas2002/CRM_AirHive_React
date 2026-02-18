@@ -28,6 +28,8 @@ import {
     Hash
 } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import CorrelationScatterWindow from '@/components/insights/CorrelationScatterWindow'
+import PostponeForecastWindow from '@/components/insights/PostponeForecastWindow'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function CorrelacionesPage() {
@@ -35,6 +37,15 @@ export default function CorrelacionesPage() {
     const router = useRouter()
     const [data, setData] = useState<any[]>([])
     const [companyRegistry, setCompanyRegistry] = useState<any[]>([])
+    const [analytics, setAnalytics] = useState<{
+        correlationData: any[],
+        correlations: any[],
+        postponeByCompanySize: any[]
+    }>({
+        correlationData: [],
+        correlations: [],
+        postponeByCompanySize: []
+    })
     const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})
     const [loading, setLoading] = useState(true)
     const [syncing, setSyncing] = useState(false)
@@ -71,9 +82,19 @@ export default function CorrelacionesPage() {
                 if (Array.isArray(corrRes.data)) {
                     setData(corrRes.data)
                     setCompanyRegistry([])
+                    setAnalytics({
+                        correlationData: [],
+                        correlations: [],
+                        postponeByCompanySize: []
+                    })
                 } else {
                     setData(corrRes.data.users || [])
                     setCompanyRegistry(corrRes.data.companyRegistry || [])
+                    setAnalytics({
+                        correlationData: corrRes.data.analytics?.correlationData || [],
+                        correlations: corrRes.data.analytics?.correlations || [],
+                        postponeByCompanySize: corrRes.data.analytics?.postponeByCompanySize || []
+                    })
                 }
             } else {
                 setError(corrRes.error || 'Error al cargar correlaciones')
@@ -259,11 +280,8 @@ export default function CorrelacionesPage() {
                     {/* Header */}
                     <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                         <div className='flex items-center gap-6'>
-                            <div
-                                className='w-16 h-16 rounded-[22px] border shadow-lg flex items-center justify-center shrink-0'
-                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                            >
-                                <BarChart3 size={34} strokeWidth={1.9} style={{ color: 'var(--accent-secondary)' }} />
+                            <div className='ah-icon-card'>
+                                <BarChart3 size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Data & Correlaciones</h1>
@@ -326,8 +344,8 @@ export default function CorrelacionesPage() {
                             >
                                 <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110`} style={{ background: `var(--${insight.color}-500, #2048FF)` }} />
                                 <div className='relative z-10 flex items-start gap-6'>
-                                    <div className='w-14 h-14 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: `var(--${insight.color}-500, #2048FF)` }}>
-                                        <insight.icon size={28} />
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                        <insight.icon size={20} strokeWidth={2} />
                                     </div>
                                     <div className='space-y-2'>
                                         <h3 className='font-black text-lg' style={{ color: 'var(--text-primary)' }}>{insight.title}</h3>
@@ -336,6 +354,20 @@ export default function CorrelacionesPage() {
                                 </div>
                             </motion.div>
                         ))}
+                    </div>
+
+                    {/* Ventanas Analíticas: Correlaciones + Pronóstico */}
+                    <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
+                        <CorrelationScatterWindow
+                            rows={analytics.correlationData || []}
+                            title='Gráfica de Correlaciones'
+                            subtitle='Analiza relación entre variables del equipo'
+                        />
+                        <PostponeForecastWindow
+                            rows={analytics.postponeByCompanySize || []}
+                            title='Pronóstico de Comportamiento'
+                            subtitle='Probabilidad de posponer/cancelar por tamaño de empresa'
+                        />
                     </div>
 
                     {/* Rising Stars Section */}
@@ -383,8 +415,8 @@ export default function CorrelacionesPage() {
                     <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <div className='p-8 border-b flex flex-col md:flex-row md:items-center justify-between gap-6' style={{ borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-2xl flex items-center justify-center' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                    <TableIcon size={24} />
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <TableIcon size={22} strokeWidth={2} />
                                 </div>
                                 <div>
                                     <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Sellers</h2>
@@ -577,8 +609,8 @@ export default function CorrelacionesPage() {
                     {/* Past Races History */}
                     <div className='space-y-6'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-500/10 text-blue-500'>
-                                <Building2 size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <Building2 size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Registro de Empresas</h2>
@@ -626,8 +658,8 @@ export default function CorrelacionesPage() {
                     {/* Past Races History */}
                     <div className='space-y-6'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-2xl flex items-center justify-center bg-yellow-500/10 text-yellow-500'>
-                                <Trophy size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <Trophy size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Historial de Carreras</h2>

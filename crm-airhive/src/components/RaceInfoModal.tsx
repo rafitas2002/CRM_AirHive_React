@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Trophy, Medal, Info, History, RefreshCw, Award } from 'lucide-react'
 import { getRaceStats, getPastRaces, syncRaceResults } from '@/app/actions/race'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface RaceInfoModalProps {
     isOpen: boolean
@@ -22,6 +23,7 @@ const EMOJI_SCALE = [
 ]
 
 export default function RaceInfoModal({ isOpen, onClose }: RaceInfoModalProps) {
+    useBodyScrollLock(isOpen)
     const [activeTab, setActiveTab] = useState<'info' | 'medals' | 'history'>('info')
     const [stats, setStats] = useState<any[]>([])
     const [pastRaces, setPastRaces] = useState<Record<string, any[]>>({})

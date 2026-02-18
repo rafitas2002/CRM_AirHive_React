@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, Check, ChevronsUpDown, Loader2 } from 'lucide-react'
-import { createCatalogItem } from '@/app/actions/catalogs'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Check, ChevronsUpDown, Loader2, Trash2 } from 'lucide-react'
+import { createCatalogItem, deleteCatalogItem } from '@/app/actions/catalogs'
 
 interface Option {
     id: string
@@ -16,7 +16,9 @@ interface CatalogSelectProps {
     options: Option[]
     tableName: string
     onNewOption: (option: Option) => void
+    onDeleteOption?: (id: string) => void
     disabled?: boolean
+    canDeleteOptions?: boolean
 }
 
 export default function CatalogSelect({
@@ -26,12 +28,17 @@ export default function CatalogSelect({
     options,
     tableName,
     onNewOption,
+    onDeleteOption,
+    canDeleteOptions = false,
     disabled = false
 }: CatalogSelectProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
     const [newItemName, setNewItemName] = useState('')
     const [loading, setLoading] = useState(false)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [deleteModeEnabled, setDeleteModeEnabled] = useState(false)
+    const rootRef = useRef<HTMLDivElement>(null)
 
     // Find selected name for display
     const selectedOption = options.find(o => o.id === value)
@@ -50,13 +57,57 @@ export default function CatalogSelect({
             setNewItemName('')
             setIsCreating(false)
             setIsOpen(false)
+            setDeleteModeEnabled(false)
         } else {
             alert('Error al crear opción: ' + (result.error || 'Desconocido'))
         }
     }
 
+    const handleDelete = async (option: Option) => {
+        const confirmed = window.confirm(`¿Eliminar "${option.name}" del catálogo?`)
+        if (!confirmed) return
+
+        setDeletingId(option.id)
+        const result = await (deleteCatalogItem(tableName, option.id) as Promise<{ success: boolean, error?: string, companies?: string[] }>)
+        setDeletingId(null)
+
+        if (result.success) {
+            if (option.id === value) {
+                onChange('')
+            }
+            onDeleteOption?.(option.id)
+        } else {
+            if (result.companies && result.companies.length > 0) {
+                const previewList = result.companies.slice(0, 12).map(name => `• ${name}`).join('\n')
+                const moreCount = result.companies.length > 12 ? `\n...y ${result.companies.length - 12} más.` : ''
+                alert(
+                    `No se puede eliminar esta industria.\n\n` +
+                    `Existen empresas que están registradas con la industria que deseas borrar:\n\n` +
+                    `${previewList}${moreCount}`
+                )
+            } else {
+                alert('Error al eliminar opción: ' + (result.error || 'Desconocido'))
+            }
+        }
+    }
+
+    useEffect(() => {
+        if (!isOpen) return
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+                setIsOpen(false)
+                setIsCreating(false)
+                setDeleteModeEnabled(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [isOpen])
+
     return (
-        <div className='relative'>
+        <div ref={rootRef} className='relative'>
             <label className='block text-xs font-bold text-[var(--text-secondary)] uppercase mb-1'>{label}</label>
 
             {/* Trigger */}
@@ -77,12 +128,7 @@ export default function CatalogSelect({
 
             {/* Dropdown */}
             {isOpen && (
-                <>
-                    <div
-                        className='fixed inset-0 z-10'
-                        onClick={() => { setIsOpen(false); setIsCreating(false); }}
-                    />
-                    <div className='absolute z-20 w-full mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col'>
+                <div className='absolute z-20 w-full mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl shadow-lg max-h-60 overflow-hidden flex flex-col'>
                         {/* List */}
                         {!isCreating ? (
                             <>
@@ -91,20 +137,53 @@ export default function CatalogSelect({
                                         <p className='text-xs text-[var(--text-secondary)] px-3 py-2 text-center'>No hay opciones</p>
                                     )}
                                     {options.map(option => (
-                                        <button
+                                        <div
                                             key={option.id}
-                                            type='button'
-                                            onClick={() => { onChange(option.id); setIsOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-[var(--hover-bg)] transition-colors
-                                                ${option.id === value ? 'bg-[#2048FF]/10 text-[#2048FF] font-semibold' : 'text-[var(--text-primary)]'}
+                                            className={`w-full flex items-center gap-2 px-1 py-0.5 rounded-lg transition-colors
+                                                ${option.id === value ? 'bg-[#2048FF]/10' : 'hover:bg-[var(--hover-bg)]'}
                                             `}
                                         >
-                                            {option.name}
-                                            {option.id === value && <Check size={14} />}
-                                        </button>
+                                            <button
+                                                type='button'
+                                                onClick={() => { onChange(option.id); setIsOpen(false); setDeleteModeEnabled(false) }}
+                                                className={`flex-1 flex items-center justify-between px-2 py-1.5 text-sm rounded-lg text-left
+                                                    ${option.id === value ? 'text-[#2048FF] font-semibold' : 'text-[var(--text-primary)]'}
+                                                `}
+                                            >
+                                                {option.name}
+                                                {option.id === value && <Check size={14} />}
+                                            </button>
+                                            {canDeleteOptions && deleteModeEnabled && (
+                                                <button
+                                                    type='button'
+                                                    onClick={() => handleDelete(option)}
+                                                    disabled={deletingId === option.id}
+                                                    className='w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 hover:bg-rose-500/10 transition-colors disabled:opacity-50'
+                                                    title={`Eliminar ${option.name}`}
+                                                >
+                                                    {deletingId === option.id
+                                                        ? <Loader2 size={14} className='animate-spin' />
+                                                        : <Trash2 size={14} />}
+                                                </button>
+                                            )}
+                                        </div>
                                     ))}
                                 </div>
                                 <div className='p-1 border-t border-[var(--card-border)]'>
+                                    {canDeleteOptions && (
+                                        <button
+                                            type='button'
+                                            onClick={() => setDeleteModeEnabled(prev => !prev)}
+                                            className={`w-full mb-1 flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                                                deleteModeEnabled
+                                                    ? 'text-rose-600 bg-rose-500/10 hover:bg-rose-500/20'
+                                                    : 'text-[var(--text-secondary)] hover:bg-[var(--hover-bg)]'
+                                            }`}
+                                        >
+                                            <Trash2 size={14} />
+                                            {deleteModeEnabled ? 'Salir de modo eliminar' : 'Eliminar industrias...'}
+                                        </button>
+                                    )}
                                     <button
                                         type='button'
                                         onClick={() => setIsCreating(true)}
@@ -154,7 +233,6 @@ export default function CatalogSelect({
                             </div>
                         )}
                     </div>
-                </>
             )}
         </div>
     )

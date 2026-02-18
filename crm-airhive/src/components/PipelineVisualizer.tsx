@@ -22,7 +22,7 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
     const winRate = activeLeads > 0 ? (closedWon / activeLeads) * 100 : 0
 
     return (
-        <div className='p-8 rounded-3xl border shadow-sm h-full flex flex-col cursor-pointer' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-8 rounded-3xl border shadow-sm h-full flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='mb-6'>
                 <h3 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Embudo de Pipeline</h3>
                 <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Distribución por etapa de venta</p>

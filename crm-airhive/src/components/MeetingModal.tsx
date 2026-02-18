@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
 import ConfirmModal from './ConfirmModal'
 import UserSelect from './UserSelect'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 
@@ -28,6 +29,7 @@ export default function MeetingModal({
     initialData,
     mode = 'create'
 }: MeetingModalProps) {
+    useBodyScrollLock(isOpen)
     const [formData, setFormData] = useState({
         title: '',
         start_time: '',

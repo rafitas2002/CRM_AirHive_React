@@ -1,5 +1,7 @@
 'use client'
 
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+
 interface ConfirmModalProps {
     isOpen: boolean
     onClose: () => void
@@ -17,6 +19,7 @@ export default function ConfirmModal({
     message,
     isDestructive = false
 }: ConfirmModalProps) {
+    useBodyScrollLock(isOpen)
     if (!isOpen) return null
 
     return (

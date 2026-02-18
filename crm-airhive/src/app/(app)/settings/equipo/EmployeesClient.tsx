@@ -74,11 +74,8 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
             <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                 <div className='flex items-center gap-8'>
                     <div className='flex items-center gap-6'>
-                        <div
-                            className='w-16 h-16 rounded-[22px] border flex items-center justify-center shadow-lg shrink-0'
-                            style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                        >
-                            <ShieldCheck size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                        <div className='ah-icon-card'>
+                            <ShieldCheck size={34} strokeWidth={1.9} />
                         </div>
                         <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -108,7 +105,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                     </button>
                     <button
                         onClick={() => { setSelectedEmployee(null); setIsModalOpen(true) }}
-                        className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2'
+                        className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer'
                     >
                         <UserPlus size={16} />
                         Nuevo Miembro
@@ -121,8 +118,8 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
                 <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                     <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                <ListFilter size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <ListFilter size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Lista de Colaboradores</h2>
@@ -245,8 +242,8 @@ export default function EmployeesClient({ initialEmployees, currentUserRole }: E
 
                     {filteredEmployees.length === 0 && (
                         <div className='p-20 text-center flex flex-col items-center gap-4'>
-                            <div className='w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-2'>
-                                <Users size={30} strokeWidth={2} className='text-[var(--text-secondary)] opacity-70' />
+                            <div className='ah-icon-card ah-icon-card-lg mb-2'>
+                                <Users size={30} strokeWidth={2} />
                             </div>
                             <p className='text-sm font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>No se encontraron colaboradores</p>
                             <button onClick={() => setSearchTerm('')} className='text-xs font-bold text-[#2048FF] border-b-2 border-transparent hover:border-[#2048FF] transition-all'>Limpiar búsqueda</button>

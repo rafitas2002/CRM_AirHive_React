@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
@@ -29,19 +29,7 @@ export default function ForecastDashboard() {
     const [dateRange, setDateRange] = useState('all') // 30, 90, 180, all
     const [filterSeller, setFilterSeller] = useState('All')
 
-    useEffect(() => {
-        if (!auth.loading && !auth.loggedIn) {
-            router.push('/home')
-            return
-        }
-        if (auth.profile && auth.profile.role !== 'admin') {
-            router.push('/home')
-            return
-        }
-        fetchLeads()
-    }, [auth.loading, auth.loggedIn, auth.profile])
-
-    const fetchLeads = async () => {
+    const fetchLeads = useCallback(async () => {
         setLoading(true)
         // Fetch ALL leads to have a complete view of the pipeline
         const { data, error } = await supabase
@@ -62,7 +50,22 @@ export default function ForecastDashboard() {
         if (histData) setHistory(histData as any)
 
         setLoading(false)
-    }
+    }, [supabase])
+
+    useEffect(() => {
+        if (!auth.loading && !auth.loggedIn) {
+            router.push('/home')
+            return
+        }
+        if (auth.profile && auth.profile.role !== 'admin') {
+            router.push('/home')
+            return
+        }
+        const timer = setTimeout(() => {
+            fetchLeads()
+        }, 0)
+        return () => clearTimeout(timer)
+    }, [auth.loading, auth.loggedIn, auth.profile, router, fetchLeads])
 
     const filteredLeads = useMemo(() => {
         let result = leads
@@ -104,7 +107,10 @@ export default function ForecastDashboard() {
             avgProb: number,
             score: number,
             pipelineExpectedValue: number,
-            pipelineAdjustedValue: number
+            pipelineAdjustedValue: number,
+            valueCalibrationFactor: number,
+            pipelineValueForecastAdjusted: number,
+            valueMeanPctError: number
         }> = {}
 
         // Global Win Rate for baseline (only from closed leads)
@@ -129,7 +135,10 @@ export default function ForecastDashboard() {
                     avgProb: 0,
                     score: 0,
                     pipelineExpectedValue: 0,
-                    pipelineAdjustedValue: 0
+                    pipelineAdjustedValue: 0,
+                    valueCalibrationFactor: 1,
+                    pipelineValueForecastAdjusted: 0,
+                    valueMeanPctError: 0
                 }
             }
             map[seller].leads.push(lead)
@@ -197,6 +206,22 @@ export default function ForecastDashboard() {
 
             // Adjusted Forecast (Weight by reliability)
             const pipelineAdj = pipelineEV * (reliabilityScore / 100)
+            const wonLeads = s.historicalLeads.filter((l) => l.etapa === 'Cerrado Ganado')
+            const valuePairs = wonLeads
+                .map((l: any) => ({
+                    estimated: Number(l.value_forecast_estimated ?? l.valor_estimado ?? 0),
+                    actual: Number(l.value_forecast_actual ?? l.valor_real_cierre ?? l.valor_estimado ?? 0)
+                }))
+                .filter((v) => Number.isFinite(v.estimated) && Number.isFinite(v.actual) && v.estimated > 0)
+
+            const estimatedTotal = valuePairs.reduce((acc, v) => acc + v.estimated, 0)
+            const actualTotal = valuePairs.reduce((acc, v) => acc + v.actual, 0)
+            const rawCalibration = estimatedTotal > 0 ? (actualTotal / estimatedTotal) : 1
+            const valueCalibrationFactor = Math.max(0.5, Math.min(1.6, rawCalibration))
+            const pipelineValueForecastAdjusted = pipelineAdj * valueCalibrationFactor
+            const valueMeanPctError = valuePairs.length > 0
+                ? valuePairs.reduce((acc, v) => acc + (Math.abs(v.actual - v.estimated) / v.estimated), 0) / valuePairs.length
+                : 0
 
             return {
                 ...s,
@@ -205,7 +230,10 @@ export default function ForecastDashboard() {
                 avgProb: scoredN > 0 ? (scoredLeads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0) / scoredN) : 0,
                 score: reliabilityScore,
                 pipelineExpectedValue: pipelineEV,
-                pipelineAdjustedValue: pipelineAdj
+                pipelineAdjustedValue: pipelineAdj,
+                valueCalibrationFactor,
+                pipelineValueForecastAdjusted,
+                valueMeanPctError
             }
         }).sort((a, b) => b.score - a.score)
     }, [leads, filteredLeads, history])
@@ -232,6 +260,10 @@ export default function ForecastDashboard() {
 
         // Global adjusted sum
         const adjustedTotal = statsPerSeller.reduce((acc, s) => acc + s.pipelineAdjustedValue, 0)
+        const valueAdjustedTotal = statsPerSeller.reduce((acc, s) => acc + s.pipelineValueForecastAdjusted, 0)
+        const avgValueError = statsPerSeller.length > 0
+            ? (statsPerSeller.reduce((acc, s) => acc + (s.valueMeanPctError || 0), 0) / statsPerSeller.length) * 100
+            : 0
 
         return {
             totalLeads: filteredLeads.length,
@@ -240,10 +272,11 @@ export default function ForecastDashboard() {
             negotiationCount: active.filter(l => l.etapa === 'Negociación').length,
             avgLogLoss: globalMeanError,
             pipelineForecast,
-            adjustedTotal
+            adjustedTotal,
+            valueAdjustedTotal,
+            avgValueError
         }
     }, [filteredLeads, statsPerSeller])
-    burial:
     return (
         <div className='min-h-full flex flex-col p-8 overflow-y-auto custom-scrollbar' style={{ background: 'transparent' }}>
             <div className='max-w-7xl mx-auto w-full space-y-10'>
@@ -251,11 +284,8 @@ export default function ForecastDashboard() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div
-                                className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden shrink-0'
-                                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                            >
-                                <TrendingUp size={34} style={{ color: 'var(--accent-secondary)' }} strokeWidth={1.9} />
+                            <div className='ah-icon-card'>
+                                <TrendingUp size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -293,7 +323,7 @@ export default function ForecastDashboard() {
                         </div>
                         <button
                             onClick={fetchLeads}
-                            className='px-5 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2'
+                            className='px-5 py-2.5 bg-[#2048FF] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer'
                         >
                             <span>Actualizar</span>
                             <RotateCw size={12} strokeWidth={2.5} />
@@ -333,9 +363,12 @@ export default function ForecastDashboard() {
                         <div className='flex flex-col'>
                             <label className='text-[10px] font-black text-white/50 uppercase tracking-[0.2em]'>Forecast Ajustado (Total)</label>
                             <p className='text-3xl font-black text-white mt-1'>
-                                ${globalStats.adjustedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                ${globalStats.valueAdjustedTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                             </p>
-                            <p className='text-[10px] text-white/60 font-medium mt-1 uppercase tracking-tighter'>Pipeline ponderado por confiabilidad</p>
+                            <p className='text-[10px] text-white/60 font-medium mt-1 uppercase tracking-tighter'>Confiabilidad + calibración de valor histórico</p>
+                            <p className='text-[9px] text-white/75 font-black uppercase tracking-wider mt-1'>
+                                Error valor prom: {globalStats.avgValueError.toFixed(1)}%
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -363,8 +396,8 @@ export default function ForecastDashboard() {
                 <div className='rounded-[40px] shadow-2xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     <div className='px-8 py-6 border-b flex items-center justify-between' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-4'>
-                            <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                <LayoutDashboard size={24} />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <LayoutDashboard size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Métricas por Colaborador</h2>
@@ -380,7 +413,7 @@ export default function ForecastDashboard() {
                                     <th className='px-8 py-5 whitespace-nowrap'>Vendedor</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Conf. (Score)</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Negoc.</th>
-                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Real (Adj)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Valor (Adj)</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Tasa Cierre</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Muestra</th>
                                 </tr>
@@ -417,8 +450,9 @@ export default function ForecastDashboard() {
                                             <p className='text-[10px] font-bold opacity-40 uppercase tracking-tighter' style={{ color: 'var(--text-secondary)' }}>{s.leads.filter(l => l.etapa === 'Negociación').length} en negoc.</p>
                                         </td>
                                         <td className='px-8 py-5 text-center' style={{ backgroundColor: 'rgba(32, 72, 255, 0.02)' }}>
-                                            <p className='font-black text-[#2048FF] text-base'>${s.pipelineAdjustedValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
-                                            <p className='text-[8px] font-black text-[#2048FF]/60 uppercase tracking-widest'>Ponderado</p>
+                                            <p className='font-black text-[#2048FF] text-base'>${s.pipelineValueForecastAdjusted.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                            <p className='text-[8px] font-black text-[#2048FF]/60 uppercase tracking-widest'>x{(s.valueCalibrationFactor || 1).toFixed(2)} calib.</p>
+                                            <p className='text-[8px] font-black text-[#2048FF]/45 uppercase tracking-widest'>err {((s.valueMeanPctError || 0) * 100).toFixed(1)}%</p>
                                         </td>
                                         <td className='px-8 py-5 text-center font-black text-sm' style={{ color: 'var(--text-primary)' }}>{s.winRate.toFixed(1)}%</td>
                                         <td className='px-8 py-5 text-center'>
@@ -439,8 +473,8 @@ export default function ForecastDashboard() {
                 {/* Redesigned Guidance Section using transparent-bordered themed cards */}
                 <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                     <div className='p-6 rounded-[30px] border shadow-sm flex gap-4 transition-all hover:bg-blue-500/5' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center shrink-0'>
-                            <Info size={24} className='text-[#2048FF]' />
+                        <div className='ah-icon-card ah-icon-card-sm'>
+                            <Info size={22} strokeWidth={2} />
                         </div>
                         <div>
                             <p className='font-black text-sm uppercase tracking-widest leading-none mb-3' style={{ color: 'var(--text-primary)' }}>Interpretación del Forecast</p>
@@ -452,8 +486,8 @@ export default function ForecastDashboard() {
 
                     {statsPerSeller.some(s => s.historicalLeads.length < 10) && (
                         <div className='p-6 rounded-[30px] border shadow-sm flex gap-4 border-amber-500/20 transition-all hover:bg-amber-500/5' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                            <div className='w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0'>
-                                <AlertCircle size={24} className='text-amber-500' />
+                            <div className='ah-icon-card ah-icon-card-sm'>
+                                <AlertCircle size={22} strokeWidth={2} />
                             </div>
                             <div>
                                 <p className='font-black text-sm uppercase tracking-widest leading-none mb-3 text-amber-600'>Validez Estadística</p>

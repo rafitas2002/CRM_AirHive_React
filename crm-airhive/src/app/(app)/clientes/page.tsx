@@ -7,7 +7,7 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
-import { Search, Users, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
+import { Search, Users, Pencil, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
 
@@ -24,6 +24,7 @@ const normalizeLead = (lead: Lead) => ({
     telefono: lead.telefono || '',
     etapa: lead.etapa || 'Prospección',
     valor_estimado: lead.valor_estimado || 0,
+    valor_real_cierre: (lead as any).valor_real_cierre ?? null,
     oportunidad: lead.oportunidad || '',
     calificacion: lead.calificacion || 3,
     notas: lead.notas || '',
@@ -229,6 +230,10 @@ export default function LeadsPage() {
         }
 
         if (modalMode === 'create') {
+            const isWonStage = leadData.etapa === 'Cerrado Ganado'
+            const realClosureValue = isWonStage
+                ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
+                : null
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
@@ -236,6 +241,7 @@ export default function LeadsPage() {
                 telefono: leadData.telefono,
                 etapa: leadData.etapa,
                 valor_estimado: leadData.valor_estimado,
+                valor_real_cierre: realClosureValue,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -283,6 +289,10 @@ export default function LeadsPage() {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
 
+            const isWonStage = leadData.etapa === 'Cerrado Ganado'
+            const realClosureValue = isWonStage
+                ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
+                : null
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
@@ -290,6 +300,7 @@ export default function LeadsPage() {
                 telefono: leadData.telefono,
                 etapa: leadData.etapa,
                 valor_estimado: leadData.valor_estimado,
+                valor_real_cierre: realClosureValue,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -340,7 +351,7 @@ export default function LeadsPage() {
                             eventType: 'lead_closed',
                             entityType: 'lead',
                             entityId: currentLead.id,
-                            metadata: { outcome: leadData.etapa, value: leadData.valor_estimado }
+                            metadata: { outcome: leadData.etapa, value: realClosureValue ?? leadData.valor_estimado }
                         })
                     }
                 } else if (probChanged) {
@@ -448,8 +459,8 @@ export default function LeadsPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <Users size={36} color="var(--input-focus)" strokeWidth={1.5} className="drop-shadow-sm" />
+                            <div className='ah-icon-card transition-all hover:scale-105'>
+                                <Users size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -463,47 +474,31 @@ export default function LeadsPage() {
                     </div>
 
                     <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                        <div className='flex gap-3'>
-                            <button
-                                onClick={() => setIsEditingMode(!isEditingMode)}
-                                className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEditingMode
-                                    ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
-                                    : 'bg-transparent hover:opacity-70 hover:scale-105 active:scale-95'
-                                    }`}
-                                style={!isEditingMode ? {
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                } : {}}
-                            >
-                                <div className='flex items-center gap-2'>
-                                    {isEditingMode ? (
-                                        <span>Bloquear Edición</span>
-                                    ) : (
-                                        <>
-                                            <span>Editar Vista</span>
-                                            <Pencil size={12} strokeWidth={2.5} className="opacity-80" />
-                                        </>
-                                    )}
-                                </div>
-                            </button>
-                            <button
-                                onClick={fetchLeads}
-                                className='px-5 py-2.5 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 group'
-                                style={{
-                                    background: 'var(--card-bg)',
-                                    borderColor: 'var(--card-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                            >
-                                <div className='flex items-center gap-2'>
-                                    <span>Actualizar</span>
-                                    <RotateCw size={12} strokeWidth={2.5} className='transition-transform group-hover:rotate-180' />
-                                </div>
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => setIsEditingMode(!isEditingMode)}
+                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
+                                ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
+                                : 'bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
+                                }`}
+                            style={!isEditingMode ? {
+                                borderColor: 'var(--card-border)',
+                                color: 'var(--text-primary)'
+                            } : {}}
+                        >
+                            <div className='flex items-center gap-2'>
+                                {isEditingMode ? (
+                                    <span>Bloquear Edición</span>
+                                ) : (
+                                    <>
+                                        <span>Editar Vista</span>
+                                        <Pencil size={12} strokeWidth={2.5} className="opacity-80" />
+                                    </>
+                                )}
+                            </div>
+                        </button>
                         <button
                             onClick={openCreateModal}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all'
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
                             + Nuevo Lead
                         </button>
@@ -515,8 +510,8 @@ export default function LeadsPage() {
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
                             <div className='flex items-center gap-4'>
-                                <div className='w-12 h-12 rounded-[20px] flex items-center justify-center shadow-inner' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                    <ListFilter size={24} />
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <ListFilter size={22} strokeWidth={2} />
                                 </div>
                                 <div>
                                     <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Bandeja de leads</h2>
@@ -572,7 +567,7 @@ export default function LeadsPage() {
                                 <select
                                     value={sortBy}
                                     onChange={(e) => setSortBy(e.target.value)}
-                                    className='ah-select-control ah-select-control-order'
+                                    className='ah-select-control'
                                 >
                                     <option value="fecha_registro-desc">Orden: Reciente</option>
                                     <option value="fecha_registro-asc">Orden: Antiguo</option>

@@ -60,7 +60,7 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                                             e.stopPropagation()
                                             onEdit?.(cliente)
                                         }}
-                                        className='p-2 hover:bg-yellow-500/10 rounded-xl transition-all'
+                                        className='p-2 rounded-xl border border-transparent text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400 transition-all cursor-pointer'
                                         title='Editar'
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

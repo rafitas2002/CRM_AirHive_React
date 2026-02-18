@@ -30,10 +30,14 @@ export default function PersonalizacionPage() {
     return (
         <div className='p-8 max-w-5xl'>
             <div className='mb-8'>
-                <h1 className='text-3xl font-bold mb-2 flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
-                    <Palette size={26} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
-                    Personalización
-                </h1>
+                <div className='flex items-center gap-4 mb-2'>
+                    <div className='ah-icon-card ah-icon-card-sm'>
+                        <Palette size={22} strokeWidth={2.1} />
+                    </div>
+                    <h1 className='text-3xl font-bold' style={{ color: 'var(--text-primary)' }}>
+                        Personalización
+                    </h1>
+                </div>
                 <p className='text-base' style={{ color: 'var(--text-secondary)' }}>
                     Personaliza la apariencia de tu CRM según tus preferencias
                 </p>
@@ -98,8 +102,10 @@ export default function PersonalizacionPage() {
                     borderColor: 'var(--card-border)'
                 }}
             >
-                <p className='text-sm flex items-start gap-2' style={{ color: 'var(--text-secondary)' }}>
-                    <Lightbulb size={16} strokeWidth={2.2} className='mt-0.5 shrink-0' style={{ color: 'var(--accent-secondary)' }} />
+                <p className='text-sm flex items-start gap-3' style={{ color: 'var(--text-secondary)' }}>
+                    <span className='ah-icon-card ah-icon-card-sm mt-0.5'>
+                        <Lightbulb size={16} strokeWidth={2.2} />
+                    </span>
                     <span>
                         El tema seleccionado se aplicará automáticamente a todas las páginas del CRM y se guardará para tus próximas sesiones.
                     </span>
