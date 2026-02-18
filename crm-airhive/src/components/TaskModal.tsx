@@ -15,6 +15,7 @@ import {
     Calendar,
     Pin
 } from 'lucide-react'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface TaskModalProps {
     isOpen: boolean
@@ -46,6 +47,7 @@ export default function TaskModal({
     leadId,
     mode
 }: TaskModalProps) {
+    useBodyScrollLock(isOpen)
     const [leads, setLeads] = useState<{ id: number, empresa: string, nombre: string }[]>([])
     const [users, setUsers] = useState<{ id: string, full_name: string }[]>([])
     const [formData, setFormData] = useState({

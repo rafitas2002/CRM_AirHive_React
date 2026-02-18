@@ -37,7 +37,7 @@
   --accent-secondary: #2048FF;
   --table-count-chip-bg: linear-gradient(135deg, rgb(37 99 235 / 0.14), rgb(67 56 202 / 0.12));
   --table-count-chip-border: rgb(37 99 235 / 0.24);
-  --table-count-chip-number: #1d4ed8;
+  --table-count-chip-number: #ffffff;
   --table-count-chip-label: #1e293b;
   --home-hero-bg: linear-gradient(135deg, #0d2450 0%, #12387c 52%, #1d4ed8 100%);
   --home-hero-border: rgba(96, 165, 250, 0.45);
@@ -96,10 +96,10 @@
   --website-badge-text: #1e3a8a;
   --accent-primary: #1e3a8a;
   --accent-secondary: #1e40af;
-  --table-count-chip-bg: linear-gradient(135deg, rgb(15 23 42 / 0.58), rgb(30 41 59 / 0.56));
-  --table-count-chip-border: rgb(96 165 250 / 0.52);
-  --table-count-chip-number: #93c5fd;
-  --table-count-chip-label: #f1f5f9;
+  --table-count-chip-bg: linear-gradient(135deg, rgb(30 58 138 / 0.38), rgb(30 64 175 / 0.34));
+  --table-count-chip-border: rgb(37 99 235 / 0.5);
+  --table-count-chip-number: #ffffff;
+  --table-count-chip-label: #e5e7eb;
   --home-hero-bg: linear-gradient(135deg, #18263f 0%, #19366f 52%, #1e40af 100%);
   --home-hero-border: rgba(96, 165, 250, 0.38);
   --home-hero-glow: rgba(30, 64, 175, 0.55);
@@ -156,7 +156,7 @@
   --website-badge-text: #a3b8ff;
   --table-count-chip-bg: linear-gradient(135deg, rgb(37 99 235 / 0.24), rgb(67 56 202 / 0.2));
   --table-count-chip-border: rgb(59 130 246 / 0.34);
-  --table-count-chip-number: #60a5fa;
+  --table-count-chip-number: #ffffff;
   --table-count-chip-label: #e5e7eb;
   --home-hero-bg: linear-gradient(135deg, #081329 0%, #102754 52%, #173c87 100%);
   --home-hero-border: rgba(59, 130, 246, 0.38);
@@ -203,6 +203,36 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+.ah-icon-card {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(145deg, #091634 0%, #0b1e46 100%);
+  border: 1px solid rgba(37, 99, 235, 0.34);
+  box-shadow: 0 14px 28px rgba(4, 13, 34, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.ah-icon-card > svg {
+  color: #ffffff;
+  stroke: #ffffff;
+}
+
+.ah-icon-card-sm {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 18px;
+}
+
+.ah-icon-card-lg {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 28px;
+}
+
 .ah-modal-overlay {
   position: fixed;
   inset: 0;
@@ -214,6 +244,7 @@ body {
   background: rgb(0 0 0 / 0.6);
   backdrop-filter: blur(6px);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .ah-modal-panel {
@@ -226,6 +257,7 @@ body {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 70px - 32px);
+  overscroll-behavior: contain;
 }
 
 .ah-modal-header {
@@ -484,6 +516,24 @@ body {
 
 .ah-reset-filter-btn:hover {
   background: rgb(244 63 94 / 0.15);
+}
+
+/* Global interactive cursor behavior */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+a[href],
+summary,
+input[type='button']:not(:disabled),
+input[type='submit']:not(:disabled),
+input[type='reset']:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role='button'][aria-disabled='true'],
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
 }
 
 /* Unified table count chip */

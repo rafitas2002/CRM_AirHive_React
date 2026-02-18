@@ -28,10 +28,14 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             {/* Sidebar Navigation */}
             <aside className='w-72 border-r flex flex-col' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                 <div className='p-6 border-b' style={{ borderColor: 'var(--card-border)' }}>
-                    <h1 className='text-2xl font-bold flex items-center gap-2.5' style={{ color: 'var(--text-primary)' }}>
-                        <Settings size={22} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
-                        Configuración
-                    </h1>
+                    <div className='flex items-center gap-3'>
+                        <div className='ah-icon-card ah-icon-card-sm'>
+                            <Settings size={20} strokeWidth={2.2} />
+                        </div>
+                        <h1 className='text-2xl font-bold' style={{ color: 'var(--text-primary)' }}>
+                            Configuración
+                        </h1>
+                    </div>
                     <p className='text-sm mt-1' style={{ color: 'var(--text-secondary)' }}>Personaliza tu experiencia</p>
                 </div>
 
@@ -49,7 +53,12 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                                     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)'
                                 }}
                             >
-                                <Icon size={18} strokeWidth={2.2} />
+                                <span
+                                    className='ah-icon-card ah-icon-card-sm shrink-0'
+                                    style={{ width: '2rem', height: '2rem', borderRadius: '0.75rem' }}
+                                >
+                                    <Icon size={14} strokeWidth={2.2} />
+                                </span>
                                 {link.label}
                                 {isActive && (
                                     <span

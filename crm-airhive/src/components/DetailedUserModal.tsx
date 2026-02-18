@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/auth'
 import { getUserActivitySummary } from '@/app/actions/admin'
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleMeta } from '@/lib/roleUtils'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface DetailedUserModalProps {
     isOpen: boolean
@@ -38,6 +39,7 @@ interface DetailedUserModalProps {
 }
 
 export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: DetailedUserModalProps) {
+    useBodyScrollLock(isOpen)
     const { profile: currentUser } = useAuth()
     const [activeTab, setActiveTab] = useState('profile')
     const [activityData, setActivityData] = useState<any>(null)

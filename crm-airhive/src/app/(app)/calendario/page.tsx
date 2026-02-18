@@ -173,8 +173,8 @@ export default function CalendarioPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-8'>
                         <div className='flex items-center gap-6'>
-                            <div className='w-16 h-16 rounded-[22px] flex items-center justify-center border shadow-lg overflow-hidden transition-all hover:scale-105 ah-window-title-icon-shell'>
-                                <CalendarDays size={36} strokeWidth={1.5} className="ah-window-title-icon" />
+                            <div className='ah-icon-card transition-all hover:scale-105'>
+                                <CalendarDays size={34} strokeWidth={1.9} />
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
@@ -201,7 +201,7 @@ export default function CalendarioPage() {
                                 <select
                                     value={selectedSellerId}
                                     onChange={(e) => setSelectedSellerId(e.target.value)}
-                                    className='bg-transparent text-sm font-black focus:outline-none cursor-pointer'
+                                    className='bg-transparent text-sm font-black focus:outline-none cursor-pointer transition-colors hover:text-[#2048FF]'
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     <option value="all">Todos los vendedores</option>
@@ -215,13 +215,13 @@ export default function CalendarioPage() {
                         <div className='flex bg-[var(--background)] rounded-2xl p-1 border border-[var(--card-border)]'>
                             <button
                                 onClick={() => setViewMode('list')}
-                                className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all uppercase tracking-widest ${viewMode === 'list' ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-gray-600'}`}
+                                className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all uppercase tracking-widest cursor-pointer ${viewMode === 'list' ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-500/10'}`}
                             >
                                 Lista
                             </button>
                             <button
                                 onClick={() => setViewMode('week')}
-                                className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all uppercase tracking-widest ${viewMode === 'week' ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-gray-600'}`}
+                                className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all uppercase tracking-widest cursor-pointer ${viewMode === 'week' ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-500/10'}`}
                             >
                                 Semana
                             </button>
@@ -229,9 +229,9 @@ export default function CalendarioPage() {
 
                         <button
                             onClick={() => setIsEditMode(!isEditMode)}
-                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${isEditMode
+                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 flex items-center gap-2 cursor-pointer ${isEditMode
                                 ? 'bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-500/20'
-                                : 'border-[var(--card-border)] text-[var(--text-primary)] hover:border-blue-500 hover:text-blue-500'
+                                : 'border-[var(--card-border)] text-[var(--text-primary)] hover:border-blue-500 hover:text-blue-500 hover:bg-blue-500/10'
                                 }`}
                         >
                             {isEditMode ? <ShieldCheck size={14} /> : <Pencil size={14} />}
@@ -245,8 +245,8 @@ export default function CalendarioPage() {
                     <div className='max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0'>
                         {meetings.length === 0 ? (
                             <div className='flex-1 flex flex-col items-center justify-center rounded-[40px] shadow-2xl shadow-blue-500/5 p-12 text-center border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                                <div className='w-24 h-24 rounded-[28px] flex items-center justify-center mb-6 ah-window-title-icon-shell'>
-                                    <CalendarDays size={42} strokeWidth={1.8} className='ah-window-title-icon' />
+                                <div className='ah-icon-card ah-icon-card-lg mb-6'>
+                                    <CalendarDays size={42} strokeWidth={2} />
                                 </div>
                                 <h3 className='text-3xl font-black mb-3' style={{ color: 'var(--text-primary)' }}>No hay juntas programadas</h3>
                                 <p className='mb-8 font-medium max-w-sm' style={{ color: 'var(--text-secondary)' }}>Empieza agendando una reunión con uno de tus leads para verla aquí.</p>
@@ -278,7 +278,7 @@ export default function CalendarioPage() {
                                                         return (
                                                             <div
                                                                 key={meeting.id}
-                                                                className={`group relative p-8 rounded-[40px] border-2 transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] cursor-pointer overflow-hidden`}
+                                                                className={`group relative p-8 rounded-[40px] border-2 transition-all hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden ${isEditMode ? 'cursor-pointer' : 'cursor-default'}`}
                                                                 style={{
                                                                     background: 'var(--card-bg)',
                                                                     borderColor: 'var(--card-border)'

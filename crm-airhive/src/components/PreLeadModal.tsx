@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
 import { getCatalogs } from '@/app/actions/catalogs'
+import { useAuth } from '@/lib/auth'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface PreLeadModalProps {
     isOpen: boolean
@@ -21,6 +23,9 @@ export default function PreLeadModal({
     initialData,
     mode
 }: PreLeadModalProps) {
+    useBodyScrollLock(isOpen)
+    const auth = useAuth()
+    const isAdmin = auth.profile?.role === 'admin'
     const [formData, setFormData] = useState({
         nombre_empresa: '',
         nombre_contacto: '',
@@ -268,6 +273,21 @@ export default function PreLeadModal({
                                         ...prev,
                                         industrias: [...(prev.industrias || []), opt].sort((a, b) => a.name.localeCompare(b.name))
                                     }))
+                                }}
+                                canDeleteOptions={isAdmin}
+                                onDeleteOption={(deletedId) => {
+                                    setCatalogs(prev => ({
+                                        ...prev,
+                                        industrias: (prev.industrias || []).filter(i => i.id !== deletedId)
+                                    }))
+                                    if (formData.industria_id === deletedId) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            industria_id: '',
+                                            industria: '',
+                                            giro_empresa: ''
+                                        }))
+                                    }
                                 }}
                             />
 

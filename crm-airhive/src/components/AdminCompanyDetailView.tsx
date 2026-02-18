@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase'
 import { CompanyData } from './CompanyModal'
 import type { Database } from '@/lib/supabase'
 import ClientDetailView from './ClientDetailView'
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { FileText, MapPin, Globe, Users2, ClipboardList } from 'lucide-react'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
@@ -24,6 +27,7 @@ export default function AdminCompanyDetailView({
     company,
     currentUserProfile
 }: AdminCompanyDetailViewProps) {
+    useBodyScrollLock(isOpen)
     const [clients, setClients] = useState<Cliente[]>([])
     const [loadingClients, setLoadingClients] = useState(false)
     const [selectedClient, setSelectedClient] = useState<Cliente | null>(null)
@@ -68,6 +72,15 @@ export default function AdminCompanyDetailView({
 
     if (!isOpen) return null
 
+    const companyBadgeIndustries = Array.from(new Set([
+        ...(company.industrias || []),
+        ...(company.industria ? [company.industria] : [])
+    ]))
+        .filter(Boolean)
+        .map((name, idx) => ({ id: `company-industry-${idx}-${name}`, name }))
+
+    const companyBadgeVisualMap = buildIndustryBadgeVisualMap(companyBadgeIndustries)
+
     return (
         <div className='fixed inset-x-0 bottom-0 top-[70px] z-[130] bg-[var(--background)] flex flex-col animate-in fade-in slide-in-from-bottom duration-300'>
             {/* Header */}
@@ -104,19 +117,51 @@ export default function AdminCompanyDetailView({
                     <div className='lg:col-span-4 space-y-6'>
                         <div className='bg-[var(--card-bg)] rounded-3xl p-8 shadow-sm border border-[var(--card-border)]'>
                             <h2 className='text-xl font-black text-[var(--text-primary)] mb-6 flex items-center gap-2 tracking-tight'>
-                                <span>📄</span> Datos Generales
+                                <FileText size={20} className='text-[var(--accent-secondary)]' /> Datos Generales
                             </h2>
 
                             <div className='space-y-6'>
                                 <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Industria</label>
                                     <p className='text-[var(--text-primary)] font-bold text-lg'>{company.industria || 'N/A'}</p>
+                                    {!!company.industrias?.length && (
+                                        <div className='mt-3 flex flex-wrap gap-2'>
+                                            {company.industrias.map((industry) => (
+                                                <span
+                                                    key={industry}
+                                                    className='px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                                                >
+                                                    {industry}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {!!companyBadgeIndustries.length && (
+                                        <div className='mt-4 p-3 rounded-xl border bg-[var(--card-bg)] border-[var(--card-border)]'>
+                                            <div className='flex flex-wrap gap-2'>
+                                                {companyBadgeIndustries.map((industry) => {
+                                                    const badgeVisual = getIndustryBadgeVisualFromMap(industry.id, companyBadgeVisualMap, industry.name)
+                                                    const IndustryIcon = badgeVisual.icon
+                                                    return (
+                                                        <span
+                                                            key={industry.id}
+                                                            className={`w-9 h-9 rounded-lg border flex items-center justify-center shadow-sm ${badgeVisual.containerClass}`}
+                                                            title={industry.name}
+                                                        >
+                                                            <IndustryIcon size={15} className={badgeVisual.iconClass} strokeWidth={2.3} />
+                                                        </span>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Ubicación</label>
                                     <div className='flex items-center gap-2'>
-                                        <span className='text-xl'>📍</span>
+                                        <MapPin size={20} className='text-red-500 shrink-0' />
                                         <p className='text-[var(--text-primary)] font-bold text-lg'>{company.ubicacion || 'No especificada'}</p>
                                     </div>
                                 </div>
@@ -129,7 +174,8 @@ export default function AdminCompanyDetailView({
                                             target='_blank'
                                             className='text-blue-500 font-bold hover:underline flex items-center gap-2 truncate text-lg'
                                         >
-                                            <span className='text-xl'>🌐</span> {company.website}
+                                            <Globe size={20} className='text-blue-500 shrink-0' />
+                                            {company.website}
                                         </a>
                                     ) : (
                                         <p className='text-[var(--text-secondary)]'>No registrado</p>
@@ -152,7 +198,7 @@ export default function AdminCompanyDetailView({
 
                         <div className='bg-[var(--card-bg)] rounded-3xl p-8 shadow-sm border border-[var(--card-border)]'>
                             <h2 className='text-xl font-black text-[var(--text-primary)] mb-4 flex items-center gap-2 tracking-tight'>
-                                <span>📝</span> Descripción
+                                <ClipboardList size={20} className='text-[var(--accent-secondary)]' /> Descripción
                             </h2>
                             <p className='text-[var(--text-secondary)] leading-relaxed font-medium bg-[var(--hover-bg)] p-6 rounded-2xl border border-[var(--card-border)]'>
                                 {company.descripcion || 'Sin descripción detallada.'}
@@ -165,7 +211,7 @@ export default function AdminCompanyDetailView({
                         <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] flex flex-col'>
                             <div className='p-8 border-b border-[var(--card-border)] flex items-center justify-between'>
                                 <h2 className='text-2xl font-black text-[var(--text-primary)] flex items-center gap-3 tracking-tight'>
-                                    <span>👥</span> Contactos y Leads Asociados
+                                    <Users2 size={24} className='text-[var(--accent-secondary)]' /> Contactos y Leads Asociados
                                     <span className='bg-[var(--hover-bg)] text-[var(--text-primary)] text-xs px-3 py-1 rounded-full font-black border border-[var(--card-border)]'>
                                         {clients.length}
                                     </span>
