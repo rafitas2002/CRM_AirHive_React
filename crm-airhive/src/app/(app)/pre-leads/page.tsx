@@ -8,7 +8,7 @@ import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { Search, Target, Pencil, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
+import { Search, Target, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { useAuth } from '@/lib/auth'
 
