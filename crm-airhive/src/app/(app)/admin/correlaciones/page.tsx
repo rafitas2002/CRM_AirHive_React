@@ -616,7 +616,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                 <div className='max-w-7xl mx-auto flex flex-col gap-10'>
 
                     {/* Header */}
-                    <div className='order-1 flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                    <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                         <div className='flex items-center gap-6'>
                             <div className='ah-icon-card'>
                                 <BarChart3 size={34} strokeWidth={1.9} />
