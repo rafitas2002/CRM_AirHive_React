@@ -42,7 +42,10 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
     const handleRecalculate = async (period: string) => {
         setLoadingPeriod(period)
         const res = await recalculateRacePeriod(period)
-        if (!res.success) alert(`No se pudo recalcular ${period}: ${res.error}`)
+        if (!res.success) {
+            const err = 'error' in res ? String(res.error) : 'Error desconocido'
+            alert(`No se pudo recalcular ${period}: ${err}`)
+        }
         await refreshHistory()
         setLoadingPeriod(null)
     }
@@ -70,7 +73,8 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
             note: editNote
         })
         if (!res.success) {
-            alert(`No se pudo guardar la corrección: ${res.error}`)
+            const err = 'error' in res ? String(res.error) : 'Error desconocido'
+            alert(`No se pudo guardar la corrección: ${err}`)
             return
         }
         setEditingId(null)
