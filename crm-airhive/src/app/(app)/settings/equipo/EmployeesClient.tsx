@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UserPlus, Search, Edit2, Ban, Eye, ShieldCheck, ListFilter, RotateCw, User, Users, Link2Off, Link2 } from 'lucide-react'
+import { UserPlus, Search, ShieldCheck, ListFilter, RotateCw, User, Users, Link2Off, Link2 } from 'lucide-react'
 import EmployeeModal from '@/components/EmployeeModal'
 import RoleBadge from '@/components/RoleBadge'
-import { createEmployee, updateEmployee, toggleEmployeeStatus, setRhMasterEnabled } from '@/app/actions/employees'
+import { createEmployee, updateEmployee, setRhMasterEnabled } from '@/app/actions/employees'
 import { useRouter } from 'next/navigation'
 import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 
@@ -18,8 +18,9 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
     const router = useRouter()
     const [searchTerm, setSearchTerm] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [modalReadOnly, setModalReadOnly] = useState(true)
+    const [isEditingRows, setIsEditingRows] = useState(false)
     const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null)
-    const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [rhMasterState, setRhMasterState] = useState(rhMasterEnabled)
     const [savingRhMaster, setSavingRhMaster] = useState(false)
 
@@ -57,28 +58,6 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
         }
         router.refresh()
         return true
-    }
-
-    const handleToggleStatus = async (id: string, currentStatus: boolean) => {
-        if (rhMasterState) {
-            alert('Acción bloqueada: RH maestro está activo.')
-            return
-        }
-        if (!confirm(`¿Estás seguro de que deseas ${currentStatus ? 'desactivar' : 'activar'} este usuario?`)) return
-
-        setLoadingAction(id)
-        // We assume 'active' is true unless strictly banned logic exists. 
-        // For simplicity, we toggle a "banned" state in auth via action.
-        // But visually, let's treat it as toggling active/inactive.
-        // The action takes "banned" as boolean. So if currentStatus is active (true), we want to ban (true).
-        const result = await toggleEmployeeStatus(id, !!currentStatus) // If active, ban explicitly.
-
-        setLoadingAction(null)
-        if (result.success) {
-            router.refresh()
-        } else {
-            alert('Error: ' + result.error)
-        }
     }
 
     const handleToggleRhMaster = async () => {
@@ -164,6 +143,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                         onClick={() => {
                             if (rhMasterState) return
                             setSelectedEmployee(null)
+                            setModalReadOnly(false)
                             setIsModalOpen(true)
                         }}
                         disabled={rhMasterState}
@@ -190,6 +170,24 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                         </div>
 
                         <div className='flex items-center gap-3'>
+                            <button
+                                type='button'
+                                onClick={() => setIsEditingRows((prev) => !prev)}
+                                disabled={rhMasterState}
+                                className='h-11 px-5 flex items-center justify-center gap-2 rounded-2xl border-2 font-black text-[10px] uppercase tracking-[0.16em] transition-all disabled:opacity-50'
+                                style={{
+                                    borderColor: isEditingRows ? '#f59e0b' : 'var(--card-border)',
+                                    background: isEditingRows ? 'rgba(245, 158, 11, 0.10)' : 'var(--card-bg)',
+                                    color: isEditingRows ? '#f59e0b' : 'var(--text-primary)'
+                                }}
+                                title='Activar o desactivar edición rápida en la tabla'
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isEditingRows ? '#f59e0b' : 'currentColor'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                                {isEditingRows ? 'Editar: ON' : 'Editar'}
+                            </button>
                             <div className='ah-count-chip'>
                                 <span className='ah-count-chip-number'>{filteredEmployees.length}</span>
                                 <div className='ah-count-chip-meta'>
@@ -228,20 +226,46 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                     <table className='w-full border-collapse'>
                         <thead>
                             <tr className='border-b' style={{ borderColor: 'var(--card-border)' }}>
+                                {isEditingRows && (
+                                    <th className='px-2 py-4 text-center text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>
+                                        Edit
+                                    </th>
+                                )}
                                 <th className='px-8 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>Empleado</th>
                                 <th className='px-8 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>Rol & Permisos</th>
                                 <th className='px-8 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>Estado</th>
                                 <th className='px-8 py-4 text-left text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>Ingreso</th>
-                                <th className='px-8 py-4 text-right text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)', background: 'var(--background)' }}>Acciones</th>
                             </tr>
                         </thead>
                         <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
                             {filteredEmployees.map((emp) => (
                                 <tr
                                     key={emp.id}
-                                    onClick={() => { setSelectedEmployee(emp); setIsModalOpen(true) }}
-                                    className='group hover:bg-[#2048FF]/5 transition-all cursor-pointer'
+                                    onClick={() => {
+                                        setSelectedEmployee(emp)
+                                        setModalReadOnly(true)
+                                        setIsModalOpen(true)
+                                    }}
+                                    className='group hover:bg-black/5 transition-colors cursor-pointer'
                                 >
+                                    {isEditingRows && (
+                                        <td className='px-2 py-5 text-center' onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedEmployee(emp)
+                                                    setModalReadOnly(false)
+                                                    setIsModalOpen(true)
+                                                }}
+                                                className='p-2 rounded-xl border border-transparent text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400 transition-all cursor-pointer'
+                                                title='Editar'
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M12 20h9" />
+                                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    )}
                                     <td className='px-8 py-5'>
                                         <div className='flex items-center gap-4'>
                                             {(() => {
@@ -292,33 +316,6 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                                             {new Date(emp.created_at).toLocaleDateString()}
                                         </p>
                                     </td>
-                                    <td className='px-8 py-5 text-right'>
-                                        <div className='flex items-center justify-end gap-3' onClick={(e) => e.stopPropagation()}>
-                                            <button
-                                                onClick={() => router.push(`/settings/equipo/${emp.id}`)}
-                                                className='w-10 h-10 flex items-center justify-center bg-[var(--background)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] rounded-xl transition-all shadow-sm group/btn'
-                                                title="Ver Perfil Completo"
-                                            >
-                                                <Eye size={18} strokeWidth={2.5} />
-                                            </button>
-                                            <button
-                                                onClick={() => { setSelectedEmployee(emp); setIsModalOpen(true) }}
-                                                disabled={rhMasterState}
-                                                className='w-10 h-10 flex items-center justify-center bg-[var(--background)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-emerald-500 hover:border-emerald-500 rounded-xl transition-all shadow-sm'
-                                                title='Editar'
-                                            >
-                                                <Edit2 size={16} strokeWidth={2.5} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleToggleStatus(emp.id, true)}
-                                                disabled={loadingAction === emp.id || rhMasterState}
-                                                className='w-10 h-10 flex items-center justify-center bg-[var(--background)] border border-[var(--card-border)] text-[var(--text-secondary)] hover:text-rose-500 hover:border-rose-500 rounded-xl transition-all shadow-sm disabled:opacity-50'
-                                                title='Desactivar / Banear'
-                                            >
-                                                <Ban size={16} strokeWidth={2.5} />
-                                            </button>
-                                        </div>
-                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -341,7 +338,7 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                 onClose={() => setIsModalOpen(false)}
                 onSave={selectedEmployee ? handleUpdate : handleCreate}
                 employee={selectedEmployee}
-                readOnlyMode={rhMasterState}
+                readOnlyMode={rhMasterState || modalReadOnly}
             />
         </div>
     )

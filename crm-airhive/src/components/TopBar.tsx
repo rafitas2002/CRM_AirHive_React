@@ -3,16 +3,255 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, type LucideIcon } from 'lucide-react'
+import { getQuoteRequestNotifications } from '@/app/actions/quotes'
+import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, type LucideIcon } from 'lucide-react'
 
 export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
+    const [supabase] = useState(() => createClient())
 
     const isAdmin = auth.profile?.role === 'admin'
+    const [quoteNotificationOpen, setQuoteNotificationOpen] = useState(false)
+    const [quotePendingCount, setQuotePendingCount] = useState(0)
+    const [quoteNotificationItems, setQuoteNotificationItems] = useState<Array<{
+        id: number
+        quote_author: string
+        contributed_by_name: string
+        requester_name: string
+        created_at: string
+    }>>([])
+    const [badgeNotificationItems, setBadgeNotificationItems] = useState<Array<{
+        id: string
+        label: string
+        level: number
+        event_type: 'unlocked' | 'upgraded'
+        created_at: string
+        sourceType: 'industry' | 'special'
+    }>>([])
+    const [badgeUnreadCount, setBadgeUnreadCount] = useState(0)
+    const quoteNotificationsRef = useRef<HTMLDivElement | null>(null)
+    const lastBadgeListSignatureRef = useRef('')
+    const lastQuoteListSignatureRef = useRef('')
     const logoDimensions = { width: 248, height: 36 }
     const dropdownIconClass = 'w-[18px] h-[18px] text-white/80 group-hover/item:text-white transition-colors'
+    const badgeSeenStorageKey = auth.user ? `airhive_seen_badge_notifications_${auth.user.id}` : ''
+
+    useEffect(() => {
+        if (!isAdmin || !auth.user) return
+        let cancelled = false
+        const load = async () => {
+            const result = await getQuoteRequestNotifications()
+            if (cancelled || !result.success || !result.data) return
+            const nextPendingCount = Number(result.data.pendingCount || 0)
+            setQuotePendingCount((prev) => (prev === nextPendingCount ? prev : nextPendingCount))
+            const items = Array.isArray(result.data.items) ? result.data.items : []
+            const normalizedItems = items.map((raw) => {
+                const item = raw as Record<string, unknown>
+                return {
+                    id: Number(item.id || 0),
+                    quote_author: String(item.quote_author || ''),
+                    contributed_by_name: String(item.contributed_by_name || ''),
+                    requester_name: String(item.requester_name || ''),
+                    created_at: String(item.created_at || '')
+                }
+            })
+            const signature = normalizedItems
+                .map((item) => `${item.id}:${item.created_at}`)
+                .join('|')
+            if (signature !== lastQuoteListSignatureRef.current) {
+                lastQuoteListSignatureRef.current = signature
+                setQuoteNotificationItems(normalizedItems)
+            }
+        }
+
+        load()
+        const interval = setInterval(load, 30000)
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+        }
+    }, [isAdmin, auth.user])
+
+    useEffect(() => {
+        if (!auth.user) return
+        let cancelled = false
+
+        const readSeen = () => {
+            if (typeof window === 'undefined' || !badgeSeenStorageKey) return new Set<string>()
+            try {
+                const raw = localStorage.getItem(badgeSeenStorageKey)
+                const parsed = raw ? JSON.parse(raw) : []
+                if (!Array.isArray(parsed)) return new Set<string>()
+                return new Set(parsed.map((x) => String(x)))
+            } catch {
+                return new Set<string>()
+            }
+        }
+
+        const loadBadgeNotifications = async () => {
+            const userId = auth.user?.id
+            if (!userId) return
+
+            const [industryRes, specialRes] = await Promise.all([
+                (supabase
+                    .from('seller_badge_events')
+                    .select('id, level, event_type, created_at, industrias(name)')
+                    .eq('seller_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(10) as any),
+                (supabase
+                    .from('seller_special_badge_events')
+                    .select('id, badge_label, level, event_type, created_at')
+                    .eq('seller_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(10) as any)
+            ])
+
+            const industryRows = Array.isArray(industryRes?.data) ? industryRes.data : []
+            const specialRows = Array.isArray(specialRes?.data) ? specialRes.data : []
+
+            const normalizedIndustry = industryRows.map((row: any) => ({
+                id: `industry:${String(row?.id || '')}`,
+                label: String(row?.industrias?.name || 'Industria'),
+                level: Number(row?.level || 1),
+                event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                created_at: String(row?.created_at || ''),
+                sourceType: 'industry' as const
+            }))
+
+            const normalizedSpecial = specialRows.map((row: any) => ({
+                id: `special:${String(row?.id || '')}`,
+                label: String(row?.badge_label || 'Badge especial'),
+                level: Number(row?.level || 1),
+                event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                created_at: String(row?.created_at || ''),
+                sourceType: 'special' as const
+            }))
+
+            const merged = [...normalizedIndustry, ...normalizedSpecial]
+                .filter((item) => item.id.endsWith(':') === false && item.created_at)
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(0, 20)
+
+            if (cancelled) return
+            const signature = merged
+                .map((item) => `${item.id}:${item.level}:${item.event_type}:${item.created_at}`)
+                .join('|')
+            if (signature !== lastBadgeListSignatureRef.current) {
+                lastBadgeListSignatureRef.current = signature
+                setBadgeNotificationItems(merged)
+            }
+
+            const seen = readSeen()
+            const unread = merged.filter((item) => !seen.has(item.id)).length
+            setBadgeUnreadCount((prev) => (prev === unread ? prev : unread))
+        }
+
+        const pushRealtimeBadgeNotification = (item: {
+            id: string
+            label: string
+            level: number
+            event_type: 'unlocked' | 'upgraded'
+            created_at: string
+            sourceType: 'industry' | 'special'
+        }) => {
+            setBadgeNotificationItems((prev) => {
+                const deduped = [item, ...prev.filter((x) => x.id !== item.id)]
+                return deduped
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .slice(0, 20)
+            })
+            const seen = readSeen()
+            if (!seen.has(item.id)) {
+                setBadgeUnreadCount((prev) => prev + 1)
+            }
+        }
+
+        loadBadgeNotifications()
+        const interval = setInterval(loadBadgeNotifications, 30000)
+        const userId = auth.user.id
+        const channel = supabase
+            .channel(`topbar-badge-notifications-${userId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'seller_badge_events',
+                    filter: `seller_id=eq.${userId}`
+                },
+                (payload: { new: { id: string, level?: number, event_type?: string, created_at?: string, industria_id?: string } }) => {
+                    const row = payload?.new
+                    const id = `industry:${String(row?.id || '')}`
+                    if (id === 'industry:') return
+                    pushRealtimeBadgeNotification({
+                        id,
+                        label: 'Badge de industria',
+                        level: Number(row?.level || 1),
+                        event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                        created_at: String(row?.created_at || new Date().toISOString()),
+                        sourceType: 'industry'
+                    })
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'seller_special_badge_events',
+                    filter: `seller_id=eq.${userId}`
+                },
+                (payload: { new: { id: string, badge_label?: string, level?: number, event_type?: string, created_at?: string } }) => {
+                    const row = payload?.new
+                    const id = `special:${String(row?.id || '')}`
+                    if (id === 'special:') return
+                    pushRealtimeBadgeNotification({
+                        id,
+                        label: String(row?.badge_label || 'Badge especial'),
+                        level: Number(row?.level || 1),
+                        event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                        created_at: String(row?.created_at || new Date().toISOString()),
+                        sourceType: 'special'
+                    })
+                }
+            )
+            .subscribe()
+
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+            supabase.removeChannel(channel)
+        }
+    }, [auth.user, badgeSeenStorageKey, supabase])
+
+    useEffect(() => {
+        const onClickOutside = (event: MouseEvent) => {
+            if (!quoteNotificationsRef.current) return
+            if (!quoteNotificationsRef.current.contains(event.target as Node)) {
+                setQuoteNotificationOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', onClickOutside)
+        return () => document.removeEventListener('mousedown', onClickOutside)
+    }, [])
+
+    const totalNotificationCount = quotePendingCount + badgeUnreadCount
+
+    const markBadgeNotificationsAsRead = () => {
+        if (typeof window === 'undefined' || !badgeSeenStorageKey) return
+        try {
+            const ids = badgeNotificationItems.map((item) => item.id).slice(0, 200)
+            localStorage.setItem(badgeSeenStorageKey, JSON.stringify(ids))
+            setBadgeUnreadCount(0)
+        } catch {
+            // noop
+        }
+    }
 
     return (
         <header className='h-[70px] bg-black/80 backdrop-blur-md border-b border-white/5 sticky top-0 z-[100]'>
@@ -233,6 +472,119 @@ export default function TopBar() {
                     <div className='h-9 px-4 rounded-full border border-white/20 bg-white/10 text-white text-xs font-bold flex items-center gap-2.5 whitespace-nowrap whitespace-nowrap shrink-0'>
                         <UserRound size={14} className='opacity-90 text-blue-300' strokeWidth={2.2} />
                         <span className='truncate max-w-[150px]'>{auth.loading ? 'Cargando...' : auth.username}</span>
+                    </div>
+
+                    <div ref={quoteNotificationsRef} className='relative'>
+                        <button
+                            type='button'
+                            onClick={() => {
+                                setQuoteNotificationOpen((prev) => {
+                                    const next = !prev
+                                    if (next) markBadgeNotificationsAsRead()
+                                    return next
+                                })
+                            }}
+                            className='relative text-white px-2 py-2 group transition-all hover:scale-110 cursor-pointer'
+                            title='Notificaciones'
+                            aria-label='Notificaciones'
+                        >
+                            <Bell size={22} strokeWidth={2.2} className='text-white/90 group-hover:text-white transition-colors' />
+                            {totalNotificationCount > 0 && (
+                                <span className='absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black leading-[18px] text-center'>
+                                    {totalNotificationCount > 99 ? '99+' : totalNotificationCount}
+                                </span>
+                            )}
+                            <span
+                                className='absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF] transition-all duration-300 ease-out w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
+                            />
+                        </button>
+
+                        {quoteNotificationOpen && (
+                            <div className='absolute right-0 top-[120%] w-[360px] rounded-2xl border border-white/10 bg-black/95 shadow-2xl z-[120] overflow-hidden'>
+                                <div className='px-4 py-3 border-b border-white/10 flex items-center justify-between'>
+                                    <p className='text-[11px] font-black uppercase tracking-[0.16em] text-white/70'>
+                                        Notificaciones
+                                    </p>
+                                    <span className='text-[11px] font-black text-blue-300'>
+                                        {totalNotificationCount} nuevas
+                                    </span>
+                                </div>
+                                <div className='max-h-[340px] overflow-y-auto'>
+                                    {badgeNotificationItems.length === 0 && !isAdmin && (
+                                        <p className='px-4 py-4 text-sm text-white/70'>Sin notificaciones de badges por ahora.</p>
+                                    )}
+
+                                    {badgeNotificationItems.length > 0 && (
+                                        <>
+                                            <div className='px-4 py-2 border-b border-white/10'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-amber-300'>
+                                                    Badges
+                                                </p>
+                                            </div>
+                                            {badgeNotificationItems.map((item) => (
+                                                <div
+                                                    key={`badge-notif-${item.id}`}
+                                                    className='px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
+                                                >
+                                                    <p className='text-sm font-semibold text-white flex items-center gap-2'>
+                                                        <Sparkles size={13} className='text-amber-300' />
+                                                        ¡Felicidades! {item.event_type === 'unlocked' ? 'Desbloqueaste' : 'Evolucionaste'} un badge
+                                                    </p>
+                                                    <p className='text-xs mt-1 text-white/75'>
+                                                        {item.label} · Nivel {item.level} · {item.sourceType === 'industry' ? 'Industria' : 'Especial'}
+                                                    </p>
+                                                    <p className='text-[11px] mt-1 text-blue-300/90'>
+                                                        {new Date(item.created_at).toLocaleString('es-MX')}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+
+                                    {isAdmin && (
+                                        <>
+                                            <div className='px-4 py-2 border-b border-white/10'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-rose-300'>
+                                                    Solicitudes de frases
+                                                </p>
+                                            </div>
+                                            {quoteNotificationItems.length === 0 && (
+                                                <p className='px-4 py-4 text-sm text-white/70'>Sin solicitudes pendientes.</p>
+                                            )}
+                                            {quoteNotificationItems.length > 0 && quoteNotificationItems.map((item) => (
+                                                <Link
+                                                    key={`quote-notif-${item.id}`}
+                                                    href='/settings/personalizacion#solicitudes-frases'
+                                                    onClick={() => setQuoteNotificationOpen(false)}
+                                                    className='block px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
+                                                >
+                                                    <p className='text-sm font-semibold text-white'>
+                                                        Autor: {item.quote_author}
+                                                    </p>
+                                                    <p className='text-xs mt-1 text-white/75'>
+                                                        Aportada por {item.contributed_by_name} • Solicita {item.requester_name}
+                                                    </p>
+                                                    <p className='text-[11px] mt-1 text-blue-300/90'>
+                                                        {new Date(item.created_at).toLocaleString('es-MX')}
+                                                    </p>
+                                                </Link>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                                {isAdmin && (
+                                    <div className='px-4 py-3'>
+                                        <Link
+                                            href='/settings/personalizacion#solicitudes-frases'
+                                            onClick={() => setQuoteNotificationOpen(false)}
+                                            className='inline-flex items-center text-xs font-bold text-blue-300 hover:text-blue-200 transition-colors'
+                                        >
+                                            Ir a revisar solicitudes
+                                        </Link>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Settings Gear Icon */}
