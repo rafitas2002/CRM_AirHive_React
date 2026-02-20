@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
@@ -34,7 +34,7 @@ interface ClientModalProps {
     initialData?: ClientData | null
     mode: 'create' | 'edit' | 'convert'
     onNavigateToCompanies?: () => void
-    companies?: { id: string, nombre: string }[]
+    companies?: { id: string, nombre: string, industria?: string | null, ubicacion?: string | null }[]
 }
 
 export default function ClientModal({
@@ -63,9 +63,6 @@ export default function ClientModal({
     })
     const [phoneError, setPhoneError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [filteredCompanies, setFilteredCompanies] = useState<{ id: string, nombre: string }[]>([])
-    const [showSuggestions, setShowSuggestions] = useState(false)
-    const wrapperRef = useRef<HTMLDivElement>(null)
     const wasOpen = useRef(false)
 
     // Probability editability state
@@ -172,37 +169,30 @@ export default function ClientModal({
     }, [formData.etapa])
 
     useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setShowSuggestions(false)
+        if (!formData.empresa_id && formData.empresa) {
+            const exactMatch = companies.find((c) => c.nombre.trim().toLowerCase() === formData.empresa.trim().toLowerCase())
+            if (exactMatch) {
+                setFormData((prev) => ({ ...prev, empresa_id: exactMatch.id, empresa: exactMatch.nombre }))
             }
         }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [wrapperRef])
+    }, [companies, formData.empresa, formData.empresa_id])
 
-    const handleEmpresaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value
-        setFormData({ ...formData, empresa: value, empresa_id: undefined })
+    const selectedCompany = useMemo(
+        () => companies.find((company) => company.id === formData.empresa_id),
+        [companies, formData.empresa_id]
+    )
 
-        if (value.length > 0) {
-            const filtered = companies.filter(c =>
-                c.nombre.toLowerCase().includes(value.toLowerCase())
-            )
-            setFilteredCompanies(filtered)
-            setShowSuggestions(true)
-        } else {
-            setShowSuggestions(false)
+    const handleCompanySelect = (companyId: string) => {
+        const company = companies.find((c) => c.id === companyId)
+        if (!company) {
+            setFormData((prev) => ({ ...prev, empresa_id: undefined, empresa: '' }))
+            return
         }
-    }
-
-    const selectCompany = (company: { id: string, nombre: string }) => {
-        setFormData({
-            ...formData,
+        setFormData((prev) => ({
+            ...prev,
             empresa: company.nombre,
             empresa_id: company.id
-        })
-        setShowSuggestions(false)
+        }))
     }
 
     const validatePhone = (phone: string) => {
@@ -267,52 +257,56 @@ export default function ClientModal({
                 <form onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
                     {/* Sección Empresa */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                        <div className='space-y-2' ref={wrapperRef}>
+                        <div className='space-y-2'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Empresa *</label>
-                            <div className='relative'>
-                                <input
-                                    required
-                                    type="text"
-                                    value={formData.empresa}
-                                    onChange={handleEmpresaChange}
-                                    readOnly={!!formData.empresa_id}
-                                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all ${formData.empresa_id ? 'bg-blue-50/10 cursor-not-allowed' : ''}`}
-                                    style={{
-                                        background: formData.empresa_id ? 'var(--background)' : 'var(--background)',
-                                        borderColor: 'var(--card-border)',
-                                        color: 'var(--text-primary)'
-                                    }}
-                                    placeholder="Busca una empresa..."
-                                    autoComplete="off"
-                                />
-                                {formData.empresa_id && mode !== 'convert' && ( // No dejar cambiar si es conversion para asegurar consistencia
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, empresa_id: undefined, empresa: '' })}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-red-500 font-black uppercase hover:scale-110 transition-transform"
-                                    >
-                                        ✕ Cambiar
-                                    </button>
-                                )}
-                                {!formData.empresa_id && showSuggestions && filteredCompanies.length > 0 && (
-                                    <div
-                                        className='absolute z-10 w-full mt-1 border rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar p-2'
-                                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
-                                    >
-                                        {filteredCompanies.map((company) => (
-                                            <div
-                                                key={company.id}
-                                                onClick={() => selectCompany(company)}
-                                                className='px-4 py-2 hover:bg-blue-500/10 cursor-pointer text-xs font-bold rounded-lg transition-colors flex items-center justify-between group'
-                                                style={{ color: 'var(--text-primary)' }}
-                                            >
-                                                <span>{company.nombre}</span>
-                                                <span className='text-[9px] text-blue-500 opacity-0 group-hover:opacity-100 uppercase tracking-tighter transition-all'>Seleccionar</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <select
+                                required
+                                value={formData.empresa_id || ''}
+                                onChange={(e) => handleCompanySelect(e.target.value)}
+                                disabled={mode === 'convert' && !!formData.empresa_id}
+                                className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
+                                style={{
+                                    background: 'var(--background)',
+                                    borderColor: 'var(--card-border)',
+                                    color: 'var(--text-primary)'
+                                }}
+                            >
+                                <option value='' disabled>Selecciona una empresa existente</option>
+                                {companies.map((company) => (
+                                    <option key={company.id} value={company.id}>
+                                        {company.nombre}
+                                    </option>
+                                ))}
+                            </select>
+
+                            {selectedCompany && (
+                                <div className='mt-2 p-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider space-y-1'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                    <p>Vinculada a empresa registrada</p>
+                                    <p className='normal-case text-xs font-semibold' style={{ color: 'var(--text-primary)' }}>
+                                        {selectedCompany.nombre}
+                                    </p>
+                                    <p className='normal-case text-[11px]'>
+                                        Industria: {selectedCompany.industria || 'Sin especificar'} | Ubicación: {selectedCompany.ubicacion || 'Sin especificar'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {companies.length === 0 && (
+                                <div className='mt-2 p-3 rounded-xl border text-xs font-bold'
+                                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                    No hay empresas registradas.
+                                    {onNavigateToCompanies && (
+                                        <button
+                                            type='button'
+                                            onClick={onNavigateToCompanies}
+                                            className='ml-2 text-blue-500 hover:text-blue-400 underline cursor-pointer'
+                                        >
+                                            Ir a Empresas
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className='space-y-2'>

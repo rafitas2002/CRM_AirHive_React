@@ -30,44 +30,50 @@ export default function PerfilPage() {
         try {
             const supabase = createClient()
 
-            // Fetch leads count
-            const { count: leadsCount } = await supabase
-                .from('clientes')
-                .select('*', { count: 'exact', head: true })
-                .eq('owner_id', auth.user.id)
-
-            // Fetch pending tasks count
-            const { count: tasksCount } = await supabase
-                .from('tareas')
-                .select('*', { count: 'exact', head: true })
-                .eq('vendedor_id', auth.user.id)
-                .eq('estado', 'pendiente')
-
-            // Fetch upcoming meetings count
-            const { count: meetingsCount } = await supabase
-                .from('meetings')
-                .select('*', { count: 'exact', head: true })
-                .eq('seller_id', auth.user.id)
-                .eq('status', 'scheduled')
-                .gte('start_time', new Date().toISOString())
-
-            // Calculate conversion rate
-            const { data: wonLeads } = await supabase
-                .from('clientes')
-                .select('id, etapa')
-                .eq('owner_id', auth.user.id)
-                .in('etapa', ['Cerrado Ganado', 'Cerrada Ganada'])
+            const [
+                { count: leadsCount },
+                { count: tasksCount },
+                { count: meetingsCount },
+                { count: wonLeadsCount }
+            ] = await Promise.all([
+                supabase
+                    .from('clientes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('owner_id', auth.user.id),
+                supabase
+                    .from('tareas')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('vendedor_id', auth.user.id)
+                    .eq('estado', 'pendiente'),
+                supabase
+                    .from('meetings')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('seller_id', auth.user.id)
+                    .eq('status', 'scheduled')
+                    .gte('start_time', new Date().toISOString()),
+                supabase
+                    .from('clientes')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('owner_id', auth.user.id)
+                    .in('etapa', ['Cerrado Ganado', 'Cerrada Ganada'])
+            ])
 
             const conversionRate = leadsCount && leadsCount > 0
-                ? ((wonLeads?.length || 0) / leadsCount) * 100
+                ? ((wonLeadsCount || 0) / leadsCount) * 100
                 : 0
 
-            setStats({
+            const nextStats = {
                 leadsAsignadas: leadsCount || 0,
                 tareasPendientes: tasksCount || 0,
                 proximasJuntas: meetingsCount || 0,
                 tasasConversion: Math.round(conversionRate)
-            })
+            }
+            setStats((prev) => (
+                prev.leadsAsignadas === nextStats.leadsAsignadas
+                && prev.tareasPendientes === nextStats.tareasPendientes
+                && prev.proximasJuntas === nextStats.proximasJuntas
+                && prev.tasasConversion === nextStats.tasasConversion
+            ) ? prev : nextStats)
         } catch (error) {
             console.error('Error fetching user stats:', error)
         } finally {

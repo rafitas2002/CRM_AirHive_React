@@ -54,6 +54,11 @@ function parseSupabaseError(error: any, fallback: string) {
     return fallback
 }
 
+function isWonStage(stage: unknown) {
+    const normalized = String(stage || '').trim().toLowerCase()
+    return normalized === 'cerrado ganado' || normalized === 'cerrada ganada'
+}
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
@@ -254,14 +259,15 @@ export default function LeadsPage() {
             const realClosureValue = isWonStage
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
+            const safeCreateStage = isWonStage ? 'Prospección' : leadData.etapa
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
                 email: leadData.email,
                 telefono: leadData.telefono,
-                etapa: leadData.etapa,
+                etapa: safeCreateStage,
                 valor_estimado: leadData.valor_estimado,
-                valor_real_cierre: realClosureValue,
+                valor_real_cierre: isWonStage ? null : realClosureValue,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -278,9 +284,37 @@ export default function LeadsPage() {
 
             if (error) {
                 console.error('Error creating lead:', error)
-                alert('Error al crear el lead: ' + error.message)
+                alert('Error al crear el lead: ' + parseSupabaseError(error, 'No se pudo crear el lead.'))
             } else if (data && data[0]) {
                 const newId = data[0].id
+
+                if (isWonStage) {
+                    const wonUpdatePayload: any = {
+                        etapa: 'Cerrado Ganado',
+                        valor_estimado: leadData.valor_estimado,
+                        valor_real_cierre: realClosureValue
+                    }
+
+                    const { error: wonUpdateError } = await (supabase
+                        .from('clientes') as any)
+                        .update(wonUpdatePayload)
+                        .eq('id', newId)
+
+                    if (wonUpdateError) {
+                        console.error('Error promoting created lead to Cerrado Ganado:', wonUpdateError)
+                        await (supabase.from('clientes') as any).delete().eq('id', newId)
+                        alert('Error al crear el lead cerrado: ' + parseSupabaseError(wonUpdateError, 'No se pudo finalizar el cierre en creación.'))
+                        return
+                    }
+
+                    // Force immediate badge recompute (industry + special badges like company_size).
+                    try {
+                        await (supabase.rpc as any)('refresh_seller_badges_for_lead', { p_lead_id: newId })
+                    } catch (badgeError) {
+                        console.warn('Lead created as won but badge recompute failed:', badgeError)
+                    }
+                }
+
                 // Track Event: lead_created
                 const { trackEvent } = await import('@/app/actions/events')
                 trackEvent({
@@ -357,6 +391,28 @@ export default function LeadsPage() {
             if (error) {
                 alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
             } else {
+                const wasWonBefore = currentLead.etapa === 'Cerrado Ganado' || currentLead.etapa === 'Cerrada Ganada'
+                const isWonNow = leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrada Ganada'
+                const ownerId = String(currentLead.owner_id || currentUser.id || '')
+
+                // Keep size/special badges fully synced to lead outcome changes.
+                if (isWonNow) {
+                    try {
+                        await (supabase.rpc as any)('refresh_seller_badges_for_lead', { p_lead_id: currentLead.id })
+                    } catch (badgeError) {
+                        console.warn('Won lead updated but badge recompute failed:', badgeError)
+                    }
+                } else if (wasWonBefore && ownerId) {
+                    try {
+                        await (supabase.rpc as any)('recompute_seller_special_badges', {
+                            p_seller_id: ownerId,
+                            p_source_lead_id: currentLead.id
+                        })
+                    } catch (badgeError) {
+                        console.warn('Lead moved out of won stage but special badge recompute failed:', badgeError)
+                    }
+                }
+
                 const { trackEvent } = await import('@/app/actions/events')
                 // Track Event: lead_stage_change
                 if (stageChanged) {
@@ -431,6 +487,9 @@ export default function LeadsPage() {
         if (!clientToDelete) return
         const leadId = clientToDelete
         const leadToDelete = leads.find((lead) => lead.id === leadId)
+        const shouldRecomputeBadges = isWonStage(leadToDelete?.etapa) && !!leadToDelete?.owner_id
+        const ownerId = String(leadToDelete?.owner_id || '')
+        const companyId = String(leadToDelete?.empresa_id || '')
 
         const { error } = await (supabase
             .from('clientes') as any)
@@ -447,6 +506,49 @@ export default function LeadsPage() {
             })
             alert(`Error al eliminar el lead: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
         } else {
+            if (shouldRecomputeBadges && ownerId) {
+                try {
+                    const industryIds = new Set<string>()
+
+                    if (companyId) {
+                        const [{ data: companyRow }, { data: companyIndustryRows }] = await Promise.all([
+                            (supabase
+                                .from('empresas') as any)
+                                .select('industria_id')
+                                .eq('id', companyId)
+                                .maybeSingle(),
+                            (supabase
+                                .from('company_industries') as any)
+                                .select('industria_id')
+                                .eq('empresa_id', companyId)
+                        ])
+
+                        const primaryIndustryId = String((companyRow as any)?.industria_id || '')
+                        if (primaryIndustryId) industryIds.add(primaryIndustryId)
+                        for (const row of (companyIndustryRows || [])) {
+                            const industriaId = String((row as any)?.industria_id || '')
+                            if (industriaId) industryIds.add(industriaId)
+                        }
+                    }
+
+                    await Promise.all([
+                        ...Array.from(industryIds).map(async (industriaId) => {
+                            await (supabase.rpc as any)('recompute_seller_industry_badge', {
+                                p_seller_id: ownerId,
+                                p_industria_id: industriaId,
+                                p_source_lead_id: leadId
+                            })
+                        }),
+                        (supabase.rpc as any)('recompute_seller_special_badges', {
+                            p_seller_id: ownerId,
+                            p_source_lead_id: leadId
+                        })
+                    ])
+                } catch (badgeRecomputeError) {
+                    console.warn('Lead deleted but badge recomputation failed:', badgeRecomputeError)
+                }
+            }
+
             const { trackEvent } = await import('@/app/actions/events')
             await trackEvent({
                 eventType: 'lead_deleted',

@@ -346,19 +346,51 @@ export default function EmpresasPage() {
 
     const handleSaveCompany = async (companyData: CompanyData) => {
         const isEditing = !!modalCompanyData
-        const companyPayload: any = { ...companyData }
-        delete companyPayload.industria_ids
-        delete companyPayload.industrias
+        const basePayload: any = {
+            nombre: companyData.nombre,
+            tamano: companyData.tamano,
+            ubicacion: companyData.ubicacion,
+            industria: companyData.industria,
+            industria_id: companyData.industria_id || null
+        }
+        const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
+
+        const getPayloadCandidates = () => {
+            const candidates: any[] = []
+            if (websiteValue !== null) {
+                candidates.push({ ...basePayload, website: websiteValue })
+                candidates.push({ ...basePayload, sitio_web: websiteValue })
+            }
+            candidates.push(basePayload)
+            return candidates
+        }
+
+        const isUnknownColumnError = (error: any) => {
+            const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
+            return msg.includes('could not find the') && msg.includes('column of')
+        }
 
         if (isEditing) {
-            const { error } = await (supabase
-                .from('empresas') as any)
-                .update(companyPayload)
-                .eq('id', modalCompanyData.id)
+            let updateError: any = null
+            for (const candidate of getPayloadCandidates()) {
+                const { error } = await (supabase
+                    .from('empresas') as any)
+                    .update(candidate)
+                    .eq('id', modalCompanyData.id)
+                if (!error) {
+                    updateError = null
+                    break
+                }
+                updateError = error
+                if (!isUnknownColumnError(error)) {
+                    break
+                }
+            }
 
-            if (error) {
-                console.error('Error updating company:', error)
-                alert('Error al actualizar la empresa')
+            if (updateError) {
+                const parsed = parseSupabaseError(updateError, 'No se pudo actualizar la empresa.')
+                console.error('Error updating company:', parsed, updateError)
+                alert(`Error al actualizar la empresa: ${parsed}`)
                 return
             }
 
@@ -369,18 +401,32 @@ export default function EmpresasPage() {
                 alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
             }
         } else {
-            const { data: createdCompany, error } = await (supabase
-                .from('empresas') as any)
-                .insert([{
-                    ...companyPayload,
-                    owner_id: auth.profile?.id
-                }])
-                .select('id')
-                .single()
+            let createdCompany: any = null
+            let createError: any = null
+            for (const candidate of getPayloadCandidates()) {
+                const { data, error } = await (supabase
+                    .from('empresas') as any)
+                    .insert([{
+                        ...candidate,
+                        owner_id: auth.profile?.id
+                    }])
+                    .select('id')
+                    .single()
+                if (!error) {
+                    createdCompany = data
+                    createError = null
+                    break
+                }
+                createError = error
+                if (!isUnknownColumnError(error)) {
+                    break
+                }
+            }
 
-            if (error) {
-                console.error('Error creating company:', error)
-                alert('Error al crear la empresa')
+            if (createError) {
+                const parsed = parseSupabaseError(createError, 'No se pudo crear la empresa.')
+                console.error('Error creating company:', parsed, createError)
+                alert(`Error al crear la empresa: ${parsed}`)
                 return
             }
 

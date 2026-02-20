@@ -827,23 +827,139 @@ export async function getUserActivitySummary(targetUserId: string) {
         }
 
         // 2. Fetch Data
+        const normalizeComparableName = (value: unknown) => String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase()
+
         const [
+            { data: targetProfile },
             { data: raceResults },
             { data: meetings },
             { data: clients },
             { data: tasks },
             { data: taskHistory },
             { data: industries },
-            { data: companies }
+            { data: companies },
+            { data: industryBadges },
+            { data: specialBadges },
+            { data: allQuotesRows }
         ] = await Promise.all([
+            dbClient.from('profiles').select('id, full_name').eq('id', targetUserId).maybeSingle() as any,
             dbClient.from('race_results').select('*').eq('user_id', targetUserId).order('period', { ascending: true }) as any,
             dbClient.from('meetings').select('*').eq('seller_id', targetUserId).order('start_time', { ascending: false }) as any,
             dbClient.from('clientes').select('*').eq('owner_id', targetUserId) as any,
             dbClient.from('tareas').select('*').eq('vendedor_id', targetUserId).order('fecha_vencimiento', { ascending: false }) as any,
             dbClient.from('historial_tareas').select('*').eq('user_id', targetUserId).order('fecha_completado', { ascending: false }) as any,
             dbClient.from('industrias').select('*') as any,
-            dbClient.from('empresas').select('*') as any
+            dbClient.from('empresas').select('*') as any,
+            dbClient
+                .from('seller_industry_badges')
+                .select('industria_id, closures_count, level, industrias(name)')
+                .eq('seller_id', targetUserId)
+                .gt('level', 0) as any,
+            dbClient
+                .from('seller_special_badges')
+                .select('badge_type, badge_key, badge_label, progress_count, level')
+                .eq('seller_id', targetUserId)
+                .gt('level', 0) as any,
+            dbClient
+                .from('crm_quotes')
+                .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                .is('deleted_at', null) as any
         ])
+
+        const targetName = normalizeComparableName((targetProfile as any)?.full_name)
+        const quoteRows = (allQuotesRows || []) as any[]
+        const matchedQuoteRows = quoteRows.filter((q: any) => {
+            if (String(q?.contributed_by || '') === String(targetUserId)) return true
+            if (normalizeComparableName(q?.contributed_by_name) === targetName) return true
+            const authorMatches = normalizeComparableName(q?.quote_author) === targetName
+            const ownLike = String(q?.quote_source || '').toLowerCase().includes('interna en airhive')
+            return authorMatches && ownLike
+        })
+        const matchedQuoteIds = matchedQuoteRows
+            .map((q: any) => Number(q?.id))
+            .filter((id: number) => Number.isFinite(id))
+        const quoteContributionProgress = matchedQuoteIds.length
+
+        let quoteLikesProgress = 0
+        if (matchedQuoteIds.length > 0) {
+            const { data: likeRows } = await (dbClient
+                .from('crm_quote_reactions')
+                .select('id')
+                .in('quote_id', matchedQuoteIds)
+                .eq('reaction_type', 'like') as any)
+            quoteLikesProgress = (likeRows || []).length
+        }
+
+        const getContributionLevel = (progress: number) => {
+            if (progress >= 25) return { level: 4, next: null as number | null }
+            if (progress >= 10) return { level: 3, next: 25 }
+            if (progress >= 5) return { level: 2, next: 10 }
+            if (progress >= 1) return { level: 1, next: 5 }
+            return { level: 0, next: 1 }
+        }
+        const getLikesLevel = (progress: number) => {
+            if (progress >= 50) return { level: 3, next: null as number | null }
+            if (progress >= 25) return { level: 2, next: 50 }
+            if (progress >= 10) return { level: 1, next: 25 }
+            return { level: 0, next: 10 }
+        }
+        const contributionMeta = getContributionLevel(quoteContributionProgress)
+        const likesMeta = getLikesLevel(quoteLikesProgress)
+
+        const derivedSpecialBadges = [] as Array<{
+            type: string
+            key: string
+            label: string
+            level: number
+            progress: number
+        }>
+        if (contributionMeta.level > 0) {
+            derivedSpecialBadges.push({
+                type: 'quote_contribution',
+                key: 'quote_contribution',
+                label: 'Aportación de Frases',
+                level: contributionMeta.level,
+                progress: quoteContributionProgress
+            })
+        }
+        if (likesMeta.level > 0) {
+            derivedSpecialBadges.push({
+                type: 'quote_likes_received',
+                key: 'quote_likes_received',
+                label: 'Frases con Likes',
+                level: likesMeta.level,
+                progress: quoteLikesProgress
+            })
+        }
+
+        const mergedSpecialByKey = new Map<string, {
+            type: string
+            key: string
+            label: string
+            level: number
+            progress: number
+        }>()
+        for (const row of (specialBadges || [])) {
+            const normalized = {
+                type: String((row as any)?.badge_type || 'special'),
+                key: String((row as any)?.badge_key || ''),
+                label: String((row as any)?.badge_label || 'Badge especial'),
+                level: Number((row as any)?.level || 0),
+                progress: Number((row as any)?.progress_count || 0)
+            }
+            const key = `${normalized.type}::${normalized.key}`
+            const prev = mergedSpecialByKey.get(key)
+            if (!prev || normalized.level >= prev.level) mergedSpecialByKey.set(key, normalized)
+        }
+        for (const row of derivedSpecialBadges) {
+            const key = `${row.type}::${row.key}`
+            const prev = mergedSpecialByKey.get(key)
+            if (!prev || row.level >= prev.level) mergedSpecialByKey.set(key, row)
+        }
 
         // 3. Performance Aggregation
         let totalSales = 0
@@ -947,6 +1063,17 @@ export async function getUserActivitySummary(targetUserId: string) {
                     pendingTasksCount: (tasks || []).filter((t: any) => t.estado === 'pendiente').length
                 },
                 activities: activityList
+                ,
+                badges: {
+                    industry: (industryBadges || []).map((b: any) => ({
+                        type: 'industry',
+                        key: String(b?.industria_id || ''),
+                        label: b?.industrias?.name || 'Industria',
+                        level: Number(b?.level || 0),
+                        progress: Number(b?.closures_count || 0)
+                    })),
+                    special: Array.from(mergedSpecialByKey.values())
+                }
             }
         }
     } catch (error: any) {

@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth'
-import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -19,7 +18,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang='es'>
       <body className={`min-h-screen bg-gray-50 ${inter.className}`}>
         <AuthProvider>
-          <GlobalMeetingHandler />
           {children}
         </AuthProvider>
       </body>

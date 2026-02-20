@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase'
 import { getCatalogs, getIndustriesForBadges } from '@/app/actions/catalogs'
-import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity, Award, Sparkles, TrendingUp, Lock, X, Building2, Flag, Layers, Ruler, Trophy, Medal, Shield, Flame, Gem } from 'lucide-react'
+import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity, Award, Sparkles, TrendingUp, Lock, X, Building2, Flag, Layers, Ruler, Trophy, Medal, Shield, Flame, Gem, MessageSquareQuote, ThumbsUp } from 'lucide-react'
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
@@ -21,6 +21,34 @@ const BADGE_GRANT_ALLOWED_ADMINS = [
 interface ProfileViewProps {
     userId: string
     editable?: boolean // Potentially for future
+}
+
+const PROFILE_VIEW_CACHE_TTL_MS = 2 * 60 * 1000
+
+type ProfileViewCachePayload = {
+    savedAt: number
+    profile: any
+    details: any
+    badges: any[]
+    badgeLevels: { level: number, min_closures: number }[]
+    specialBadges: any[]
+    sellerStats: {
+        totalClosures: number
+        reliabilityScore: number
+        seniorityYears: number
+    }
+    isBadgeLeader: boolean
+    leaderBadgeCount: number
+    allIndustries: { id: string, name: string, is_active?: boolean }[]
+    catalogs: Record<string, any[]>
+}
+
+function normalizeComparableName(value: unknown) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
 }
 
 export default function ProfileView({ userId }: ProfileViewProps) {
@@ -44,66 +72,228 @@ export default function ProfileView({ userId }: ProfileViewProps) {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        let cancelled = false
+        const cacheKey = `airhive_profile_view_cache_${userId}`
+
+        const readCache = () => {
+            if (typeof window === 'undefined') return null
+            try {
+                const raw = localStorage.getItem(cacheKey)
+                if (!raw) return null
+                const parsed = JSON.parse(raw) as ProfileViewCachePayload
+                if (!parsed?.savedAt) return null
+                const age = Date.now() - Number(parsed.savedAt)
+                if (age > PROFILE_VIEW_CACHE_TTL_MS) return null
+                return parsed
+            } catch {
+                return null
+            }
+        }
+
+        const writeCache = (payload: Omit<ProfileViewCachePayload, 'savedAt'>) => {
+            if (typeof window === 'undefined') return
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    ...payload,
+                    savedAt: Date.now()
+                }))
+            } catch {
+                // no-op
+            }
+        }
+
+        const cached = readCache()
+        if (cached) {
+            setProfile(cached.profile || null)
+            setDetails(cached.details || null)
+            setBadges(Array.isArray(cached.badges) ? cached.badges : [])
+            setBadgeLevels(Array.isArray(cached.badgeLevels) ? cached.badgeLevels : [])
+            setSpecialBadges(Array.isArray(cached.specialBadges) ? cached.specialBadges : [])
+            setSellerStats(cached.sellerStats || {
+                totalClosures: 0,
+                reliabilityScore: 0,
+                seniorityYears: 0
+            })
+            setIsBadgeLeader(Boolean(cached.isBadgeLeader))
+            setLeaderBadgeCount(Number(cached.leaderBadgeCount || 0))
+            setAllIndustries(Array.isArray(cached.allIndustries) ? cached.allIndustries : [])
+            setCatalogs(cached.catalogs || {})
+            setLoading(false)
+        }
+
         const loadData = async () => {
-            const supabase = createClient()
+            try {
+                const supabase = createClient()
 
-            const [
-                { data: p },
-                { data: d },
-                { data: userBadges },
-                { data: levels },
-                { data: userSpecialBadges },
-                { count: closuresCount },
-                { data: reliabilityRows },
-                industriesResponse,
-                catsResponse
-            ] = await Promise.all([
-                supabase.from('profiles').select('*').eq('id', userId).single(),
-                (supabase.from('employee_profiles') as any).select('*').eq('user_id', userId).single(),
-                supabase
-                    .from('seller_industry_badges')
-                    .select('industria_id, closures_count, level, next_level_threshold, unlocked_at, updated_at, industrias(name)')
-                    .eq('seller_id', userId)
-                    .gt('level', 0)
-                    .order('closures_count', { ascending: false }),
-                supabase
-                    .from('badge_level_config')
-                    .select('level, min_closures')
-                    .order('level', { ascending: true }),
-                (supabase
-                    .from('seller_special_badges') as any)
-                    .select('id, badge_type, badge_key, badge_label, progress_count, level, next_level_threshold, unlocked_at, updated_at')
-                    .eq('seller_id', userId)
-                    .gt('level', 0)
-                    .order('badge_type', { ascending: true })
-                    .order('progress_count', { ascending: false }),
-                (supabase
-                    .from('seller_badge_closures') as any)
-                    .select('lead_id', { count: 'exact', head: true })
-                    .eq('seller_id', userId),
-                (supabase
-                    .from('clientes') as any)
-                    .select('forecast_logloss')
-                    .eq('owner_id', userId)
-                    .not('forecast_logloss', 'is', null),
-                getIndustriesForBadges(),
-                getCatalogs()
-            ])
+                const [
+                    { data: p },
+                    { data: d },
+                    { data: userBadges },
+                    { data: levels },
+                    { data: userSpecialBadges },
+                    { count: closuresCount },
+                    { data: reliabilityRows },
+                    industriesResponse,
+                    catsResponse
+                ] = await Promise.all([
+                    supabase.from('profiles').select('*').eq('id', userId).single(),
+                    (supabase.from('employee_profiles') as any).select('*').eq('user_id', userId).single(),
+                    supabase
+                        .from('seller_industry_badges')
+                        .select('industria_id, closures_count, level, next_level_threshold, unlocked_at, updated_at, industrias(name)')
+                        .eq('seller_id', userId)
+                        .gt('level', 0)
+                        .order('closures_count', { ascending: false }),
+                    supabase
+                        .from('badge_level_config')
+                        .select('level, min_closures')
+                        .order('level', { ascending: true }),
+                    (supabase
+                        .from('seller_special_badges') as any)
+                        .select('id, badge_type, badge_key, badge_label, progress_count, level, next_level_threshold, unlocked_at, updated_at')
+                        .eq('seller_id', userId)
+                        .gt('level', 0)
+                        .order('badge_type', { ascending: true })
+                        .order('progress_count', { ascending: false }),
+                    (supabase
+                        .from('seller_badge_closures') as any)
+                        .select('lead_id', { count: 'exact', head: true })
+                        .eq('seller_id', userId),
+                    (supabase
+                        .from('clientes') as any)
+                        .select('forecast_logloss')
+                        .eq('owner_id', userId)
+                        .not('forecast_logloss', 'is', null),
+                    getIndustriesForBadges(),
+                    getCatalogs()
+                ])
 
-            const cats = catsResponse.success && catsResponse.data ? catsResponse.data : {}
-            const industries = industriesResponse.success && industriesResponse.data ? industriesResponse.data : []
+                if (cancelled) return
 
-            setProfile(p)
-            setDetails(d || {})
-            setBadges(userBadges || [])
-            setSpecialBadges(
-                (userSpecialBadges || []).filter((b: any) =>
-                    b &&
-                    (b.id || b.badge_type || b.badge_key) &&
-                    (b.level || 0) > 0 &&
-                    (b.progress_count || 0) > 0
-                )
+                const cats = catsResponse.success && catsResponse.data ? catsResponse.data : {}
+                const industries = industriesResponse.success && industriesResponse.data ? industriesResponse.data : []
+                const profileRow = (p || {}) as any
+
+                setProfile(profileRow)
+                setDetails(d || {})
+                setBadges(userBadges || [])
+
+                const normalizedFullName = normalizeComparableName(profileRow?.full_name)
+                const profileName = String(profileRow?.full_name || '').trim()
+
+                // Optimized quote fetch: avoid full-table scan in settings profile.
+                const quoteQueries: Array<Promise<any>> = [
+                    (supabase
+                        .from('crm_quotes') as any)
+                        .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                        .is('deleted_at', null)
+                        .eq('contributed_by', userId)
+                ]
+
+                if (profileName) {
+                    quoteQueries.push(
+                        (supabase
+                            .from('crm_quotes') as any)
+                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                            .is('deleted_at', null)
+                            .eq('contributed_by_name', profileName)
+                    )
+                    quoteQueries.push(
+                        (supabase
+                            .from('crm_quotes') as any)
+                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                            .is('deleted_at', null)
+                            .eq('quote_author', profileName)
+                    )
+                }
+
+                const quoteResponses = await Promise.all(quoteQueries)
+                const quoteMap = new Map<number, any>()
+                for (const response of quoteResponses) {
+                    for (const row of (response?.data || [])) {
+                        const id = Number((row as any)?.id)
+                        if (!Number.isFinite(id)) continue
+                        quoteMap.set(id, row)
+                    }
+                }
+                const quoteRows = Array.from(quoteMap.values()) as any[]
+                const matchedQuoteRows = quoteRows.filter((q: any) => {
+                    if (String(q?.contributed_by || '') === String(userId)) return true
+                    if (normalizeComparableName(q?.contributed_by_name) === normalizedFullName) return true
+                    const authorMatches = normalizeComparableName(q?.quote_author) === normalizedFullName
+                    const ownLike = String(q?.quote_source || '').toLowerCase().includes('interna en airhive')
+                    return authorMatches && ownLike
+                })
+            const matchedQuoteIds = matchedQuoteRows
+                .map((q: any) => Number(q?.id))
+                .filter((id: number) => Number.isFinite(id))
+            const quoteContributionProgress = matchedQuoteIds.length
+
+            let quoteLikesProgress = 0
+            if (matchedQuoteIds.length > 0) {
+                const { data: likesRows } = await (supabase
+                    .from('crm_quote_reactions') as any)
+                    .select('id')
+                    .in('quote_id', matchedQuoteIds)
+                    .eq('reaction_type', 'like')
+                quoteLikesProgress = (likesRows || []).length
+            }
+
+            const getContributionLevel = (progress: number) => {
+                if (progress >= 25) return { level: 4, next: null as number | null }
+                if (progress >= 10) return { level: 3, next: 25 }
+                if (progress >= 5) return { level: 2, next: 10 }
+                if (progress >= 1) return { level: 1, next: 5 }
+                return { level: 0, next: 1 }
+            }
+            const getQuoteLikesLevel = (progress: number) => {
+                if (progress >= 50) return { level: 3, next: null as number | null }
+                if (progress >= 25) return { level: 2, next: 50 }
+                if (progress >= 10) return { level: 1, next: 25 }
+                return { level: 0, next: 10 }
+            }
+
+            const contributionLevelMeta = getContributionLevel(quoteContributionProgress)
+            const quoteLikesLevelMeta = getQuoteLikesLevel(quoteLikesProgress)
+            const derivedSpecial: any[] = []
+            if (contributionLevelMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-quote-contribution',
+                    badge_type: 'quote_contribution',
+                    badge_key: 'quote_contribution',
+                    badge_label: 'Aportación de Frases',
+                    progress_count: quoteContributionProgress,
+                    level: contributionLevelMeta.level,
+                    next_level_threshold: contributionLevelMeta.next
+                })
+            }
+            if (quoteLikesLevelMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-quote-likes',
+                    badge_type: 'quote_likes_received',
+                    badge_key: 'quote_likes_received',
+                    badge_label: 'Frases con Likes',
+                    progress_count: quoteLikesProgress,
+                    level: quoteLikesLevelMeta.level,
+                    next_level_threshold: quoteLikesLevelMeta.next
+                })
+            }
+
+            const realSpecial = (userSpecialBadges || []).filter((b: any) =>
+                b &&
+                (b.id || b.badge_type || b.badge_key) &&
+                (b.level || 0) > 0 &&
+                (b.progress_count || 0) > 0
             )
+            const mergedByKey = new Map<string, any>()
+            for (const row of [...realSpecial, ...derivedSpecial]) {
+                const key = `${row?.badge_type || 'special'}::${row?.badge_key || 'key'}`
+                const prev = mergedByKey.get(key)
+                if (!prev || Number(row?.level || 0) >= Number(prev?.level || 0)) {
+                    mergedByKey.set(key, row)
+                }
+            }
+            setSpecialBadges(Array.from(mergedByKey.values()))
             setBadgeLevels(levels || [])
             setAllIndustries((industries || []) as { id: string, name: string, is_active?: boolean }[])
             setCatalogs(cats)
@@ -125,47 +315,42 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             const avgLogloss = relN > 0 ? (relRows.reduce((a: number, b: number) => a + b, 0) / relN) : 1
             const rawAcc = Math.max(0, 1 - avgLogloss)
             const relScore = relN > 0 ? Math.max(0, Math.min(100, (rawAcc * (relN / (relN + 4))) * 100)) : 0
-            setSellerStats({
-                totalClosures: Math.max(0, Number(closuresCount || 0)),
-                reliabilityScore: Math.round(relScore),
-                seniorityYears: years
-            })
+                setSellerStats({
+                    totalClosures: Math.max(0, Number(closuresCount || 0)),
+                    reliabilityScore: Math.round(relScore),
+                    seniorityYears: years
+                })
+                // Lightweight leader badge state from precomputed badge (no global table scans).
+                const badgeLeader = (userSpecialBadges || []).find((badge: any) => badge?.badge_type === 'badge_leader')
+                setIsBadgeLeader(Boolean(badgeLeader && Number(badgeLeader?.level || 0) > 0))
+                setLeaderBadgeCount(Number(badgeLeader?.progress_count || 0))
 
-            // Badge leadership: compare unlocked badge counts across all sellers.
-            const [
-                { data: allIndustryBadges },
-                { data: allSpecialBadges }
-            ] = await Promise.all([
-                (supabase
-                    .from('seller_industry_badges') as any)
-                    .select('seller_id')
-                    .gt('level', 0),
-                (supabase
-                    .from('seller_special_badges') as any)
-                    .select('seller_id')
-                    .gt('level', 0)
-                    .gt('progress_count', 0)
-            ])
-
-            const countMap = new Map<string, number>()
-            for (const row of (allIndustryBadges || [])) {
-                const sellerId = row?.seller_id
-                if (!sellerId) continue
-                countMap.set(sellerId, (countMap.get(sellerId) || 0) + 1)
+                writeCache({
+                    profile: profileRow,
+                    details: d || {},
+                    badges: userBadges || [],
+                    badgeLevels: levels || [],
+                    specialBadges: Array.from(mergedByKey.values()),
+                    sellerStats: {
+                        totalClosures: Math.max(0, Number(closuresCount || 0)),
+                        reliabilityScore: Math.round(relScore),
+                        seniorityYears: years
+                    },
+                    isBadgeLeader: Boolean(badgeLeader && Number(badgeLeader?.level || 0) > 0),
+                    leaderBadgeCount: Number(badgeLeader?.progress_count || 0),
+                    allIndustries: (industries || []) as { id: string, name: string, is_active?: boolean }[],
+                    catalogs: cats
+                })
+            } catch (error) {
+                console.error('Error loading profile view:', error)
+            } finally {
+                if (!cancelled) setLoading(false)
             }
-            for (const row of (allSpecialBadges || [])) {
-                const sellerId = row?.seller_id
-                if (!sellerId) continue
-                countMap.set(sellerId, (countMap.get(sellerId) || 0) + 1)
-            }
-
-            const maxCount = Math.max(0, ...Array.from(countMap.values()))
-            const currentCount = countMap.get(userId) || 0
-            setLeaderBadgeCount(maxCount)
-            setIsBadgeLeader(maxCount > 0 && currentCount === maxCount)
-            setLoading(false)
         }
         loadData()
+        return () => {
+            cancelled = true
+        }
     }, [userId])
 
     // Helper to resolve ID to Name
@@ -229,8 +414,25 @@ export default function ProfileView({ userId }: ProfileViewProps) {
 
     const roleMeta = getRoleMeta(profile.role)
     const maxConfiguredLevel = badgeLevels.length > 0 ? Math.max(...badgeLevels.map(b => b.level)) : 4
-    const totalBadgePoints = badges.reduce((sum, b) => sum + (b.level || 0), 0)
+    const totalBadgePoints = badges.reduce((sum, b) => sum + (b.level || 0), 0) + specialBadges.reduce((sum, b) => sum + (Number(b?.level || 0)), 0)
     const badgeByIndustry = new Map<string, any>(badges.map((b) => [b.industria_id, b]))
+    const summarySpecialBadges = (() => {
+        const list = Array.isArray(specialBadges) ? specialBadges : []
+        const rankDealTier = (badge: any) => {
+            const key = String(badge?.badge_key || '')
+            if (key === 'value_1m') return 3
+            if (key === 'value_500k') return 2
+            if (key === 'value_100k') return 1
+            return 0
+        }
+
+        const bestDealTier = list
+            .filter((badge: any) => badge?.badge_type === 'deal_value_tier')
+            .sort((a: any, b: any) => rankDealTier(b) - rankDealTier(a))[0] || null
+
+        const withoutDealTier = list.filter((badge: any) => badge?.badge_type !== 'deal_value_tier')
+        return bestDealTier ? [...withoutDealTier, bestDealTier] : withoutDealTier
+    })()
     const canGrantAdminBadge = auth.profile?.role === 'admin'
         && auth.user?.id !== userId
         && BADGE_GRANT_ALLOWED_ADMINS.includes(String(auth.profile?.full_name || '').trim())
@@ -334,60 +536,50 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         Aún no hay badges desbloqueados. Cierra una empresa para ganar el primero.
                     </div>
                 ) : (
-                    <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                    <div className='flex flex-wrap gap-2'>
                         {badges.map((badge) => {
                             const industryName = badge?.industrias?.name || 'Industria'
                             const badgeVisual = getIndustryBadgeVisualFromMap(badge.industria_id, industryVisualMap, industryName)
                             const IndustryIcon = badgeVisual.icon
-                            const closures = badge.closures_count || 0
-                            const level = badge.level || 0
-                            const nextThreshold = badge.next_level_threshold as number | null
-                            const currentLevelMin = badgeLevels.find(b => b.level === level)?.min_closures || 1
-                            const denom = nextThreshold ? Math.max(1, nextThreshold - currentLevelMin) : 1
-                            const rawProgress = nextThreshold ? ((closures - currentLevelMin) / denom) * 100 : 100
-                            const progress = Math.max(0, Math.min(100, rawProgress))
-                            const achievedMax = level >= maxConfiguredLevel || !nextThreshold
 
                             return (
-                                <div key={`${badge.industria_id}-${badge.level}`} className='p-4 rounded-xl border bg-[var(--hover-bg)] border-[var(--card-border)]'>
-                                    <div className='flex items-start justify-between gap-2'>
-                                        <div className='flex items-center gap-3 min-w-0'>
-                                            <div className={`relative overflow-hidden w-10 h-10 rounded-xl border flex items-center justify-center ${badgeVisual.containerClass}`}>
-                                                <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                                <IndustryIcon size={18} strokeWidth={2.7} className={badgeVisual.iconClass} />
-                                            </div>
-                                            <div className='min-w-0'>
-                                                <p className='text-sm font-black truncate text-[var(--text-primary)]'>{industryName}</p>
-                                                <p className='text-[10px] font-bold uppercase tracking-widest text-[var(--accent-secondary)]'>
-                                                    Nivel {level}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <span className='text-xs font-black px-2 py-1 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100'>
-                                            {closures} cierres
-                                        </span>
-                                    </div>
-
-                                    <div className='mt-4'>
-                                        <div className='flex items-center justify-between text-[10px] font-bold uppercase tracking-wider mb-1 text-[var(--text-secondary)]'>
-                                            <span className='flex items-center gap-1'><TrendingUp size={12} /> Progreso</span>
-                                            <span>{achievedMax ? 'Nivel máximo' : `Meta: ${nextThreshold}`}</span>
-                                        </div>
-                                        <div className='h-2.5 rounded-full border overflow-hidden bg-[var(--card-bg)] border-[var(--card-border)]'>
-                                            <div
-                                                className='h-full bg-gradient-to-r from-blue-500 to-indigo-500'
-                                                style={{ width: `${progress}%` }}
-                                            />
-                                        </div>
-                                        <p className='mt-2 text-[11px] font-medium text-[var(--text-secondary)]'>
-                                            {achievedMax
-                                                ? 'Badge completamente evolucionado.'
-                                                : `Te faltan ${Math.max(0, (nextThreshold || 0) - closures)} cierres para nivel ${level + 1}.`}
-                                        </p>
-                                    </div>
+                                <div
+                                    key={`${badge.industria_id}-${badge.level}`}
+                                    title={industryName}
+                                    className={`relative overflow-hidden w-14 h-14 rounded-xl border flex items-center justify-center ${badgeVisual.containerClass}`}
+                                >
+                                    <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
+                                    <IndustryIcon size={21} strokeWidth={2.7} className={badgeVisual.iconClass} />
                                 </div>
                             )
                         })}
+                    </div>
+                )}
+
+                {specialBadges.length > 0 && (
+                    <div className='rounded-xl border p-4 bg-[var(--hover-bg)] border-[var(--card-border)]'>
+                        <p className='text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)] mb-3'>
+                            Badges especiales acumuladas
+                        </p>
+                        <div className='flex flex-wrap gap-2'>
+                            {summarySpecialBadges.map((badge: any, index: number) => (
+                                (() => {
+                                    const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
+                                    const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
+                                    const Icon = typeMeta.icon
+                                    return (
+                                        <div
+                                    key={`special-summary-${badge?.badge_type || 'badge'}-${badge?.badge_key || index}`}
+                                            title={safeLabel}
+                                            className={`relative overflow-hidden w-10 h-10 rounded-xl border flex items-center justify-center ${typeMeta.containerClass}`}
+                                        >
+                                            <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
+                                            <Icon size={17} strokeWidth={2.7} className={typeMeta.iconClass} />
+                                        </div>
+                                    )
+                                })()
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -677,6 +869,8 @@ function AllBadgesModal({
                                 const isStreakPaused = isStreakBadge && String(safeLabel).toLowerCase().includes('pausada')
                                 const isDealValueBadge = badge.badge_type === 'deal_value_tier'
                                 const isRacePointsLeaderBadge = badge.badge_type === 'race_points_leader'
+                                const isQuoteContributionBadge = badge.badge_type === 'quote_contribution'
+                                const isQuoteLikesBadge = badge.badge_type === 'quote_likes_received'
                                 const nextThreshold = (badge.next_level_threshold ?? getSpecialDefaultThreshold(badge.badge_type)) as number | null
                                 const achievedMax = !nextThreshold
                                 const rawProgress = achievedMax ? 100 : Math.min(100, (progressCount / Math.max(1, nextThreshold || 1)) * 100)
@@ -729,6 +923,10 @@ function AllBadgesModal({
                                                                         ? `${progressCount} cierres`
                                                                         : isRacePointsLeaderBadge
                                                                             ? `${progressCount} pts`
+                                                                            : isQuoteContributionBadge
+                                                                                ? `${progressCount} frases`
+                                                                                : isQuoteLikesBadge
+                                                                                    ? `${progressCount} likes`
                                                                 : `${progressCount} progreso`
                                                     : <span className='inline-flex items-center gap-1'><Lock size={11} /> 0 progreso</span>}
                                             </span>
@@ -757,6 +955,10 @@ function AllBadgesModal({
                                                                             ? 'Nivel máximo alcanzado.'
                                                                             : isRacePointsLeaderBadge
                                                                                 ? 'Mantén la mayor cantidad de puntos para conservarlo activo.'
+                                                                                : isQuoteContributionBadge
+                                                                                    ? `Siguiente nivel en ${Math.max(0, nextThreshold - progressCount)} frase${Math.max(0, nextThreshold - progressCount) === 1 ? '' : 's'}.`
+                                                                                    : isQuoteLikesBadge
+                                                                                        ? `Siguiente nivel en ${Math.max(0, nextThreshold - progressCount)} like${Math.max(0, nextThreshold - progressCount) === 1 ? '' : 's'}.`
                                                                     : `Siguiente nivel en ${Math.max(0, nextThreshold - progressCount)}.`
                                                         : isReliabilityBadge
                                                             ? `Desbloquea con ${nextThreshold}% de score de confiabilidad.`
@@ -770,6 +972,10 @@ function AllBadgesModal({
                                                                             ? `Desbloquea al cerrar un lead de ${safeLabel.replace('Valor ', '$')}.`
                                                                             : isRacePointsLeaderBadge
                                                                                 ? 'Desbloquea al liderar el ranking de puntos del podio.'
+                                                                                : isQuoteContributionBadge
+                                                                                    ? `Desbloquea al aportar ${nextThreshold} frase${nextThreshold === 1 ? '' : 's'} aceptada${nextThreshold === 1 ? '' : 's'}.`
+                                                                                    : isQuoteLikesBadge
+                                                                                        ? `Desbloquea al recibir ${nextThreshold} likes en tus frases.`
                                                                     : `Desbloquea con ${nextThreshold} progreso.`}
                                             </p>
                                         </div>
@@ -958,6 +1164,22 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
             iconClass: solidIconClass
         }
     }
+    if (badgeType === 'quote_contribution') {
+        return {
+            title: 'Aportación de Frases',
+            icon: MessageSquareQuote,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#2563eb] to-[#1d4ed8]`,
+            iconClass: solidIconClass
+        }
+    }
+    if (badgeType === 'quote_likes_received') {
+        return {
+            title: 'Frases con Likes',
+            icon: ThumbsUp,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]`,
+            iconClass: solidIconClass
+        }
+    }
 
     if (badgeType === 'admin_granted') {
         const adminGradient = labelLower.includes('jesus gracia')
@@ -1008,6 +1230,8 @@ function getSpecialDefaultThreshold(badgeType?: string) {
     if (badgeType === 'race_all_positions') return 3
     if (badgeType === 'race_total_trophies') return 10
     if (badgeType === 'race_points_leader') return 1
+    if (badgeType === 'quote_contribution') return 1
+    if (badgeType === 'quote_likes_received') return 10
     if (badgeType === 'admin_granted') return 1
     if (badgeType === 'badge_leader') return 1
     return 1
@@ -1234,6 +1458,24 @@ function buildSpecialBadgeCatalog(
             next_level_threshold: 1
         },
         {
+            id: 'virtual-quote-contribution',
+            badge_type: 'quote_contribution',
+            badge_key: 'quote_contribution',
+            badge_label: 'Aportación de Frases',
+            progress_count: 0,
+            level: 0,
+            next_level_threshold: 1
+        },
+        {
+            id: 'virtual-quote-likes-received',
+            badge_type: 'quote_likes_received',
+            badge_key: 'quote_likes_received',
+            badge_label: 'Frases con Likes',
+            progress_count: 0,
+            level: 0,
+            next_level_threshold: 10
+        },
+        {
             id: 'virtual-admin-granted',
             badge_type: 'admin_granted',
             badge_key: 'admin_jesus_gracia',
@@ -1294,13 +1536,15 @@ function buildSpecialBadgeCatalog(
             if (type === 'closure_milestone') return 'closure_milestone'
             if (type === 'reliability_score') return 'reliability_score'
             if (type === 'closing_streak') return 'closing_streak'
-            if (type === 'deal_value_tier') return badge?.badge_key || 'deal_value_tier'
+            if (type === 'deal_value_tier') return 'deal_value_tier'
             if (type === 'race_first_place') return 'race_first'
             if (type === 'race_second_place') return 'race_second'
             if (type === 'race_third_place') return 'race_third'
             if (type === 'race_all_positions') return 'race_podio'
             if (type === 'race_total_trophies') return 'race_10_trophies'
             if (type === 'race_points_leader') return 'race_points_leader'
+            if (type === 'quote_contribution') return 'quote_contribution'
+            if (type === 'quote_likes_received') return 'quote_likes_received'
             if (type === 'admin_granted') return badge?.badge_key || 'admin_granted'
             if (type === 'badge_leader') return 'badge_leader'
             return badge?.badge_key || 'key'
@@ -1309,7 +1553,28 @@ function buildSpecialBadgeCatalog(
         const prev = map.get(key)
 
         if (!prev) {
-            map.set(key, { ...badge, badge_key: normalizedKey })
+            map.set(key, { ...badge, badge_key: badge?.badge_key || normalizedKey })
+            continue
+        }
+
+        if (type === 'deal_value_tier') {
+            const rank = (value: any) => {
+                const keyValue = String(value?.badge_key || '')
+                if (keyValue === 'value_1m') return 3
+                if (keyValue === 'value_500k') return 2
+                if (keyValue === 'value_100k') return 1
+                return 0
+            }
+            const prevRank = rank(prev)
+            const nextRank = rank(badge)
+            if (nextRank >= prevRank) {
+                map.set(key, {
+                    ...prev,
+                    ...badge,
+                    progress_count: Math.max(prev?.progress_count || 0, badge?.progress_count || 0),
+                    level: Math.max(prev?.level || 0, badge?.level || 0)
+                })
+            }
             continue
         }
 
@@ -1319,7 +1584,7 @@ function buildSpecialBadgeCatalog(
             map.set(key, {
                 ...prev,
                 ...badge,
-                badge_key: normalizedKey,
+                badge_key: badge?.badge_key || normalizedKey,
                 progress_count: Math.max(prev?.progress_count || 0, badge?.progress_count || 0),
                 level: Math.max(prevLevel, nextLevel),
                 next_level_threshold: (prev?.next_level_threshold ?? badge?.next_level_threshold)
@@ -1359,8 +1624,10 @@ function getSpecialBadgeOrder(type?: string) {
     if (type === 'race_all_positions') return 14
     if (type === 'race_total_trophies') return 15
     if (type === 'race_points_leader') return 16
-    if (type === 'admin_granted') return 17
-    if (type === 'badge_leader') return 18
+    if (type === 'quote_contribution') return 17
+    if (type === 'quote_likes_received') return 18
+    if (type === 'admin_granted') return 19
+    if (type === 'badge_leader') return 20
     return 99
 }
 
@@ -1386,8 +1653,11 @@ function getSpecialBadgeCategoryMeta(type?: string) {
     if (type === 'race_first_place' || type === 'race_second_place' || type === 'race_third_place' || type === 'race_all_positions' || type === 'race_total_trophies' || type === 'race_points_leader') {
         return { key: 'competition', title: 'Competencia', order: 7 }
     }
+    if (type === 'quote_contribution' || type === 'quote_likes_received') {
+        return { key: 'quotes', title: 'Frases', order: 8 }
+    }
     if (type === 'admin_granted' || type === 'badge_leader') {
-        return { key: 'distinctions', title: 'Distinciones', order: 8 }
+        return { key: 'distinctions', title: 'Distinciones', order: 9 }
     }
     return { key: 'others', title: 'Otros', order: 99 }
 }

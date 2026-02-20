@@ -68,9 +68,32 @@ export default function CompanyModal({
     const [showSuggestions, setShowSuggestions] = useState(false)
     const wrapperRef = useRef<HTMLDivElement>(null)
 
+    const normalizeCompanyForForm = (raw: any): CompanyData => {
+        const industriaIds = Array.isArray(raw?.industria_ids)
+            ? raw.industria_ids.filter(Boolean)
+            : (raw?.industria_id ? [raw.industria_id] : [])
+        const industrias = Array.isArray(raw?.industrias)
+            ? raw.industrias.filter(Boolean)
+            : (raw?.industria ? [raw.industria] : [])
+
+        return {
+            id: raw?.id,
+            nombre: String(raw?.nombre || ''),
+            tamano: Number(raw?.tamano || 1),
+            ubicacion: String(raw?.ubicacion || ''),
+            logo_url: String(raw?.logo_url || ''),
+            industria: String(raw?.industria || ''),
+            industria_id: raw?.industria_id || '',
+            industria_ids: industriaIds,
+            industrias,
+            website: String(raw?.website || raw?.sitio_web || ''),
+            descripcion: String(raw?.descripcion || '')
+        }
+    }
+
     useEffect(() => {
         if (isOpen && initialData) {
-            setFormData(initialData)
+            setFormData(normalizeCompanyForForm(initialData))
         } else if (isOpen && !initialData) {
             setFormData({
                 nombre: '',
@@ -130,13 +153,7 @@ export default function CompanyModal({
     }
 
     const selectCompany = (company: CompanyData) => {
-        setFormData({
-            ...company,
-            industria_ids: company.industria_ids || (company.industria_id ? [company.industria_id] : []),
-            industrias: company.industrias || (company.industria ? [company.industria] : []),
-            // Ensure id is kept if we want to update the existing one, 
-            // but the parent might handle that.
-        })
+        setFormData(normalizeCompanyForForm(company))
         setShowSuggestions(false)
     }
 
