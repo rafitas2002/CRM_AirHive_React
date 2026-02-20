@@ -25,6 +25,7 @@ export default function GlobalMeetingHandler() {
 
     // Ref to track meetings currently being processed to avoid duplicate modals/saves
     const processingMeetings = useRef<Set<string>>(new Set())
+    const pendingSignatureRef = useRef('')
 
     const checkUpdates = useCallback(async () => {
         if (!auth.user || auth.loading) return
@@ -49,7 +50,13 @@ export default function GlobalMeetingHandler() {
 
             // 1. Check for pending confirmations
             const pending = await getPendingConfirmations(auth.user.id)
-            setPendingConfirmations(pending)
+            const pendingSignature = pending
+                .map((m: any) => `${String(m?.id || '')}:${String(m?.updated_at || m?.start_time || '')}`)
+                .join('|')
+            if (pendingSignature !== pendingSignatureRef.current) {
+                pendingSignatureRef.current = pendingSignature
+                setPendingConfirmations(pending)
+            }
 
             // Cross-tab synchronization logic:
             if (showConfirmationModal && selectedMeeting) {
@@ -77,6 +84,7 @@ export default function GlobalMeetingHandler() {
             if (alerts.length > 0) {
                 setActiveAlerts((prev: any[]) => {
                     const newAlerts = alerts.filter((a: any) => !prev.some((p: any) => p.id === a.id))
+                    if (newAlerts.length === 0) return prev
 
                     newAlerts.forEach((alert: any) => {
                         if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'granted') {

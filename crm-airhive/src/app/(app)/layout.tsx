@@ -39,7 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {/* Decorative background identity layer */}
                 <VisualIdentityBackground />
                 <TopBar />
-                <main className='flex-1 overflow-auto relative z-10' style={{ background: 'transparent' }}>
+                <main id='app-main-scroll' className='flex-1 overflow-auto relative z-10' style={{ background: 'transparent' }}>
                     {children}
                 </main>
             </div>
