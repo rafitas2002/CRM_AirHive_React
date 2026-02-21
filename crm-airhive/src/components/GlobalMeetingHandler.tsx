@@ -17,6 +17,7 @@ import { createClient } from '@/lib/supabase'
 
 export default function GlobalMeetingHandler() {
     const auth = useAuth()
+    const userId = auth.user?.id || null
     const [pendingConfirmations, setPendingConfirmations] = useState<any[]>([])
     const [activeAlerts, setActiveAlerts] = useState<any[]>([])
     const [showConfirmationModal, setShowConfirmationModal] = useState(false)
@@ -26,9 +27,13 @@ export default function GlobalMeetingHandler() {
     // Ref to track meetings currently being processed to avoid duplicate modals/saves
     const processingMeetings = useRef<Set<string>>(new Set())
     const pendingSignatureRef = useRef('')
+    const showConfirmationModalRef = useRef(false)
+    const selectedMeetingIdRef = useRef<string | null>(null)
+    const syncInFlightRef = useRef(false)
+    const disableGoogleSyncRef = useRef(false)
 
     const checkUpdates = useCallback(async () => {
-        if (!auth.user || auth.loading) return
+        if (!userId || auth.loading) return
 
         try {
             // 0. Freeze meetings starting NOW
@@ -36,7 +41,7 @@ export default function GlobalMeetingHandler() {
             const { data: startingMeetings } = await (createClient()
                 .from('meetings') as any)
                 .select('id, lead_id')
-                .eq('seller_id', auth.user.id)
+                .eq('seller_id', userId)
                 .eq('meeting_status', 'scheduled')
                 .lte('start_time', nowIso)
                 .is('frozen_probability_value', null)
@@ -49,7 +54,7 @@ export default function GlobalMeetingHandler() {
             }
 
             // 1. Check for pending confirmations
-            const pending = await getPendingConfirmations(auth.user.id)
+            const pending = await getPendingConfirmations(userId)
             const pendingSignature = pending
                 .map((m: any) => `${String(m?.id || '')}:${String(m?.updated_at || m?.start_time || '')}`)
                 .join('|')
@@ -59,8 +64,8 @@ export default function GlobalMeetingHandler() {
             }
 
             // Cross-tab synchronization logic:
-            if (showConfirmationModal && selectedMeeting) {
-                const stillPending = pending.some(m => m.id === selectedMeeting.id)
+            if (showConfirmationModalRef.current && selectedMeetingIdRef.current) {
+                const stillPending = pending.some(m => m.id === selectedMeetingIdRef.current)
                 if (!stillPending) {
                     console.log('🔄 Meeting confirmed elsewhere, closing modal.')
                     setShowConfirmationModal(false)
@@ -69,7 +74,7 @@ export default function GlobalMeetingHandler() {
                 }
             }
 
-            if (pending.length > 0 && !showConfirmationModal) {
+            if (pending.length > 0 && !showConfirmationModalRef.current) {
                 // Find first meeting that isn't already being processed
                 const nextToConfirm = pending.find(m => !processingMeetings.current.has(m.id))
 
@@ -80,7 +85,7 @@ export default function GlobalMeetingHandler() {
             }
 
             // 2. Check for due alerts
-            const alerts = await getPendingAlerts(auth.user.id)
+            const alerts = await getPendingAlerts(userId)
             if (alerts.length > 0) {
                 setActiveAlerts((prev: any[]) => {
                     const newAlerts = alerts.filter((a: any) => !prev.some((p: any) => p.id === a.id))
@@ -106,17 +111,38 @@ export default function GlobalMeetingHandler() {
         } catch (error) {
             console.error('Error checking global meeting updates:', error)
         }
-    }, [auth.user, auth.loading, showConfirmationModal, selectedMeeting])
+    }, [userId, auth.loading])
 
     useEffect(() => {
-        if (!auth.user) return
+        showConfirmationModalRef.current = showConfirmationModal
+    }, [showConfirmationModal])
+
+    useEffect(() => {
+        selectedMeetingIdRef.current = selectedMeeting?.id || null
+    }, [selectedMeeting])
+
+    useEffect(() => {
+        if (!userId) return
+
+        const runGoogleSync = async () => {
+            if (syncInFlightRef.current || !userId || disableGoogleSyncRef.current) return
+            try {
+                syncInFlightRef.current = true
+                const res = await syncGoogleEventsAction(userId)
+                if (res.success && res.updatedCount && res.updatedCount > 0) {
+                    console.log(`✅ Auto-synced ${res.updatedCount} events from Google`)
+                }
+                if (!res.success) {
+                    disableGoogleSyncRef.current = true
+                    console.warn('Google sync-back disabled for this session due to connection/token error.')
+                }
+            } finally {
+                syncInFlightRef.current = false
+            }
+        }
 
         checkUpdates()
-        syncGoogleEventsAction(auth.user.id).then(res => {
-            if (res.success && res.updatedCount && res.updatedCount > 0) {
-                console.log(`✅ Auto-synced ${res.updatedCount} events from Google`)
-            }
-        })
+        void runGoogleSync()
 
         const channel = supabase
             .channel('global-notifications')
@@ -126,7 +152,7 @@ export default function GlobalMeetingHandler() {
                     event: '*',
                     schema: 'public',
                     table: 'meeting_alerts',
-                    filter: `user_id=eq.${auth.user.id}`
+                    filter: `user_id=eq.${userId}`
                 },
                 () => checkUpdates()
             )
@@ -136,7 +162,7 @@ export default function GlobalMeetingHandler() {
                     event: 'UPDATE',
                     schema: 'public',
                     table: 'meetings',
-                    filter: `seller_id=eq.${auth.user.id}`
+                    filter: `seller_id=eq.${userId}`
                 },
                 (payload) => {
                     // Trigger update on any change to meetings to ensure UI sync
@@ -152,7 +178,7 @@ export default function GlobalMeetingHandler() {
 
         const interval = setInterval(checkUpdates, 15 * 1000)
         const syncInterval = setInterval(() => {
-            if (auth.user) syncGoogleEventsAction(auth.user.id)
+            void runGoogleSync()
         }, 5 * 60 * 1000)
 
         return () => {
@@ -160,10 +186,10 @@ export default function GlobalMeetingHandler() {
             clearInterval(interval)
             clearInterval(syncInterval)
         }
-    }, [auth.user, checkUpdates, supabase])
+    }, [userId, checkUpdates, supabase])
 
     const handleConfirmMeeting = async (wasHeld: boolean, notes: string) => {
-        if (!selectedMeeting || !auth.user) return
+        if (!selectedMeeting || !userId) return
 
         const meetingId = selectedMeeting.id
         if (processingMeetings.current.has(meetingId)) {
@@ -179,7 +205,7 @@ export default function GlobalMeetingHandler() {
                 meetingId,
                 wasHeld,
                 notes,
-                auth.user.id
+                userId
             )
 
             if (result.success) {
@@ -207,7 +233,7 @@ export default function GlobalMeetingHandler() {
         }
     }
 
-    if (!auth.user) return null
+    if (!userId) return null
 
     return (
         <>

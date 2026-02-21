@@ -199,6 +199,14 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
     { keywords: ['biotecnologia', 'laboratorio'], icons: [Microscope, TestTube, Beaker, FlaskConical, HeartPulse] }
 ]
 
+const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string }> = [
+    {
+        keywords: ['alimentos', 'bebidas', 'restaur', 'food'],
+        icon: Utensils,
+        colorClass: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]'
+    }
+]
+
 function normalizeText(value?: string) {
     return (value || '')
         .toLowerCase()
@@ -260,6 +268,19 @@ function getSemanticCandidates(industryName?: string): LucideIcon[] {
     return candidates
 }
 
+function getFixedIndustryVisual(industryName?: string): BadgeVisual | null {
+    const normalized = normalizeText(industryName)
+    if (!normalized) return null
+
+    for (const rule of FIXED_INDUSTRY_VISUAL_RULES) {
+        if (rule.keywords.some((k) => normalized.includes(k))) {
+            return buildVisual(rule.icon, rule.colorClass)
+        }
+    }
+
+    return null
+}
+
 export function buildIndustryBadgeVisualMap(
     industries: Array<{ id: string; name?: string }>
 ): Record<string, BadgeVisual> {
@@ -272,6 +293,13 @@ export function buildIndustryBadgeVisualMap(
         .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'))
 
     for (const industry of uniqueIndustries) {
+        const fixedVisual = getFixedIndustryVisual(industry.name)
+        if (fixedVisual) {
+            usedIcons.add(fixedVisual.icon)
+            result[industry.id] = fixedVisual
+            continue
+        }
+
         const semanticCandidates = getSemanticCandidates(industry.name)
         let selectedIcon: LucideIcon | null = null
 

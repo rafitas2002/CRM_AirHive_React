@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { getQuoteRequestNotifications } from '@/app/actions/quotes'
 import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, type LucideIcon } from 'lucide-react'
 
 export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
+    const userId = auth.user?.id || null
     const [supabase] = useState(() => createClient())
 
     const isAdmin = auth.profile?.role === 'admin'
@@ -38,46 +38,106 @@ export default function TopBar() {
     const lastQuoteListSignatureRef = useRef('')
     const logoDimensions = { width: 248, height: 36 }
     const dropdownIconClass = 'w-[18px] h-[18px] text-white/80 group-hover/item:text-white transition-colors'
-    const badgeSeenStorageKey = auth.user ? `airhive_seen_badge_notifications_${auth.user.id}` : ''
+    const badgeSeenStorageKey = userId ? `airhive_seen_badge_notifications_${userId}` : ''
 
     useEffect(() => {
-        if (!isAdmin || !auth.user) return
+        if (!isAdmin || !userId) return
         let cancelled = false
-        const load = async () => {
-            const result = await getQuoteRequestNotifications()
-            if (cancelled || !result.success || !result.data) return
-            const nextPendingCount = Number(result.data.pendingCount || 0)
-            setQuotePendingCount((prev) => (prev === nextPendingCount ? prev : nextPendingCount))
-            const items = Array.isArray(result.data.items) ? result.data.items : []
-            const normalizedItems = items.map((raw) => {
+
+        const loadQuoteNotifications = async () => {
+            const { count } = await (supabase
+                .from('crm_quote_requests') as any)
+                .select('id', { head: true, count: 'exact' })
+                .eq('status', 'pending')
+
+            const { data: requests, error: requestsError } = await (supabase
+                .from('crm_quote_requests') as any)
+                .select('id, quote_author, contributed_by_name, requested_by, created_at')
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .limit(8)
+
+            if (cancelled || requestsError) return
+
+            const normalizedItems = (Array.isArray(requests) ? requests : []).map((raw) => {
                 const item = raw as Record<string, unknown>
                 return {
                     id: Number(item.id || 0),
                     quote_author: String(item.quote_author || ''),
                     contributed_by_name: String(item.contributed_by_name || ''),
-                    requester_name: String(item.requester_name || ''),
+                    requested_by: String(item.requested_by || ''),
+                    requester_name: 'Usuario',
                     created_at: String(item.created_at || '')
                 }
             })
-            const signature = normalizedItems
+
+            const requesterIds = Array.from(
+                new Set(normalizedItems.map((item) => item.requested_by).filter(Boolean))
+            )
+            let requesterById = new Map<string, string>()
+
+            if (requesterIds.length > 0) {
+                const { data: profiles } = await (supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', requesterIds) as any)
+
+                requesterById = new Map(
+                    (Array.isArray(profiles) ? profiles : []).map((profile: any) => [
+                        String(profile?.id || ''),
+                        String(profile?.full_name || 'Usuario')
+                    ])
+                )
+            }
+
+            const itemsWithRequester = normalizedItems.map((item) => ({
+                id: item.id,
+                quote_author: item.quote_author,
+                contributed_by_name: item.contributed_by_name,
+                requester_name: requesterById.get(item.requested_by) || 'Usuario',
+                created_at: item.created_at
+            }))
+
+            const nextPendingCount = Number(count || 0)
+            setQuotePendingCount((prev) => (prev === nextPendingCount ? prev : nextPendingCount))
+
+            const signature = itemsWithRequester
                 .map((item) => `${item.id}:${item.created_at}`)
                 .join('|')
             if (signature !== lastQuoteListSignatureRef.current) {
                 lastQuoteListSignatureRef.current = signature
-                setQuoteNotificationItems(normalizedItems)
+                setQuoteNotificationItems(itemsWithRequester)
             }
         }
 
+        const load = async () => {
+            await loadQuoteNotifications()
+        }
+
         load()
-        const interval = setInterval(load, 30000)
+        const channel = supabase
+            .channel(`topbar-quote-notifications-${userId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'crm_quote_requests'
+                },
+                () => {
+                    void load()
+                }
+            )
+            .subscribe()
+
         return () => {
             cancelled = true
-            clearInterval(interval)
+            supabase.removeChannel(channel)
         }
-    }, [isAdmin, auth.user])
+    }, [isAdmin, userId, supabase])
 
     useEffect(() => {
-        if (!auth.user) return
+        if (!userId) return
         let cancelled = false
 
         const readSeen = () => {
@@ -91,31 +151,60 @@ export default function TopBar() {
                 return new Set<string>()
             }
         }
+        const persistSeen = (ids: Set<string>) => {
+            if (typeof window === 'undefined' || !badgeSeenStorageKey) return
+            try {
+                localStorage.setItem(badgeSeenStorageKey, JSON.stringify(Array.from(ids).slice(-200)))
+            } catch {
+                // noop
+            }
+        }
 
         const loadBadgeNotifications = async () => {
-            const userId = auth.user?.id
             if (!userId) return
 
-            const [industryRes, specialRes] = await Promise.all([
+            const [industryRes, specialRes, activeIndustryBadgesRes, activeSpecialBadgesRes] = await Promise.all([
                 (supabase
                     .from('seller_badge_events')
-                    .select('id, level, event_type, created_at, industrias(name)')
+                    .select('id, industria_id, level, event_type, created_at, industrias(name)')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false })
                     .limit(10) as any),
                 (supabase
                     .from('seller_special_badge_events')
-                    .select('id, badge_label, level, event_type, created_at')
+                    .select('id, badge_type, badge_key, badge_label, level, event_type, created_at')
                     .eq('seller_id', userId)
                     .order('created_at', { ascending: false })
-                    .limit(10) as any)
+                    .limit(10) as any),
+                (supabase
+                    .from('seller_industry_badges')
+                    .select('industria_id')
+                    .eq('seller_id', userId)
+                    .gt('level', 0)),
+                (supabase
+                    .from('seller_special_badges')
+                    .select('badge_type, badge_key')
+                    .eq('seller_id', userId)
+                    .gt('level', 0))
             ])
 
             const industryRows = Array.isArray(industryRes?.data) ? industryRes.data : []
             const specialRows = Array.isArray(specialRes?.data) ? specialRes.data : []
 
+            const activeIndustryKeys = new Set(
+                (Array.isArray(activeIndustryBadgesRes?.data) ? activeIndustryBadgesRes.data : [])
+                    .map((row: { industria_id?: string | null }) => String(row?.industria_id || ''))
+                    .filter(Boolean)
+            )
+            const activeSpecialKeys = new Set(
+                (Array.isArray(activeSpecialBadgesRes?.data) ? activeSpecialBadgesRes.data : [])
+                    .map((row: { badge_type?: string | null, badge_key?: string | null }) => `${String(row?.badge_type || '')}:${String(row?.badge_key || '')}`)
+                    .filter((x: string) => x !== ':')
+            )
+
             const normalizedIndustry = industryRows.map((row: any) => ({
                 id: `industry:${String(row?.id || '')}`,
+                badgeRef: String(row?.industria_id || ''),
                 label: String(row?.industrias?.name || 'Industria'),
                 level: Number(row?.level || 1),
                 event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
@@ -125,6 +214,7 @@ export default function TopBar() {
 
             const normalizedSpecial = specialRows.map((row: any) => ({
                 id: `special:${String(row?.id || '')}`,
+                badgeRef: `${String(row?.badge_type || '')}:${String(row?.badge_key || '')}`,
                 label: String(row?.badge_label || 'Badge especial'),
                 level: Number(row?.level || 1),
                 event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
@@ -134,6 +224,10 @@ export default function TopBar() {
 
             const merged = [...normalizedIndustry, ...normalizedSpecial]
                 .filter((item) => item.id.endsWith(':') === false && item.created_at)
+                .filter((item) => {
+                    if (item.sourceType === 'industry') return activeIndustryKeys.has(item.badgeRef)
+                    return activeSpecialKeys.has(item.badgeRef)
+                })
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .slice(0, 20)
 
@@ -147,7 +241,13 @@ export default function TopBar() {
             }
 
             const seen = readSeen()
-            const unread = merged.filter((item) => !seen.has(item.id)).length
+            const mergedIds = new Set(merged.map((item) => item.id))
+            const prunedSeen = new Set(Array.from(seen).filter((id) => mergedIds.has(id)))
+            if (prunedSeen.size !== seen.size) {
+                persistSeen(prunedSeen)
+            }
+
+            const unread = merged.filter((item) => !prunedSeen.has(item.id)).length
             setBadgeUnreadCount((prev) => (prev === unread ? prev : unread))
         }
 
@@ -173,7 +273,6 @@ export default function TopBar() {
 
         loadBadgeNotifications()
         const interval = setInterval(loadBadgeNotifications, 30000)
-        const userId = auth.user.id
         const channel = supabase
             .channel(`topbar-badge-notifications-${userId}`)
             .on(
@@ -201,6 +300,18 @@ export default function TopBar() {
             .on(
                 'postgres_changes',
                 {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'seller_badge_events',
+                    filter: `seller_id=eq.${userId}`
+                },
+                () => {
+                    void loadBadgeNotifications()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'seller_special_badge_events',
@@ -220,6 +331,42 @@ export default function TopBar() {
                     })
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'seller_industry_badges',
+                    filter: `seller_id=eq.${userId}`
+                },
+                () => {
+                    void loadBadgeNotifications()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'seller_special_badges',
+                    filter: `seller_id=eq.${userId}`
+                },
+                () => {
+                    void loadBadgeNotifications()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'seller_special_badge_events',
+                    filter: `seller_id=eq.${userId}`
+                },
+                () => {
+                    void loadBadgeNotifications()
+                }
+            )
             .subscribe()
 
         return () => {
@@ -227,7 +374,7 @@ export default function TopBar() {
             clearInterval(interval)
             supabase.removeChannel(channel)
         }
-    }, [auth.user, badgeSeenStorageKey, supabase])
+    }, [userId, badgeSeenStorageKey, supabase])
 
     useEffect(() => {
         const onClickOutside = (event: MouseEvent) => {

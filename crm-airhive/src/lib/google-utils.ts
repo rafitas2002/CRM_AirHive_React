@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
 
 export async function getValidAccessToken(userId: string) {
@@ -16,7 +16,11 @@ export async function getValidAccessToken(userId: string) {
         .single()
 
     if (error || !data) {
-        console.error('Error fetching google connection:', error)
+        const code = String((error as { code?: string } | null)?.code || '')
+        // No active Google integration for this user.
+        if (code !== 'PGRST116') {
+            console.error('Error fetching google connection:', error)
+        }
         return null
     }
 
@@ -26,6 +30,11 @@ export async function getValidAccessToken(userId: string) {
     const now = Date.now()
     if (expiresAt - now > 5 * 60 * 1000) {
         return integrationData.access_token
+    }
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+        console.warn('Google OAuth env vars missing; skipping token refresh.')
+        return null
     }
 
     console.log('Refreshing Google Token for user:', userId)
@@ -48,9 +57,25 @@ export async function getValidAccessToken(userId: string) {
         const tokens = await response.json()
 
         if (!response.ok) {
-            console.error('Refresh Error:', tokens)
-            // If refresh fails (e.g. revoked), we might want to throw or return null
-            throw new Error('Failed to refresh token: ' + (tokens.error_description || tokens.error))
+            const oauthError = String(tokens?.error || '')
+            const oauthDescription = String(tokens?.error_description || '')
+            const shouldDisconnect = oauthError === 'invalid_client' || oauthError === 'invalid_grant'
+
+            console.error('Refresh Error:', {
+                error: oauthError || 'unknown',
+                error_description: oauthDescription || 'unknown'
+            })
+
+            if (shouldDisconnect) {
+                console.warn(`Disconnecting invalid Google integration for user ${userId} due to OAuth error: ${oauthError}`)
+                await supabase
+                    .from('google_integrations')
+                    .delete()
+                    .eq('id', integrationData.id)
+                return null
+            }
+
+            return null
         }
 
         // Update DB
@@ -71,6 +96,6 @@ export async function getValidAccessToken(userId: string) {
         return tokens.access_token
     } catch (err) {
         console.error('Token Refresh Exception:', err)
-        throw err
+        return null
     }
 }

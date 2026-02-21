@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const code = searchParams.get('code')
     const error = searchParams.get('error')
+    const state = searchParams.get('state')
 
     const redirectUrl = new URL('/settings/cuentas', request.url)
 
@@ -19,7 +20,17 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const result = await exchangeGoogleCode(code)
+        let fallbackUserId: string | null = null
+        if (state) {
+            try {
+                const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'))
+                fallbackUserId = typeof decoded?.userId === 'string' ? decoded.userId : null
+            } catch {
+                fallbackUserId = null
+            }
+        }
+
+        const result = await exchangeGoogleCode(code, fallbackUserId)
 
         if (result.success) {
             redirectUrl.searchParams.set('status', 'connected')
