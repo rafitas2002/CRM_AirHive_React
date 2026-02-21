@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { getMyBadgeCelebrationFeed } from '@/app/actions/badgeCelebrations'
 import { X, Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
@@ -38,14 +37,16 @@ type CelebrationEvent = {
 
 export default function GlobalBadgeCelebration() {
     const auth = useAuth()
+    const userId = auth.user?.id || null
     const [supabase] = useState(() => createClient())
     const [industryCatalog, setIndustryCatalog] = useState<Array<{ id: string, name: string, is_active?: boolean }>>([])
     const [queue, setQueue] = useState<CelebrationEvent[]>([])
     const shownIds = useRef<Set<string>>(new Set())
+    const industryCatalogRef = useRef<Array<{ id: string, name: string, is_active?: boolean }>>([])
 
     const current = queue[0] || null
-    const seenStorageKey = auth.user ? `airhive_seen_badge_events_${auth.user.id}` : ''
-    const badgeLevelSnapshotKey = auth.user ? `airhive_badge_level_snapshot_${auth.user.id}` : ''
+    const seenStorageKey = userId ? `airhive_seen_badge_events_${userId}` : ''
+    const badgeLevelSnapshotKey = userId ? `airhive_badge_level_snapshot_${userId}` : ''
 
     const readSeenEventIds = () => {
         if (typeof window === 'undefined' || !seenStorageKey) return new Set<string>()
@@ -97,7 +98,11 @@ export default function GlobalBadgeCelebration() {
     }, [industryCatalog, current])
 
     useEffect(() => {
-        if (!auth.user) return
+        industryCatalogRef.current = industryCatalog
+    }, [industryCatalog])
+
+    useEffect(() => {
+        if (!userId) return
 
         const loadIndustries = async () => {
             const { data } = await supabase
@@ -109,11 +114,11 @@ export default function GlobalBadgeCelebration() {
         }
 
         loadIndustries()
-    }, [auth.user, supabase])
+    }, [userId, supabase])
 
     useEffect(() => {
-        if (!auth.user) return
-        const currentUserId = auth.user.id
+        if (!userId) return
+        const currentUserId = userId
         const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
         const enqueueIndustryEvent = async (eventId: string) => {
@@ -314,8 +319,6 @@ export default function GlobalBadgeCelebration() {
                 nextSnapshot[key] = level
                 if (level > prev) {
                     const scopedId = `derived-industry:${industriaId}:L${level}`
-                    if (shownIds.current.has(scopedId)) continue
-                    shownIds.current.add(scopedId)
                     derivedEvents.push({
                         id: scopedId,
                         sourceType: 'industry',
@@ -340,8 +343,6 @@ export default function GlobalBadgeCelebration() {
                 nextSnapshot[key] = level
                 if (level > prev) {
                     const scopedId = `derived-special:${badgeType}:${badgeKey}:L${level}`
-                    if (shownIds.current.has(scopedId)) continue
-                    shownIds.current.add(scopedId)
                     derivedEvents.push({
                         id: scopedId,
                         sourceType: 'special',
@@ -361,134 +362,7 @@ export default function GlobalBadgeCelebration() {
             setQueue((prev) => [...prev, ...derivedEvents.slice(0, 4)])
         }
 
-        const hydrateFromServerFeed = async () => {
-            const response = await getMyBadgeCelebrationFeed()
-            if (!response?.success || !response?.data) return false
-
-            const feed = response.data as {
-                industryEvents: Array<any>
-                specialEvents: Array<any>
-                industryLevels: Array<any>
-                specialLevels: Array<any>
-            }
-
-            const seen = readSeenEventIds()
-            const scoped = new Set(seen)
-            const hydratedEvents: CelebrationEvent[] = []
-
-            const industryEvents = (Array.isArray(feed.industryEvents) ? feed.industryEvents : [])
-                .filter((row) => !!row?.id)
-                .sort((a, b) => new Date(String(a?.created_at || 0)).getTime() - new Date(String(b?.created_at || 0)).getTime())
-            for (const row of industryEvents) {
-                const scopedId = `industry:${String(row.id)}`
-                if (shownIds.current.has(scopedId) || scoped.has(scopedId)) continue
-                shownIds.current.add(scopedId)
-                scoped.add(scopedId)
-                hydratedEvents.push({
-                    id: scopedId,
-                    sourceType: 'industry',
-                    industria_id: String(row?.industria_id || ''),
-                    industryName: String(row?.industrias?.name || 'Industria'),
-                    badgeLabel: String(row?.industrias?.name || 'Industria'),
-                    level: Number(row?.level || 1),
-                    eventType: (row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
-                    progressCount: Number(row?.closures_count || 0)
-                })
-            }
-
-            const specialEvents = (Array.isArray(feed.specialEvents) ? feed.specialEvents : [])
-                .filter((row) => !!row?.id)
-                .sort((a, b) => new Date(String(a?.created_at || 0)).getTime() - new Date(String(b?.created_at || 0)).getTime())
-            for (const row of specialEvents) {
-                const scopedId = `special:${String(row.id)}`
-                if (shownIds.current.has(scopedId) || scoped.has(scopedId)) continue
-                shownIds.current.add(scopedId)
-                scoped.add(scopedId)
-                hydratedEvents.push({
-                    id: scopedId,
-                    sourceType: 'special',
-                    badgeType: String(row?.badge_type || 'special'),
-                    badgeLabel: String(row?.badge_label || 'Badge especial'),
-                    level: Number(row?.level || 1),
-                    eventType: (row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
-                    progressCount: Number(row?.progress_count || 0)
-                })
-            }
-
-            if (hydratedEvents.length > 0) {
-                setQueue((prev) => [...prev, ...hydratedEvents.slice(0, 4)])
-                persistSeenEventIds(scoped)
-            }
-
-            // Secondary fallback: derive popup by level delta even if event rows are unavailable.
-            const previous = readBadgeLevelSnapshot()
-            const nextSnapshot: Record<string, number> = {}
-            const derivedEvents: CelebrationEvent[] = []
-
-            const industryLevels = Array.isArray(feed.industryLevels) ? feed.industryLevels : []
-            for (const row of industryLevels) {
-                const industriaId = String(row?.industria_id || '')
-                if (!industriaId) continue
-                const level = Number(row?.level || 0)
-                if (level <= 0) continue
-                const key = `lvl:industry:${industriaId}`
-                const prev = Number(previous[key] || 0)
-                nextSnapshot[key] = level
-                if (level > prev) {
-                    const scopedId = `derived-industry:${industriaId}:L${level}`
-                    if (shownIds.current.has(scopedId)) continue
-                    shownIds.current.add(scopedId)
-                    derivedEvents.push({
-                        id: scopedId,
-                        sourceType: 'industry',
-                        industria_id: industriaId,
-                        industryName: String(row?.industrias?.name || 'Industria'),
-                        badgeLabel: String(row?.industrias?.name || 'Industria'),
-                        level,
-                        eventType: prev === 0 ? 'unlocked' : 'upgraded',
-                        progressCount: Number(row?.closures_count || 0)
-                    })
-                }
-            }
-
-            const specialLevels = Array.isArray(feed.specialLevels) ? feed.specialLevels : []
-            for (const row of specialLevels) {
-                const badgeType = String(row?.badge_type || '')
-                const badgeKey = String(row?.badge_key || '')
-                if (!badgeType || !badgeKey) continue
-                const level = Number(row?.level || 0)
-                if (level <= 0) continue
-                const key = `lvl:special:${badgeType}:${badgeKey}`
-                const prev = Number(previous[key] || 0)
-                nextSnapshot[key] = level
-                if (level > prev) {
-                    const scopedId = `derived-special:${badgeType}:${badgeKey}:L${level}`
-                    if (shownIds.current.has(scopedId)) continue
-                    shownIds.current.add(scopedId)
-                    derivedEvents.push({
-                        id: scopedId,
-                        sourceType: 'special',
-                        badgeType,
-                        badgeLabel: String(row?.badge_label || 'Badge especial'),
-                        level,
-                        eventType: prev === 0 ? 'unlocked' : 'upgraded',
-                        progressCount: Number(row?.progress_count || 0)
-                    })
-                }
-            }
-
-            const isFirstSnapshot = Object.keys(previous).length === 0
-            persistBadgeLevelSnapshot(nextSnapshot)
-            if (!isFirstSnapshot && derivedEvents.length > 0) {
-                setQueue((prev) => [...prev, ...derivedEvents.slice(0, 4)])
-            }
-
-            return true
-        }
-
         const hydrateAllRecentEvents = async () => {
-            const fromServer = await hydrateFromServerFeed()
-            if (fromServer) return
             await hydrateRecentIndustryEvents()
             await hydrateRecentSpecialEvents()
             await hydrateBadgeLevelDeltaFallback()
@@ -515,7 +389,7 @@ export default function GlobalBadgeCelebration() {
                     const seen = readSeenEventIds()
                     seen.add(scopedId)
                     persistSeenEventIds(seen)
-                    const industryName = industryCatalog.find((i) => i.id === String(row?.industria_id || ''))?.name || 'Industria'
+                    const industryName = industryCatalogRef.current.find((i) => i.id === String(row?.industria_id || ''))?.name || 'Industria'
                     setQueue((prev) => [
                         ...prev,
                         {
@@ -562,18 +436,42 @@ export default function GlobalBadgeCelebration() {
                     ])
                 }
             )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'seller_industry_badges',
+                    filter: `seller_id=eq.${currentUserId}`
+                },
+                () => {
+                    void hydrateBadgeLevelDeltaFallback()
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'seller_special_badges',
+                    filter: `seller_id=eq.${currentUserId}`
+                },
+                () => {
+                    void hydrateBadgeLevelDeltaFallback()
+                }
+            )
             .subscribe()
 
-        // Fallback polling so celebration still appears if realtime is delayed/unavailable.
+        // Conservative fallback polling: only derive level deltas locally.
         const interval = setInterval(() => {
-            hydrateAllRecentEvents()
-        }, 8000)
+            void hydrateBadgeLevelDeltaFallback()
+        }, 60000)
 
         return () => {
             clearInterval(interval)
             supabase.removeChannel(channel)
         }
-    }, [auth.user, supabase, industryCatalog])
+    }, [userId, supabase])
 
     const currentEventId = current?.id || 'none'
     const confettiPieces = useMemo(() => {
@@ -593,7 +491,7 @@ export default function GlobalBadgeCelebration() {
         })
     }, [currentEventId])
 
-    if (!auth.user || !current) return null
+    if (!userId || !current) return null
 
     const industryVisual = current.sourceType === 'industry' && current.industria_id
         ? getIndustryBadgeVisualFromMap(current.industria_id, visualMap, current.industryName)

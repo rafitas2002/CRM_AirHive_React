@@ -8,7 +8,7 @@ import MeetingModal from '@/components/MeetingModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import { updateMeeting } from '@/lib/meetingsService'
 import { deleteMeetingAction } from '@/app/actions/meetings'
-import { getGoogleAuthUrl, getGoogleConnectionStatus } from '@/app/actions/google-integration'
+import { getGoogleAuthUrlWithState, getGoogleConnectionStatus } from '@/app/actions/google-integration'
 import { createClient } from '@/lib/supabase'
 
 import CalendarWeekView from '@/components/CalendarWeekView'
@@ -94,7 +94,7 @@ export default function CalendarioPage() {
     }
 
     const handleConnectGoogle = async () => {
-        const url = await getGoogleAuthUrl()
+        const url = await getGoogleAuthUrlWithState(auth.user?.id || null)
         window.location.href = url
     }
 

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getGoogleAuthUrl, getGoogleConnectionStatus, disconnectGoogle } from '@/app/actions/google-integration'
+import { getGoogleAuthUrlWithState, getGoogleConnectionStatus, disconnectGoogle } from '@/app/actions/google-integration'
+import { useAuth } from '@/lib/auth'
 import { Link2, CalendarDays, Mail, Bell, Chrome, CheckCircle2, Circle } from 'lucide-react'
 
 type ConnectionStatus = {
@@ -12,6 +13,7 @@ type ConnectionStatus = {
 }
 
 export default function CuentasPage() {
+    const auth = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
 
@@ -21,6 +23,8 @@ export default function CuentasPage() {
 
     const [status, setStatus] = useState<ConnectionStatus>({ connected: false })
     const [loading, setLoading] = useState(true)
+    const checkingStatusRef = useRef(false)
+    const handledCallbackParamRef = useRef(false)
 
     useEffect(() => {
         checkStatus()
@@ -28,15 +32,21 @@ export default function CuentasPage() {
 
     useEffect(() => {
         if (statusParam === 'connected') {
-            // Clear params
+            if (handledCallbackParamRef.current) return
+            handledCallbackParamRef.current = true
             router.replace('/settings/cuentas')
-            checkStatus()
+            void checkStatus()
         } else if (error) {
+            if (handledCallbackParamRef.current) return
+            handledCallbackParamRef.current = true
             alert(`Error al conectar con Google: ${error}`)
+            router.replace('/settings/cuentas')
         }
     }, [statusParam, error, router])
 
     const checkStatus = async () => {
+        if (checkingStatusRef.current) return
+        checkingStatusRef.current = true
         try {
             const data = await getGoogleConnectionStatus()
             if (data) {
@@ -51,13 +61,14 @@ export default function CuentasPage() {
         } catch (err) {
             console.error('Error checking status:', err)
         } finally {
+            checkingStatusRef.current = false
             setLoading(false)
         }
     }
 
     const handleConnectGoogle = async () => {
         try {
-            const url = await getGoogleAuthUrl()
+            const url = await getGoogleAuthUrlWithState(auth.user?.id || null)
             window.location.href = url
         } catch (err) {
             console.error('Error getting auth url:', err)

@@ -2,10 +2,11 @@
 
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { getValidAccessToken } from '@/lib/google-utils'
 import { sendGmailMessage } from '@/lib/gmailService'
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
 // Fallback for Vercel where it might be named without NEXT_PUBLIC
 const GOOGLE_REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI || ''
@@ -31,13 +32,40 @@ export async function getGoogleAuthUrl() {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
 
-export async function exchangeGoogleCode(code: string) {
+export async function getGoogleAuthUrlWithState(userId?: string | null) {
+    const url = await getGoogleAuthUrl()
+    if (!userId) return url
+
+    const statePayload = JSON.stringify({
+        userId,
+        ts: Date.now()
+    })
+    const state = Buffer.from(statePayload, 'utf8').toString('base64url')
+    return `${url}&state=${encodeURIComponent(state)}`
+}
+
+export async function exchangeGoogleCode(code: string, fallbackUserId?: string | null) {
     try {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-        if (userError || !user) throw new Error('Usuario no autenticado')
+        const { data: { user } } = await supabase.auth.getUser()
+        const userId = user?.id || fallbackUserId || null
+        if (!userId) throw new Error('Usuario no autenticado')
+
+        const dbClient: any = user?.id ? supabase : createAdminClient()
+
+        if (!user?.id && fallbackUserId) {
+            const { data: profileExists, error: profileError } = await dbClient
+                .from('profiles')
+                .select('id')
+                .eq('id', fallbackUserId)
+                .maybeSingle()
+
+            if (profileError || !profileExists?.id) {
+                throw new Error('Usuario inválido para OAuth')
+            }
+        }
 
         // 1. Exchange code for tokens
         const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -56,7 +84,9 @@ export async function exchangeGoogleCode(code: string) {
 
         if (!tokenResponse.ok) {
             console.error('Google Token Error:', tokens)
-            throw new Error(tokens.error_description || 'Error al obtener tokens de Google')
+            const oauthError = String(tokens?.error || '').trim()
+            const oauthDescription = String(tokens?.error_description || '').trim()
+            throw new Error([oauthError, oauthDescription].filter(Boolean).join(': ') || 'Error al obtener tokens de Google')
         }
 
         if (!tokens.refresh_token) {
@@ -79,10 +109,10 @@ export async function exchangeGoogleCode(code: string) {
         const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
         // 4. Save to Database
-        const { error: dbError } = await (supabase
+        const { error: dbError } = await (dbClient
             .from('google_integrations') as any)
             .upsert({
-                user_id: user.id,
+                user_id: userId,
                 email: googleUser.email,
                 access_token: tokens.access_token,
                 refresh_token: tokens.refresh_token,
