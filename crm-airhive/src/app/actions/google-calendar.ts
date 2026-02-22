@@ -121,7 +121,6 @@ export async function deleteGoogleEventAction(eventId: string, sellerId: string)
  */
 export async function syncGoogleEventsAction(userId: string) {
     try {
-        console.log('🔄 Starting Google Calendar sync-back for user:', userId)
         const accessToken = await getValidAccessToken(userId)
         if (!accessToken) return { success: false, error: 'No Google connection' }
 

@@ -12,15 +12,22 @@ import { useAuth } from '@/lib/auth'
  */
 export default function EventTracker() {
     const { user, loggedIn } = useAuth()
-    const sessionStartTime = useRef<number>(Date.now())
+    const sessionStartTime = useRef<number>(0)
     const lastTrackedUserId = useRef<string | null>(null)
 
     useEffect(() => {
         if (loggedIn && user) {
             // New session detected or user changed
             if (lastTrackedUserId.current !== user.id) {
+                const startedKey = `airhive_session_started_${user.id}`
+                if (typeof window !== 'undefined' && sessionStorage.getItem(startedKey) === '1') {
+                    lastTrackedUserId.current = user.id
+                    return
+                }
+
                 sessionStartTime.current = Date.now()
                 lastTrackedUserId.current = user.id
+                if (typeof window !== 'undefined') sessionStorage.setItem(startedKey, '1')
 
                 trackEvent({
                     eventType: 'session_start',
@@ -54,7 +61,7 @@ export default function EventTracker() {
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload)
         }
-    }, [loggedIn, user])
+    }, [loggedIn, user?.id])
 
     return null
 }
