@@ -567,6 +567,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                     const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
                                     const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
                                     const Icon = typeMeta.icon
+                                    const badgeOverlayNumber = getSpecialBadgeOverlayNumber(badge)
                                     return (
                                         <div
                                     key={`special-summary-${badge?.badge_type || 'badge'}-${badge?.badge_key || index}`}
@@ -575,6 +576,11 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                         >
                                             <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
                                             <Icon size={17} strokeWidth={2.7} className={typeMeta.iconClass} />
+                                            {badgeOverlayNumber && (
+                                                <span className='absolute bottom-[2px] left-1/2 -translate-x-1/2 text-[8px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
+                                                    {badgeOverlayNumber}
+                                                </span>
+                                            )}
                                         </div>
                                     )
                                 })()

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { X, Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
+import { Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
 type SpecialBadgeEventRow = {
@@ -33,6 +33,7 @@ type CelebrationEvent = {
     level: number
     eventType: 'unlocked' | 'upgraded'
     progressCount: number
+    badgeKey?: string
 }
 
 export default function GlobalBadgeCelebration() {
@@ -41,7 +42,9 @@ export default function GlobalBadgeCelebration() {
     const [supabase] = useState(() => createClient())
     const [industryCatalog, setIndustryCatalog] = useState<Array<{ id: string, name: string, is_active?: boolean }>>([])
     const [queue, setQueue] = useState<CelebrationEvent[]>([])
+    const [isExiting, setIsExiting] = useState(false)
     const shownIds = useRef<Set<string>>(new Set())
+    const recentLiveSpecialByBadge = useRef<Map<string, number>>(new Map())
     const industryCatalogRef = useRef<Array<{ id: string, name: string, is_active?: boolean }>>([])
 
     const current = queue[0] || null
@@ -70,18 +73,18 @@ export default function GlobalBadgeCelebration() {
     }
 
     const readBadgeLevelSnapshot = () => {
-        if (typeof window === 'undefined' || !badgeLevelSnapshotKey) return {} as Record<string, number>
+        if (typeof window === 'undefined' || !badgeLevelSnapshotKey) return {} as Record<string, { level: number, unlockedAt: string }>
         try {
             const raw = localStorage.getItem(badgeLevelSnapshotKey)
             const parsed = raw ? JSON.parse(raw) : {}
             if (!parsed || typeof parsed !== 'object') return {}
-            return parsed as Record<string, number>
+            return parsed as Record<string, { level: number, unlockedAt: string }>
         } catch {
             return {}
         }
     }
 
-    const persistBadgeLevelSnapshot = (snapshot: Record<string, number>) => {
+    const persistBadgeLevelSnapshot = (snapshot: Record<string, { level: number, unlockedAt: string }>) => {
         if (typeof window === 'undefined' || !badgeLevelSnapshotKey) return
         try {
             localStorage.setItem(badgeLevelSnapshotKey, JSON.stringify(snapshot))
@@ -173,7 +176,7 @@ export default function GlobalBadgeCelebration() {
             for (let attempt = 0; attempt < 5; attempt++) {
                 const res = await ((supabase as any)
                     .from('seller_special_badge_events')
-                    .select('id, badge_type, badge_label, level, event_type, progress_count')
+                    .select('id, badge_type, badge_key, badge_label, level, event_type, progress_count')
                     .eq('id', eventId)
                     .maybeSingle())
                 data = res?.data
@@ -198,6 +201,7 @@ export default function GlobalBadgeCelebration() {
                     id: scopedId,
                     sourceType: 'special',
                     badgeType: specialData.badge_type,
+                    badgeKey: specialData.badge_key || undefined,
                     badgeLabel: specialData.badge_label || 'Badge especial',
                     level: specialData.level,
                     eventType: safeEventType,
@@ -234,6 +238,7 @@ export default function GlobalBadgeCelebration() {
                     id: scopedId,
                     sourceType: 'special',
                     badgeType: row.badge_type,
+                    badgeKey: row.badge_key || undefined,
                     badgeLabel: row.badge_label || 'Badge especial',
                     level: row.level,
                     eventType: (row.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
@@ -293,12 +298,12 @@ export default function GlobalBadgeCelebration() {
             const [industryRes, specialRes] = await Promise.all([
                 ((supabase as any)
                     .from('seller_industry_badges')
-                    .select('industria_id, level, closures_count, industrias(name)')
+                    .select('industria_id, level, closures_count, unlocked_at, industrias(name)')
                     .eq('seller_id', currentUserId)
                     .gt('level', 0)),
                 ((supabase as any)
                     .from('seller_special_badges')
-                    .select('badge_type, badge_key, badge_label, level, progress_count')
+                    .select('badge_type, badge_key, badge_label, level, progress_count, unlocked_at')
                     .eq('seller_id', currentUserId)
                     .gt('level', 0))
             ])
@@ -306,7 +311,9 @@ export default function GlobalBadgeCelebration() {
             const industries = Array.isArray(industryRes?.data) ? industryRes.data : []
             const specials = Array.isArray(specialRes?.data) ? specialRes.data : []
             const previous = readBadgeLevelSnapshot()
-            const nextSnapshot: Record<string, number> = {}
+            const isFirstSnapshot = Object.keys(previous).length === 0
+            const nowMs = Date.now()
+            const nextSnapshot: Record<string, { level: number, unlockedAt: string }> = {}
             const derivedEvents: CelebrationEvent[] = []
 
             for (const row of industries) {
@@ -315,9 +322,15 @@ export default function GlobalBadgeCelebration() {
                 const level = Number(row?.level || 0)
                 if (level <= 0) continue
                 const key = `lvl:industry:${industriaId}`
-                const prev = Number(previous[key] || 0)
-                nextSnapshot[key] = level
-                if (level > prev) {
+                const unlockedAt = String(row?.unlocked_at || '')
+                const unlockedAtMs = unlockedAt ? new Date(unlockedAt).getTime() : 0
+                const prevLevel = Number(previous[key]?.level || 0)
+                const prevUnlockedAt = String(previous[key]?.unlockedAt || '')
+                nextSnapshot[key] = { level, unlockedAt }
+                const levelIncreased = level > prevLevel
+                const unlockedAtChanged = level > 0 && unlockedAt && prevUnlockedAt && unlockedAt !== prevUnlockedAt
+                const recentUnlockOnFirstSnapshot = isFirstSnapshot && level > 0 && unlockedAtMs > 0 && (nowMs - unlockedAtMs) <= 120000
+                if (levelIncreased || unlockedAtChanged || recentUnlockOnFirstSnapshot) {
                     const scopedId = `derived-industry:${industriaId}:L${level}`
                     derivedEvents.push({
                         id: scopedId,
@@ -326,7 +339,7 @@ export default function GlobalBadgeCelebration() {
                         industryName: String(row?.industrias?.name || 'Industria'),
                         badgeLabel: String(row?.industrias?.name || 'Industria'),
                         level,
-                        eventType: prev === 0 ? 'unlocked' : 'upgraded',
+                        eventType: prevLevel === 0 ? 'unlocked' : 'upgraded',
                         progressCount: Number(row?.closures_count || 0)
                     })
                 }
@@ -339,26 +352,31 @@ export default function GlobalBadgeCelebration() {
                 const level = Number(row?.level || 0)
                 if (level <= 0) continue
                 const key = `lvl:special:${badgeType}:${badgeKey}`
-                const prev = Number(previous[key] || 0)
-                nextSnapshot[key] = level
-                if (level > prev) {
+                const unlockedAt = String(row?.unlocked_at || '')
+                const unlockedAtMs = unlockedAt ? new Date(unlockedAt).getTime() : 0
+                const prevLevel = Number(previous[key]?.level || 0)
+                const prevUnlockedAt = String(previous[key]?.unlockedAt || '')
+                nextSnapshot[key] = { level, unlockedAt }
+                const levelIncreased = level > prevLevel
+                const unlockedAtChanged = level > 0 && unlockedAt && prevUnlockedAt && unlockedAt !== prevUnlockedAt
+                const recentUnlockOnFirstSnapshot = isFirstSnapshot && level > 0 && unlockedAtMs > 0 && (nowMs - unlockedAtMs) <= 120000
+                if (levelIncreased || unlockedAtChanged || recentUnlockOnFirstSnapshot) {
                     const scopedId = `derived-special:${badgeType}:${badgeKey}:L${level}`
                     derivedEvents.push({
                         id: scopedId,
                         sourceType: 'special',
                         badgeType,
+                        badgeKey,
                         badgeLabel: String(row?.badge_label || 'Badge especial'),
                         level,
-                        eventType: prev === 0 ? 'unlocked' : 'upgraded',
+                        eventType: prevLevel === 0 ? 'unlocked' : 'upgraded',
                         progressCount: Number(row?.progress_count || 0)
                     })
                 }
             }
 
-            // First run seeds snapshot only (no retroactive popups).
-            const isFirstSnapshot = Object.keys(previous).length === 0
             persistBadgeLevelSnapshot(nextSnapshot)
-            if (isFirstSnapshot || derivedEvents.length === 0) return
+            if (derivedEvents.length === 0) return
             setQueue((prev) => [...prev, ...derivedEvents.slice(0, 4)])
         }
 
@@ -413,11 +431,19 @@ export default function GlobalBadgeCelebration() {
                     table: 'seller_special_badge_events',
                     filter: `seller_id=eq.${currentUserId}`
                 },
-                (payload: { new: { id: string, badge_type?: string, badge_label?: string, level?: number, event_type?: string, progress_count?: number } }) => {
+                (payload: { new: { id: string, badge_type?: string, badge_key?: string, badge_label?: string, level?: number, event_type?: string, progress_count?: number } }) => {
                     const row = payload?.new
                     const eventId = String(row?.id || '')
                     const scopedId = `special:${eventId}`
                     if (!eventId || shownIds.current.has(scopedId)) return
+
+                    const badgeType = String(row?.badge_type || 'special')
+                    const badgeKey = String(row?.badge_key || '')
+                    const level = Number(row?.level || 1)
+                    const liveSig = `${badgeType}:${badgeKey}:L${level}`
+                    const liveSeenAt = recentLiveSpecialByBadge.current.get(liveSig) || 0
+                    if (Date.now() - liveSeenAt < 4000) return
+
                     shownIds.current.add(scopedId)
                     const seen = readSeenEventIds()
                     seen.add(scopedId)
@@ -427,9 +453,10 @@ export default function GlobalBadgeCelebration() {
                         {
                             id: scopedId,
                             sourceType: 'special',
-                            badgeType: String(row?.badge_type || 'special'),
+                            badgeType,
+                            badgeKey,
                             badgeLabel: String(row?.badge_label || 'Badge especial'),
-                            level: Number(row?.level || 1),
+                            level,
                             eventType: (row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
                             progressCount: Number(row?.progress_count || 0)
                         }
@@ -456,16 +483,49 @@ export default function GlobalBadgeCelebration() {
                     table: 'seller_special_badges',
                     filter: `seller_id=eq.${currentUserId}`
                 },
-                () => {
+                (payload: { eventType?: string, new?: any, old?: any }) => {
+                    const eventType = String(payload?.eventType || '').toUpperCase()
+                    const nextRow = payload?.new || {}
+                    const prevRow = payload?.old || {}
+
+                    const nextLevel = Number(nextRow?.level || 0)
+                    const prevLevel = Number(prevRow?.level || 0)
+                    const badgeType = String(nextRow?.badge_type || prevRow?.badge_type || '')
+                    const badgeKey = String(nextRow?.badge_key || prevRow?.badge_key || '')
+
+                    if (badgeType && badgeKey && ((eventType === 'INSERT' && nextLevel > 0) || (eventType === 'UPDATE' && nextLevel > prevLevel && nextLevel > 0))) {
+                        const scopedId = `special-live:${badgeType}:${badgeKey}:L${nextLevel}:U${String(nextRow?.updated_at || Date.now())}`
+                        if (!shownIds.current.has(scopedId)) {
+                            shownIds.current.add(scopedId)
+                            recentLiveSpecialByBadge.current.set(`${badgeType}:${badgeKey}:L${nextLevel}`, Date.now())
+                            setQueue((prev) => [
+                                ...prev,
+                                {
+                                    id: scopedId,
+                                    sourceType: 'special',
+                                    badgeType,
+                                    badgeKey,
+                                    badgeLabel: String(nextRow?.badge_label || prevRow?.badge_label || 'Badge especial'),
+                                    level: nextLevel,
+                                    eventType: prevLevel > 0 ? 'upgraded' : 'unlocked',
+                                    progressCount: Number(nextRow?.progress_count || 0)
+                                }
+                            ])
+                        }
+                    }
                     void hydrateBadgeLevelDeltaFallback()
                 }
             )
             .subscribe()
 
-        // Conservative fallback polling: only derive level deltas locally.
+        // Poll recent events too (not only level deltas) so popup still appears
+        // when realtime delivery is delayed/missed but DB events exist.
         const interval = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+            void hydrateRecentIndustryEvents()
+            void hydrateRecentSpecialEvents()
             void hydrateBadgeLevelDeltaFallback()
-        }, 60000)
+        }, 15000)
 
         return () => {
             clearInterval(interval)
@@ -476,7 +536,7 @@ export default function GlobalBadgeCelebration() {
     const currentEventId = current?.id || 'none'
     const confettiPieces = useMemo(() => {
         const colors = ['#60a5fa', '#22d3ee', '#34d399', '#fbbf24', '#f472b6', '#a78bfa', '#fb7185']
-        return Array.from({ length: 34 }).map((_, index) => {
+        return Array.from({ length: 72 }).map((_, index) => {
             const seed = (index + 3) * 37
             return {
                 id: `${currentEventId}-${index}`,
@@ -501,15 +561,28 @@ export default function GlobalBadgeCelebration() {
     const containerClass = industryVisual?.containerClass || specialVisual.containerClass
     const iconClass = industryVisual?.iconClass || specialVisual.iconClass
     const isUnlocked = current.eventType === 'unlocked'
+    const specialBadgeOverlay = getSpecialBadgeOverlayNumber(current.badgeType, current.badgeKey, current.badgeLabel)
+    const closeCta = isUnlocked ? 'Recibir Reconocimiento' : 'Seguir Sumando'
+    const closeAndContinue = () => {
+        if (isExiting) return
+        setIsExiting(true)
+        window.setTimeout(() => {
+            setQueue((prev) => prev.slice(1))
+            setIsExiting(false)
+        }, 380)
+    }
 
     return (
         <div className='fixed inset-0 z-[10001] pointer-events-none flex items-center justify-center p-4 md:p-8'>
-            <div className='absolute inset-0 bg-black/40 backdrop-blur-[2px]' />
+            <div className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] ${isExiting ? 'ah-badge-overlay-exit' : 'ah-badge-overlay-enter'}`} />
 
-            <div className='relative w-[min(94vw,700px)] rounded-[30px] border shadow-2xl overflow-hidden bg-[var(--card-bg)] border-[var(--card-border)] pointer-events-auto animate-in zoom-in-95 fade-in duration-500'>
+            <div className={`relative w-[min(94vw,700px)] rounded-[30px] border shadow-2xl overflow-hidden bg-[var(--card-bg)] border-[var(--card-border)] pointer-events-auto ${isExiting ? 'ah-badge-popup-exit' : 'ah-badge-popup-enter'}`}>
                 <div className='absolute inset-0 pointer-events-none overflow-hidden'>
                     <div className='ah-firework ah-firework-left' />
                     <div className='ah-firework ah-firework-right' />
+                    <div className='ah-firework ah-firework-top' />
+                    <div className='ah-firework ah-firework-bottom' />
+                    <div className='ah-firework ah-firework-mid' />
                     {confettiPieces.map((piece) => (
                         <span
                             key={piece.id}
@@ -538,14 +611,6 @@ export default function GlobalBadgeCelebration() {
                             Gran trabajo. Sigue así para mantener el momentum.
                         </p>
                     </div>
-                    <button
-                        type='button'
-                        onClick={() => setQueue((prev) => prev.slice(1))}
-                        className='w-10 h-10 rounded-xl bg-white/15 hover:bg-white/30 text-white inline-flex items-center justify-center transition-colors cursor-pointer'
-                        aria-label='Cerrar notificación de badge'
-                    >
-                        <X size={18} />
-                    </button>
                 </div>
 
                 <div className='p-6 md:p-8'>
@@ -553,6 +618,11 @@ export default function GlobalBadgeCelebration() {
                         <div className={`relative overflow-hidden w-24 h-24 md:w-28 md:h-28 rounded-2xl border flex items-center justify-center shadow-xl ${containerClass}`}>
                             <span className='absolute top-[3px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
                             <Icon size={42} strokeWidth={2.5} className={iconClass} />
+                            {specialBadgeOverlay && (
+                                <span className='absolute bottom-[7px] left-1/2 -translate-x-1/2 text-[12px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
+                                    {specialBadgeOverlay}
+                                </span>
+                            )}
                         </div>
                         <div className='min-w-0'>
                             <p className='text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]'>
@@ -577,10 +647,36 @@ export default function GlobalBadgeCelebration() {
                         <Sparkles size={16} className='text-amber-400' />
                         Cada badge suma a tu reputación comercial dentro de AirHive.
                     </div>
+
+                    <div className='mt-6 flex justify-end'>
+                        <button
+                            type='button'
+                            onClick={closeAndContinue}
+                            className='inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm md:text-base font-black tracking-wide transition-all cursor-pointer border border-emerald-300/40 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-[0_12px_28px_rgba(16,185,129,0.35)] hover:brightness-110 hover:-translate-y-0.5'
+                        >
+                            {closeCta}
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <style jsx>{`
+                .ah-badge-popup-enter {
+                    animation: ahBadgePopupIn 540ms cubic-bezier(0.22, 1, 0.36, 1) both;
+                }
+
+                .ah-badge-popup-exit {
+                    animation: ahBadgePopupOut 380ms cubic-bezier(0.4, 0, 1, 1) both;
+                }
+
+                .ah-badge-overlay-enter {
+                    animation: ahBadgeOverlayIn 320ms ease-out both;
+                }
+
+                .ah-badge-overlay-exit {
+                    animation: ahBadgeOverlayOut 280ms ease-in both;
+                }
+
                 .ah-confetti {
                     position: absolute;
                     top: -14px;
@@ -595,12 +691,12 @@ export default function GlobalBadgeCelebration() {
 
                 .ah-firework {
                     position: absolute;
-                    width: 180px;
-                    height: 180px;
+                    width: 220px;
+                    height: 220px;
                     border-radius: 999px;
-                    opacity: 0.32;
+                    opacity: 0.4;
                     pointer-events: none;
-                    animation: ahPulse 1.6s ease-out 2 both;
+                    animation: ahPulse 1.9s ease-out 3 both;
                 }
 
                 .ah-firework-left {
@@ -614,6 +710,63 @@ export default function GlobalBadgeCelebration() {
                     top: 18px;
                     background: radial-gradient(circle, rgba(251,191,36,0.6) 0%, rgba(251,191,36,0.15) 36%, transparent 72%);
                     animation-delay: 0.35s;
+                }
+
+                .ah-firework-top {
+                    left: 42%;
+                    top: -72px;
+                    background: radial-gradient(circle, rgba(59,130,246,0.58) 0%, rgba(34,211,238,0.16) 42%, transparent 72%);
+                    animation-delay: 0.18s;
+                }
+
+                .ah-firework-bottom {
+                    right: 24%;
+                    bottom: -80px;
+                    background: radial-gradient(circle, rgba(244,114,182,0.58) 0%, rgba(244,114,182,0.12) 42%, transparent 72%);
+                    animation-delay: 0.52s;
+                }
+
+                .ah-firework-mid {
+                    left: -80px;
+                    bottom: 8%;
+                    background: radial-gradient(circle, rgba(250,204,21,0.58) 0%, rgba(250,204,21,0.14) 42%, transparent 72%);
+                    animation-delay: 0.72s;
+                }
+
+                @keyframes ahBadgePopupIn {
+                    0% {
+                        opacity: 0;
+                        transform: translateY(26px) scale(0.94);
+                        filter: blur(2px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: translateY(0) scale(1);
+                        filter: blur(0);
+                    }
+                }
+
+                @keyframes ahBadgePopupOut {
+                    0% {
+                        opacity: 1;
+                        transform: translateY(0) scale(1);
+                        filter: blur(0);
+                    }
+                    100% {
+                        opacity: 0;
+                        transform: translateY(22px) scale(0.97);
+                        filter: blur(1px);
+                    }
+                }
+
+                @keyframes ahBadgeOverlayIn {
+                    0% { opacity: 0; }
+                    100% { opacity: 1; }
+                }
+
+                @keyframes ahBadgeOverlayOut {
+                    0% { opacity: 1; }
+                    100% { opacity: 0; }
                 }
 
                 @keyframes ahConfettiFall {
@@ -636,8 +789,8 @@ export default function GlobalBadgeCelebration() {
                         opacity: 0.2;
                     }
                     50% {
-                        transform: scale(1.08);
-                        opacity: 0.45;
+                        transform: scale(1.14);
+                        opacity: 0.58;
                     }
                 }
             `}</style>
@@ -703,6 +856,9 @@ function getSpecialVisual(badgeType?: string, badgeLabel?: string) {
     if (badgeType === 'closure_milestone') {
         return { icon: Building2, containerClass: `${metallic} bg-gradient-to-br from-[#f97316] to-[#c2410c]`, iconClass }
     }
+    if (badgeType === 'company_size') {
+        return { icon: Building2, containerClass: `${metallic} bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]`, iconClass }
+    }
     if (badgeType === 'location_city') {
         return { icon: Flag, containerClass: `${metallic} bg-gradient-to-br from-[#f97316] to-[#c2410c]`, iconClass }
     }
@@ -714,4 +870,12 @@ function getSpecialVisual(badgeType?: string, badgeLabel?: string) {
         containerClass: `${metallic} bg-gradient-to-br from-[#d946ef] to-[#a21caf]`,
         iconClass
     }
+}
+
+function getSpecialBadgeOverlayNumber(badgeType?: string, badgeKey?: string, badgeLabel?: string) {
+    if (badgeType !== 'company_size') return null
+    const fromKey = String(badgeKey || '').match(/size_(\d+)/)?.[1]
+    if (fromKey) return fromKey
+    const fromLabel = String(badgeLabel || '').match(/(\d+)/)?.[1]
+    return fromLabel || null
 }

@@ -59,6 +59,11 @@ function isWonStage(stage: unknown) {
     return normalized === 'cerrado ganado' || normalized === 'cerrada ganada'
 }
 
+function isLostStage(stage: unknown) {
+    const normalized = String(stage || '').trim().toLowerCase()
+    return normalized === 'cerrado perdido' || normalized === 'cerrada perdida'
+}
+
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
     const [loading, setLoading] = useState(true)
@@ -255,11 +260,11 @@ export default function LeadsPage() {
         }
 
         if (modalMode === 'create') {
-            const isWonStage = leadData.etapa === 'Cerrado Ganado'
-            const realClosureValue = isWonStage
+            const isWon = isWonStage(leadData.etapa)
+            const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
-            const safeCreateStage = isWonStage ? 'Prospección' : leadData.etapa
+            const safeCreateStage = isWon ? 'Prospección' : leadData.etapa
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
@@ -267,7 +272,7 @@ export default function LeadsPage() {
                 telefono: leadData.telefono,
                 etapa: safeCreateStage,
                 valor_estimado: leadData.valor_estimado,
-                valor_real_cierre: isWonStage ? null : realClosureValue,
+                valor_real_cierre: isWon ? null : realClosureValue,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -288,7 +293,7 @@ export default function LeadsPage() {
             } else if (data && data[0]) {
                 const newId = data[0].id
 
-                if (isWonStage) {
+                if (isWon) {
                     const wonUpdatePayload: any = {
                         etapa: 'Cerrado Ganado',
                         valor_estimado: leadData.valor_estimado,
@@ -343,8 +348,8 @@ export default function LeadsPage() {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
 
-            const isWonStage = leadData.etapa === 'Cerrado Ganado'
-            const realClosureValue = isWonStage
+            const isWon = isWonStage(leadData.etapa)
+            const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
             const payload: any = {
@@ -363,11 +368,11 @@ export default function LeadsPage() {
             }
 
             // SCORING LOGIC
-            const isClosedNow = leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrado Perdido'
-            const wasClosedBefore = currentLead.etapa === 'Cerrado Ganado' || currentLead.etapa === 'Cerrado Perdido'
+            const isClosedNow = isWonStage(leadData.etapa) || isLostStage(leadData.etapa)
+            const wasClosedBefore = isWonStage(currentLead.etapa) || isLostStage(currentLead.etapa)
 
             if (isClosedNow) {
-                const y = leadData.etapa === 'Cerrado Ganado' ? 1 : 0
+                const y = isWonStage(leadData.etapa) ? 1 : 0
                 const pValue = leadData.probabilidad !== undefined ? leadData.probabilidad : ((currentLead as any).probabilidad || 50)
                 const p = pValue / 100
 
@@ -391,8 +396,8 @@ export default function LeadsPage() {
             if (error) {
                 alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
             } else {
-                const wasWonBefore = currentLead.etapa === 'Cerrado Ganado' || currentLead.etapa === 'Cerrada Ganada'
-                const isWonNow = leadData.etapa === 'Cerrado Ganado' || leadData.etapa === 'Cerrada Ganada'
+                const wasWonBefore = isWonStage(currentLead.etapa)
+                const isWonNow = isWonStage(leadData.etapa)
                 const ownerId = String(currentLead.owner_id || currentUser.id || '')
 
                 // Keep size/special badges fully synced to lead outcome changes.
