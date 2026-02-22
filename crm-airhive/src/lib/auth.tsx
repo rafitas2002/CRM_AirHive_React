@@ -1,9 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from './supabase'
-import { Session, User } from '@supabase/supabase-js'
+import { User } from '@supabase/supabase-js'
 import { trackEvent } from '@/app/actions/events'
 
 type Profile = {
@@ -41,8 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true) // Initial loading state
     const [busy, setBusy] = useState(false) // Action busy state (login/logout)
     const [lastError, setLastError] = useState('')
+    const latestUserIdRef = useRef<string | null>(null)
 
     const clearError = () => setLastError('')
+
+    useEffect(() => {
+        latestUserIdRef.current = user?.id || null
+    }, [user?.id])
 
     // Initial session check
     useEffect(() => {
@@ -89,16 +94,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         init()
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
-                if (session.user.id !== user?.id) {
-                    // Only set global loading if we don't have a user at all
-                    if (!user) setLoading(true)
+                const currentUserId = latestUserIdRef.current
+                const incomingUserId = session.user.id
+                const isNewSessionUser = currentUserId !== incomingUserId
+                const shouldHydrateProfile = event === 'SIGNED_IN' || event === 'USER_UPDATED' || isNewSessionUser
+
+                if (shouldHydrateProfile) {
+                    if (!currentUserId) setLoading(true)
                     await handleUserSession(session.user)
+                } else if (!currentUserId) {
+                    setUser(session.user)
+                    setLoading(false)
                 }
             } else {
                 setUser(null)
                 setProfile(null)
+                latestUserIdRef.current = null
                 setLoading(false)
             }
         })
@@ -149,12 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error('Unexpected error fetching profile:', err)
         } finally {
             setLoading(false)
-            // Track session start
-            trackEvent({
-                eventType: 'session_start',
-                userId: authUser.id,
-                metadata: { method: 'automatic' }
-            })
+            // Session_start is tracked in EventTracker to avoid duplicate events/noise.
         }
     }
 

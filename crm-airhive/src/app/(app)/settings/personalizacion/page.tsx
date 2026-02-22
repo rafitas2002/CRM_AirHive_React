@@ -35,7 +35,7 @@ export default function PersonalizacionPage() {
     const [quotesLoadError, setQuotesLoadError] = useState<string>('')
 
     useEffect(() => {
-        if (!profile) return
+        if (!profile?.id) return
 
         let cancelled = false
         const loadQuotes = async () => {
@@ -65,7 +65,7 @@ export default function PersonalizacionPage() {
 
         loadQuotes()
         return () => { cancelled = true }
-    }, [profile])
+    }, [profile?.id, profile?.role])
 
     return (
         <div className='p-8 max-w-5xl'>

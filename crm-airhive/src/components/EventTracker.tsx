@@ -61,7 +61,7 @@ export default function EventTracker() {
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload)
         }
-    }, [loggedIn, user])
+    }, [loggedIn, user?.id])
 
     return null
 }
