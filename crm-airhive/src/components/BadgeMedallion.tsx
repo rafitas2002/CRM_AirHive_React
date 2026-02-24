@@ -125,7 +125,7 @@ export default function BadgeMedallion({
     const showIsolatedRing = BADGE_ISOLATED_RING_EXPERIMENT
     const activeCoreInset = showIsolatedRing ? s.coreInsetIsolated : s.coreInset
     const coreBorderClass = showIsolatedRing ? 'border-[3px]' : 'border'
-    const defaultCoreBorderToneClass = 'border-black/30'
+    const defaultCoreBorderToneClass = 'border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
     const ringToneMap = {
         gold: {
             outer: 'bg-gradient-to-br from-[#fff8cf] via-[#facc15] to-[#b45309] shadow-[0_10px_24px_rgba(245,158,11,0.25),0_4px_10px_rgba(0,0,0,0.28)]',

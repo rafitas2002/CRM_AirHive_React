@@ -3,10 +3,13 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
-import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, type LucideIcon } from 'lucide-react'
+import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, type LucideIcon } from 'lucide-react'
+import BadgeMedallion from '@/components/BadgeMedallion'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 
 export default function TopBar() {
     const pathname = usePathname()
@@ -31,14 +34,48 @@ export default function TopBar() {
         event_type: 'unlocked' | 'upgraded'
         created_at: string
         sourceType: 'industry' | 'special'
+        industriaId?: string
+        badgeType?: string
+        badgeKey?: string
     }>>([])
     const [badgeUnreadCount, setBadgeUnreadCount] = useState(0)
+    const [industryCatalog, setIndustryCatalog] = useState<Array<{ id: string; name: string }>>([])
     const quoteNotificationsRef = useRef<HTMLDivElement | null>(null)
     const lastBadgeListSignatureRef = useRef('')
     const lastQuoteListSignatureRef = useRef('')
     const logoDimensions = { width: 248, height: 36 }
     const dropdownIconClass = 'w-[18px] h-[18px] text-white/80 group-hover/item:text-white transition-colors'
     const badgeSeenStorageKey = userId ? `airhive_seen_badge_notifications_${userId}` : ''
+    const badgeIndustryVisualMap = useMemo(() => buildIndustryBadgeVisualMap(industryCatalog), [industryCatalog])
+    const industryNameById = useMemo(
+        () => new Map(industryCatalog.map((row) => [String(row.id), String(row.name)])),
+        [industryCatalog]
+    )
+
+    useEffect(() => {
+        if (!userId) return
+        let cancelled = false
+
+        const loadIndustryCatalog = async () => {
+            const { data } = await supabase
+                .from('industrias')
+                .select('id, name')
+                .order('name', { ascending: true })
+
+            if (cancelled) return
+            setIndustryCatalog(
+                (Array.isArray(data) ? data : [])
+                    .map((row: any) => ({ id: String(row?.id || ''), name: String(row?.name || 'Industria') }))
+                    .filter((row) => row.id)
+            )
+        }
+
+        void loadIndustryCatalog()
+
+        return () => {
+            cancelled = true
+        }
+    }, [userId, supabase])
 
     useEffect(() => {
         if (!isAdmin || !userId) return
@@ -209,7 +246,8 @@ export default function TopBar() {
                 level: Number(row?.level || 1),
                 event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
                 created_at: String(row?.created_at || ''),
-                sourceType: 'industry' as const
+                sourceType: 'industry' as const,
+                industriaId: String(row?.industria_id || '')
             }))
 
             const normalizedSpecial = specialRows.map((row: any) => ({
@@ -219,7 +257,9 @@ export default function TopBar() {
                 level: Number(row?.level || 1),
                 event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
                 created_at: String(row?.created_at || ''),
-                sourceType: 'special' as const
+                sourceType: 'special' as const,
+                badgeType: String(row?.badge_type || ''),
+                badgeKey: String(row?.badge_key || '')
             }))
 
             const merged = [...normalizedIndustry, ...normalizedSpecial]
@@ -258,6 +298,9 @@ export default function TopBar() {
             event_type: 'unlocked' | 'upgraded'
             created_at: string
             sourceType: 'industry' | 'special'
+            industriaId?: string
+            badgeType?: string
+            badgeKey?: string
         }) => {
             setBadgeNotificationItems((prev) => {
                 const deduped = [item, ...prev.filter((x) => x.id !== item.id)]
@@ -289,11 +332,12 @@ export default function TopBar() {
                     if (id === 'industry:') return
                     pushRealtimeBadgeNotification({
                         id,
-                        label: 'Badge de industria',
+                        label: industryNameById.get(String(row?.industria_id || '')) || 'Industria',
                         level: Number(row?.level || 1),
                         event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
                         created_at: String(row?.created_at || new Date().toISOString()),
-                        sourceType: 'industry'
+                        sourceType: 'industry',
+                        industriaId: String(row?.industria_id || '')
                     })
                 }
             )
@@ -317,7 +361,7 @@ export default function TopBar() {
                     table: 'seller_special_badge_events',
                     filter: `seller_id=eq.${userId}`
                 },
-                (payload: { new: { id: string, badge_label?: string, level?: number, event_type?: string, created_at?: string } }) => {
+                (payload: { new: { id: string, badge_label?: string, badge_type?: string, badge_key?: string, level?: number, event_type?: string, created_at?: string } }) => {
                     const row = payload?.new
                     const id = `special:${String(row?.id || '')}`
                     if (id === 'special:') return
@@ -327,7 +371,9 @@ export default function TopBar() {
                         level: Number(row?.level || 1),
                         event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
                         created_at: String(row?.created_at || new Date().toISOString()),
-                        sourceType: 'special'
+                        sourceType: 'special',
+                        badgeType: String(row?.badge_type || ''),
+                        badgeKey: String(row?.badge_key || '')
                     })
                 }
             )
@@ -374,7 +420,7 @@ export default function TopBar() {
             clearInterval(interval)
             supabase.removeChannel(channel)
         }
-    }, [userId, badgeSeenStorageKey, supabase])
+    }, [userId, badgeSeenStorageKey, supabase, industryNameById])
 
     useEffect(() => {
         const onClickOutside = (event: MouseEvent) => {
@@ -440,7 +486,7 @@ export default function TopBar() {
                         <button
                             className={[
                                 'relative text-white font-semibold text-base px-2 py-2 group flex items-center gap-1.5 cursor-pointer',
-                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads')) ? 'active-customer' : ''
+                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos')) ? 'active-customer' : ''
                             ].join(' ')}
                         >
                             Customer
@@ -448,7 +494,7 @@ export default function TopBar() {
                                 className={[
                                     'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
                                     'transition-all duration-300 ease-out',
-                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads')) ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos')) ? 'w-full opacity-100' : 'w-0 opacity-0',
                                     'group-hover:w-full group-hover:opacity-100'
                                 ].join(' ')}
                             />
@@ -460,7 +506,8 @@ export default function TopBar() {
                                 {[
                                     { href: '/empresas', label: 'Empresas', icon: Building2 },
                                     { href: '/clientes', label: 'Leads', icon: UsersRound },
-                                    { href: '/pre-leads', label: 'Pre-leads', icon: Target }
+                                    { href: '/pre-leads', label: 'Pre-leads', icon: Target },
+                                    { href: '/proyectos', label: 'Proyectos', icon: Boxes }
                                 ].map((item) => {
                                     const Icon = item.icon as LucideIcon
                                     const isActive = pathname === item.href
@@ -668,23 +715,46 @@ export default function TopBar() {
                                                     Badges
                                                 </p>
                                             </div>
-                                            {badgeNotificationItems.map((item) => (
+                                            {badgeNotificationItems.map((item) => {
+                                                const displayLabel = item.sourceType === 'industry'
+                                                    ? (industryNameById.get(String(item.industriaId || '')) || item.label)
+                                                    : item.label
+                                                return (
                                                 <div
                                                     key={`badge-notif-${item.id}`}
                                                     className='px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
                                                 >
-                                                    <p className='text-sm font-semibold text-white flex items-center gap-2'>
-                                                        <Sparkles size={13} className='text-amber-300' />
-                                                        ¡Felicidades! {item.event_type === 'unlocked' ? 'Desbloqueaste' : 'Evolucionaste'} un badge
-                                                    </p>
-                                                    <p className='text-xs mt-1 text-white/75'>
-                                                        {item.label} · Nivel {item.level} · {item.sourceType === 'industry' ? 'Industria' : 'Especial'}
-                                                    </p>
-                                                    <p className='text-[11px] mt-1 text-blue-300/90'>
-                                                        {new Date(item.created_at).toLocaleString('es-MX')}
-                                                    </p>
+                                                    <div className='flex items-start gap-3'>
+                                                        <TopBarBadgeNotificationMedallion
+                                                            item={{ ...item, label: displayLabel }}
+                                                            industryVisualMap={badgeIndustryVisualMap}
+                                                        />
+                                                        <div className='min-w-0 flex-1'>
+                                                            <p className='text-sm font-semibold text-white flex items-center gap-2'>
+                                                                <Sparkles size={13} className='text-amber-300 shrink-0' />
+                                                                <span className='truncate'>
+                                                                    ¡Felicidades! {item.event_type === 'unlocked' ? 'Desbloqueaste' : 'Evolucionaste'} un badge
+                                                                </span>
+                                                            </p>
+                                                            <p className='text-xs mt-1 text-white/75 truncate'>
+                                                                {displayLabel}
+                                                            </p>
+                                                            <div className='mt-1 flex items-center gap-2 flex-wrap'>
+                                                                <span className='inline-flex items-center rounded-md border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black text-amber-200'>
+                                                                    Nivel {item.level}
+                                                                </span>
+                                                                <span className='inline-flex items-center rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/70'>
+                                                                    {item.sourceType === 'industry' ? 'Industria' : 'Especial'}
+                                                                </span>
+                                                            </div>
+                                                            <p className='text-[11px] mt-1.5 text-blue-300/90'>
+                                                                {new Date(item.created_at).toLocaleString('es-MX')}
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            ))}
+                                                )
+                                            })}
                                         </>
                                     )}
 
@@ -769,5 +839,84 @@ export default function TopBar() {
                 </div>
             </div>
         </header>
+    )
+}
+
+function getTopBarSpecialBadgeOverlayNumber(badgeType?: string, badgeKey?: string, badgeLabel?: string) {
+    if (badgeType === 'company_size') {
+        const fromKey = String(badgeKey || '').match(/size_(\d+)/)?.[1]
+        if (fromKey) return fromKey
+        const fromLabel = String(badgeLabel || '').match(/(\d+)/)?.[1]
+        return fromLabel || null
+    }
+    if (badgeType === 'deal_value_tier') {
+        const key = String(badgeKey || '')
+        if (key === 'value_1k_2k') return '1k'
+        if (key === 'value_2k_5k') return '2k'
+        if (key === 'value_5k_10k') return '5k'
+        if (key === 'value_10k_100k' || key === 'value_10k_plus') return '10k'
+        return null
+    }
+    return null
+}
+
+function shouldUseWhiteCoreBorderForTopBarSpecialBadgeType(type?: string) {
+    return type === 'deal_value_tier'
+        || type === 'company_size'
+        || type === 'all_company_sizes'
+        || type === 'multi_industry'
+        || type === 'closure_milestone'
+        || type === 'seniority_years'
+        || type === 'prelead_registered'
+        || type === 'lead_registered'
+        || type === 'meeting_completed'
+        || type === 'reliability_score'
+        || type === 'quote_contribution'
+        || type === 'quote_likes_received'
+}
+
+function TopBarBadgeNotificationMedallion({
+    item,
+    industryVisualMap
+}: {
+    item: {
+        id: string
+        label: string
+        sourceType: 'industry' | 'special'
+        industriaId?: string
+        badgeType?: string
+        badgeKey?: string
+    }
+    industryVisualMap: ReturnType<typeof buildIndustryBadgeVisualMap>
+}) {
+    if (item.sourceType === 'industry') {
+        const visual = getIndustryBadgeVisualFromMap(item.industriaId, industryVisualMap, item.label)
+        return (
+            <BadgeMedallion
+                icon={visual.icon}
+                centerClassName={visual.containerClass}
+                iconClassName={visual.iconClass}
+                size='sm'
+                iconSize={16}
+                strokeWidth={2.4}
+                className='mt-0.5'
+            />
+        )
+    }
+
+    const specialSpec = getSpecialBadgeVisualSpec(item.badgeType, item.label, item.badgeKey)
+    return (
+        <BadgeMedallion
+            icon={specialSpec?.icon || Sparkles}
+            centerClassName={specialSpec?.centerGradientClass || 'bg-gradient-to-br from-[#d946ef] to-[#a21caf]'}
+            iconClassName={specialSpec?.iconClassName || 'text-white'}
+            overlayText={getTopBarSpecialBadgeOverlayNumber(item.badgeType, item.badgeKey, item.label)}
+            ringStyle={specialSpec?.ringStyle || 'match'}
+            coreBorderColorClassName={String(specialSpec?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForTopBarSpecialBadgeType(item.badgeType) ? '!border-white/90' : '')}
+            size='sm'
+            iconSize={16}
+            strokeWidth={2.4}
+            className='mt-0.5'
+        />
     )
 }

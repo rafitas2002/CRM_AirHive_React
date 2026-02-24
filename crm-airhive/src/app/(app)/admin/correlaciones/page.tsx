@@ -381,6 +381,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
 
         result.sort((a, b) => {
             if (sortBy === 'totalSales') return b.totalSales - a.totalSales
+            if (sortBy === 'badgesAccumulated') return (b.badgesAccumulated || 0) - (a.badgesAccumulated || 0)
             if (sortBy === 'totalMedals') return b.totalMedals - a.totalMedals
             if (sortBy === 'gold') return b.medals.gold - a.medals.gold
             if (sortBy === 'silver') return b.medals.silver - a.medals.silver
@@ -388,6 +389,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
             if (sortBy === 'preLeadsDay') return b.avgPreLeadsPerDay - a.avgPreLeadsPerDay
             if (sortBy === 'convertedMonth') return b.avgConvertedPreLeadsPerMonth - a.avgConvertedPreLeadsPerMonth
             if (sortBy === 'companyMonth') return b.avgCompaniesPerMonth - a.avgCompaniesPerMonth
+            if (sortBy === 'closedProjects') return (b.closedProjectsCount || 0) - (a.closedProjectsCount || 0)
+            if (sortBy === 'distinctClosedProjects') return (b.closedDistinctProjectsCount || 0) - (a.closedDistinctProjectsCount || 0)
             if (sortBy === 'tenure') return b.tenureMonths - a.tenureMonths
             if (sortBy === 'age') return (b.age || 0) - (a.age || 0)
             if (sortBy === 'growth') return b.growth - a.growth
@@ -774,12 +777,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                     className='ah-select-control ah-select-control-order'
                                 >
                                     <option value="totalSales">Ordenar por: Ventas</option>
+                                    <option value="badgesAccumulated">Ordenar por: Cantidad de badges</option>
                                     <option value="totalMedals">Ordenar por: Total Medallas</option>
                                     <option value="gold">Ordenar por: Oro</option>
                                     <option value="efficiency">Ordenar por: Eficiencia (Pts/Mes)</option>
                                     <option value="preLeadsDay">Ordenar por: Pre-Leads / Día</option>
                                     <option value="convertedMonth">Ordenar por: Conv. PreLead / Mes</option>
                                     <option value="companyMonth">Ordenar por: Empresas / Mes</option>
+                                    <option value="closedProjects">Ordenar por: Proyectos cerrados</option>
+                                    <option value="distinctClosedProjects">Ordenar por: Proyectos distintos cerrados</option>
                                     <option value="meetings">Ordenar por: Effort (Mtg/Close)</option>
                                     <option value="accuracy">Ordenar por: Forecast Accuracy</option>
                                     <option value="speed">Ordenar por: Response Speed</option>
@@ -821,8 +827,11 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                         <th className='px-8 py-5 text-center'>Pre-Leads</th>
                                         <th className='px-8 py-5 text-center'>% Conv</th>
                                         <th className='px-8 py-5 text-center'>Empresas</th>
+                                        <th className='px-8 py-5 text-center'>Proj. Cerrados</th>
+                                        <th className='px-8 py-5 text-center'>Proj. Distintos</th>
                                         <th className='px-8 py-5'>Ventas Totales</th>
                                         <th className='px-8 py-5'>Crecimiento</th>
+                                        <th className='px-8 py-5 text-center'>Badges Acum.</th>
                                         <th className='px-8 py-5 text-center'>Medallas</th>
                                         <th className='px-8 py-5 text-center'>Effort (Mtg/C)</th>
                                         <th className='px-8 py-5 text-center'>Accuracy</th>
@@ -884,6 +893,16 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                                     </span>
                                                 </div>
                                             </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                    {item.closedProjectsCount || 0}
+                                                </span>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                    {item.closedDistinctProjectsCount || 0}
+                                                </span>
+                                            </td>
                                             <td className='px-8 py-5 font-black text-sm' style={{ color: 'var(--text-primary)' }}>
                                                 ${item.totalSales.toLocaleString()}
                                             </td>
@@ -903,6 +922,11 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                                         <span className='font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>0%</span>
                                                     )}
                                                 </div>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
+                                                <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                    {(item.badgesAccumulated || 0).toLocaleString('es-MX')}
+                                                </span>
                                             </td>
                                             <td className='px-8 py-5'>
                                                 <div className='flex items-center justify-center gap-3'>

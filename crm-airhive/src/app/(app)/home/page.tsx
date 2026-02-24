@@ -22,8 +22,10 @@ import PipelineVisualizer from '@/components/PipelineVisualizer'
 import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 import MyTasksWidget from '@/components/MyTasksWidget'
 import { rankRaceItems } from '@/lib/raceRanking'
+import { computeAdjustedMonthlyRaceLeadValue, computeSellerForecastRaceReliability } from '@/lib/forecastRaceAdjustments'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
+type ForecastReliabilityMetric = Database['public']['Tables']['seller_forecast_reliability_metrics']['Row']
 type History = {
     lead_id: number
     field_name: string
@@ -52,17 +54,28 @@ const getRealCloseTimestamp = (lead: Lead) =>
 function AdminDashboardView({ username }: { username: string }) {
     const [leads, setLeads] = useState<Lead[]>([])
     const [history, setHistory] = useState<History[]>([])
+    const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, ForecastReliabilityMetric>>({})
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
-            const { data: leadData } = await supabase.from('clientes').select('*')
-            const { data: histData } = await (supabase.from('lead_history') as any).select('*').eq('field_name', 'probabilidad').order('created_at', { ascending: false })
+            const [{ data: leadData }, { data: histData }, { data: reliabilityData }] = await Promise.all([
+                supabase.from('clientes').select('*'),
+                (supabase.from('lead_history') as any).select('*').eq('field_name', 'probabilidad').order('created_at', { ascending: false }),
+                (supabase.from('seller_forecast_reliability_metrics') as any).select('*')
+            ])
 
             if (leadData) setLeads(leadData)
             if (histData) setHistory(histData as any)
+            if (reliabilityData) {
+                const nextMap: Record<string, ForecastReliabilityMetric> = {}
+                ;(reliabilityData as ForecastReliabilityMetric[]).forEach((row) => {
+                    if (row?.seller_id) nextMap[String(row.seller_id)] = row
+                })
+                setReliabilityMetricsBySellerId(nextMap)
+            }
             setLoading(false)
         }
         fetchData()
@@ -70,6 +83,7 @@ function AdminDashboardView({ username }: { username: string }) {
 
     const stats = useMemo(() => {
         const map: Record<string, {
+            sellerId: string | null,
             name: string,
             historicalLeads: Lead[],
             activeLeads: Lead[],
@@ -77,28 +91,34 @@ function AdminDashboardView({ username }: { username: string }) {
             negotiationPipeline: number,
             raceRealClosedValue: number,
             raceForecastValue: number,
-            raceForecastLeadCount: number
+            raceForecastLeadCount: number,
+            raceForecastAdjustedValue: number,
+            raceForecastAdjustedReliability: number
         }> = {}
 
         const closed = leads.filter(l => isClosedStage(l.etapa))
         const active = leads.filter(l => !isClosedStage(l.etapa))
 
         leads.forEach(lead => {
-            const seller = lead.owner_username || 'Unknown'
-            if (!map[seller]) {
-                map[seller] = {
-                    name: seller,
+            const sellerKey = String(lead.owner_id || lead.owner_username || 'Unknown')
+            const sellerName = lead.owner_username || 'Unknown'
+            if (!map[sellerKey]) {
+                map[sellerKey] = {
+                    sellerId: lead.owner_id ? String(lead.owner_id) : null,
+                    name: sellerName,
                     historicalLeads: [],
                     activeLeads: [],
                     score: 0,
                     negotiationPipeline: 0,
                     raceRealClosedValue: 0,
                     raceForecastValue: 0,
-                    raceForecastLeadCount: 0
+                    raceForecastLeadCount: 0,
+                    raceForecastAdjustedValue: 0,
+                    raceForecastAdjustedReliability: 0
                 }
             }
-            if (isClosedStage(lead.etapa)) map[seller].historicalLeads.push(lead)
-            else map[seller].activeLeads.push(lead)
+            if (isClosedStage(lead.etapa)) map[sellerKey].historicalLeads.push(lead)
+            else map[sellerKey].activeLeads.push(lead)
         })
 
         const sellers = Object.values(map).map(s => {
@@ -127,6 +147,10 @@ function AdminDashboardView({ username }: { username: string }) {
             const negotiationLeads = s.activeLeads.filter((l) => isNegotiationStage(l.etapa))
             const raceForecastValue = negotiationLeads
                 .reduce((acc, l) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
+            const reliabilityMetrics = s.sellerId ? reliabilityMetricsBySellerId[String(s.sellerId)] : null
+            const raceForecastAdjustedValue = negotiationLeads
+                .reduce((acc, l) => acc + computeAdjustedMonthlyRaceLeadValue(l, reliabilityMetrics), 0)
+            const raceForecastAdjustedReliability = computeSellerForecastRaceReliability(reliabilityMetrics)
 
             const raceRealClosedValue = s.historicalLeads
                 .filter((l) => isWonStage(l.etapa) && isCurrentUtcMonth(getRealCloseTimestamp(l)))
@@ -138,7 +162,9 @@ function AdminDashboardView({ username }: { username: string }) {
                 negotiationPipeline: negPipeline,
                 raceRealClosedValue,
                 raceForecastValue,
-                raceForecastLeadCount: negotiationLeads.length
+                raceForecastLeadCount: negotiationLeads.length,
+                raceForecastAdjustedValue,
+                raceForecastAdjustedReliability
             }
         }).sort((a, b) => b.raceRealClosedValue - a.raceRealClosedValue)
 
@@ -161,11 +187,14 @@ function AdminDashboardView({ username }: { username: string }) {
             activeCount: active.length,
             dataWarnings: active.filter(l => !l.valor_estimado).length
         }
-    }, [leads, history])
+    }, [leads, history, reliabilityMetricsBySellerId])
 
     if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.raceRealClosedValue)) * 1.5 || 1000000
+    const forecastCombinedGoal = Math.max(
+        ...stats.sellers.map((s) => s.raceRealClosedValue + s.raceForecastAdjustedValue)
+    ) * 1.5 || teamGoal
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
     const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.raceRealClosedValue)
@@ -296,6 +325,18 @@ function AdminDashboardView({ username }: { username: string }) {
                                 percentage: (s.raceRealClosedValue / teamGoal) * 100,
                                 reliability: s.score
                             }))}
+                            forecastRace={{
+                                maxGoal: forecastCombinedGoal,
+                                title: 'Carrera de Pronóstico Ajustado',
+                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad, valor y fecha',
+                                sellers: stats.sellers.map((s) => ({
+                                    name: s.name,
+                                    value: s.raceRealClosedValue + s.raceForecastAdjustedValue,
+                                    percentage: ((s.raceRealClosedValue + s.raceForecastAdjustedValue) / forecastCombinedGoal) * 100,
+                                    reliability: s.raceForecastAdjustedReliability,
+                                    rawValueBeforeAdjustment: s.raceRealClosedValue + s.raceForecastValue
+                                }))
+                            }}
                             subtitle='Cierres reales ganados del mes (fecha real de cierre) vs meta de equipo'
                         />
 

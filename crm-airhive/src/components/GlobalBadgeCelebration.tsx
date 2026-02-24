@@ -640,7 +640,7 @@ export default function GlobalBadgeCelebration() {
                                 ringStyle={current.sourceType === 'special'
                                     ? (popupSpecialSpec?.ringStyle || 'match')
                                     : 'match'}
-                                coreBorderColorClassName={popupSpecialSpec?.coreBorderColorClassName || ''}
+                                coreBorderColorClassName={String(popupSpecialSpec?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(current.badgeType) ? '!border-white/90' : '')}
                                 size='xl'
                                 iconSize={42}
                                 strokeWidth={2.5}
@@ -820,6 +820,21 @@ export default function GlobalBadgeCelebration() {
             `}</style>
         </div>
     )
+}
+
+function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
+    return type === 'deal_value_tier'
+        || type === 'company_size'
+        || type === 'all_company_sizes'
+        || type === 'multi_industry'
+        || type === 'closure_milestone'
+        || type === 'seniority_years'
+        || type === 'prelead_registered'
+        || type === 'lead_registered'
+        || type === 'meeting_completed'
+        || type === 'reliability_score'
+        || type === 'quote_contribution'
+        || type === 'quote_likes_received'
 }
 
 function getSpecialVisual(badgeType?: string, badgeLabel?: string, badgeKey?: string | null) {

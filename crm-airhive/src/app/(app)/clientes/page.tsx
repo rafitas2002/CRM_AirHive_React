@@ -257,6 +257,116 @@ export default function LeadsPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+    const syncCompanyProjectAssignmentsFromLead = async (params: {
+        empresaId?: string | null
+        leadId?: number | null
+        inNegotiationProjectIds?: string[]
+        prospectionSameCloseProjectIds?: string[]
+        futureLeadOpportunityProjectIds?: string[]
+        implementedRealProjectIds?: string[]
+        implementedRealProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+        assignedByUserId?: string | null
+    }) => {
+        const empresaId = String(params.empresaId || '')
+        const leadId = Number(params.leadId || 0)
+        if (!empresaId || !leadId) return
+
+        const inNegotiation = Array.from(new Set((params.inNegotiationProjectIds || []).filter(Boolean)))
+        const prospectionSameClose = Array.from(new Set((params.prospectionSameCloseProjectIds || []).filter(Boolean)))
+        const futureLeadOpportunity = Array.from(new Set((params.futureLeadOpportunityProjectIds || []).filter(Boolean)))
+        const implementedReal = Array.from(new Set((params.implementedRealProjectIds || []).filter(Boolean)))
+        const implementedRealProjectValues = params.implementedRealProjectValues || {}
+
+        const { error: deleteError } = await (supabase.from('empresa_proyecto_asignaciones') as any)
+            .delete()
+            .eq('empresa_id', empresaId)
+            .eq('source_lead_id', leadId)
+
+        if (deleteError) {
+            throw deleteError
+        }
+
+        const rows = [
+            ...inNegotiation.map((projectId) => ({
+                empresa_id: empresaId,
+                proyecto_id: projectId,
+                assignment_stage: 'in_negotiation',
+                source_lead_id: leadId,
+                assigned_by: params.assignedByUserId || null
+            })),
+            ...prospectionSameClose.map((projectId) => ({
+                empresa_id: empresaId,
+                proyecto_id: projectId,
+                assignment_stage: 'prospection_same_close',
+                source_lead_id: leadId,
+                assigned_by: params.assignedByUserId || null
+            })),
+            ...futureLeadOpportunity.map((projectId) => ({
+                empresa_id: empresaId,
+                proyecto_id: projectId,
+                assignment_stage: 'future_lead_opportunity',
+                source_lead_id: leadId,
+                assigned_by: params.assignedByUserId || null
+            })),
+            ...implementedReal.map((projectId) => ({
+                empresa_id: empresaId,
+                proyecto_id: projectId,
+                assignment_stage: 'implemented_real',
+                source_lead_id: leadId,
+                assigned_by: params.assignedByUserId || null,
+                mensualidad_pactada_usd: implementedRealProjectValues[projectId]?.mensualidad_usd ?? null,
+                implementacion_pactada_usd: implementedRealProjectValues[projectId]?.implementacion_usd ?? null
+            }))
+        ]
+
+        if (rows.length === 0) return
+
+        const { error: upsertError } = await ((supabase.from('empresa_proyecto_asignaciones') as any))
+            .upsert(rows, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
+
+        if (upsertError) {
+            throw upsertError
+        }
+
+        // Auto-register implemented industries for the project based on the company's industries
+        // once the project is marked as implemented_real.
+        if (implementedReal.length > 0) {
+            const [{ data: companyRow }, { data: companyIndustryRows }] = await Promise.all([
+                (supabase.from('empresas') as any)
+                    .select('industria_id')
+                    .eq('id', empresaId)
+                    .maybeSingle(),
+                (supabase.from('company_industries') as any)
+                    .select('industria_id')
+                    .eq('empresa_id', empresaId)
+            ])
+
+            const industryIds = new Set<string>()
+            const primaryIndustryId = String((companyRow as any)?.industria_id || '')
+            if (primaryIndustryId) industryIds.add(primaryIndustryId)
+            for (const row of (companyIndustryRows || [])) {
+                const industriaId = String((row as any)?.industria_id || '')
+                if (industriaId) industryIds.add(industriaId)
+            }
+
+            const relationRows = Array.from(industryIds).flatMap((industriaId) =>
+                implementedReal.map((projectId) => ({
+                    proyecto_id: projectId,
+                    industria_id: industriaId,
+                    relation_status: 'implemented_in_industry'
+                }))
+            )
+
+            if (relationRows.length > 0) {
+                const { error: relationSyncError } = await (supabase.from('proyecto_industrias') as any)
+                    .upsert(relationRows, { onConflict: 'proyecto_id,industria_id' })
+                if (relationSyncError) {
+                    console.warn('Project->industry implemented sync failed:', relationSyncError)
+                }
+            }
+        }
+    }
+
     const handleSaveLead = async (leadData: ReturnType<typeof normalizeLead> & { empresa_id?: string }) => {
         if (!currentUser) {
             alert('No se pudo identificar al usuario actual.')
@@ -358,6 +468,21 @@ export default function LeadsPage() {
                     { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id },
                     ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
                 ])
+
+                try {
+                    await syncCompanyProjectAssignmentsFromLead({
+                        empresaId: finalEmpresaId as string,
+                        leadId: newId,
+                        inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
+                        prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
+                        futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
+                        implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                        implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                        assignedByUserId: currentUser.id
+                    })
+                } catch (projectSyncError) {
+                    console.warn('Lead created but project assignments sync failed:', projectSyncError)
+                }
             }
         } else if (modalMode === 'edit' && currentLead) {
             // Check for changes to log
@@ -497,6 +622,21 @@ export default function LeadsPage() {
 
                 if (historyEntries.length > 0) {
                     await (supabase.from('lead_history') as any).insert(historyEntries)
+                }
+
+                try {
+                    await syncCompanyProjectAssignmentsFromLead({
+                        empresaId: finalEmpresaId as string,
+                        leadId: currentLead.id,
+                        inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
+                        prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
+                        futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
+                        implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                        implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                        assignedByUserId: currentUser.id
+                    })
+                } catch (projectSyncError) {
+                    console.warn('Lead updated but project assignments sync failed:', projectSyncError)
                 }
             }
         }
