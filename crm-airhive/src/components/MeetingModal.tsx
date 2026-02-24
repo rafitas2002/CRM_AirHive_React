@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
 import ConfirmModal from './ConfirmModal'
 import UserSelect from './UserSelect'
+import { FriendlyDateTimePicker } from './FriendlyDatePickers'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
 import { Building2, CalendarDays, Phone, Sparkles, Video, X, PencilLine, Link2 } from 'lucide-react'
@@ -103,6 +104,10 @@ export default function MeetingModal({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!formData.start_time) {
+            alert('Selecciona la fecha y hora de la reunión')
+            return
+        }
         setIsSubmitting(true)
 
         try {
@@ -231,13 +236,11 @@ export default function MeetingModal({
                                 <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
                                     Fecha y Hora <span className='text-red-500'>*</span>
                                 </label>
-                                <input
-                                    type='datetime-local'
-                                    required
+                                <FriendlyDateTimePicker
                                     value={formData.start_time}
-                                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                                    className='w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
-                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    onChange={(next) => setFormData({ ...formData, start_time: next })}
+                                    minuteStep={5}
+                                    className='w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer'
                                 />
                             </div>
 

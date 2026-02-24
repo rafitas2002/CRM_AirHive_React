@@ -47,6 +47,16 @@ export type Database = {
                     contacto: string | null
                     etapa: string | null
                     valor_estimado: number | null
+                    valor_real_cierre: number | null
+                    valor_implementacion_estimado: number | null
+                    valor_implementacion_real_cierre: number | null
+                    value_forecast_estimated: number | null
+                    value_forecast_actual: number | null
+                    implementation_forecast_estimated: number | null
+                    implementation_forecast_actual: number | null
+                    implementation_forecast_abs_error: number | null
+                    implementation_forecast_pct_error: number | null
+                    implementation_forecast_scored_at: string | null
                     oportunidad: string | null
                     calificacion: number | null
                     notas: string | null
@@ -59,6 +69,13 @@ export type Database = {
                     forecast_outcome: number | null
                     forecast_scored_at: string | null
                     probabilidad: number | null
+                    forecast_close_date: string | null
+                    close_date_forecast_estimated: string | null
+                    close_date_forecast_actual: string | null
+                    close_date_forecast_days_error: number | null
+                    close_date_forecast_abs_days_error: number | null
+                    close_date_forecast_score: number | null
+                    close_date_forecast_scored_at: string | null
                     probability_locked: boolean | null
                     next_meeting_id: string | null
                     last_snapshot_at: string | null
@@ -68,6 +85,7 @@ export type Database = {
                     original_vendedor_id: string | null
                     converted_at: string | null
                     converted_by: string | null
+                    closed_at_real: string | null
                 }
                 Insert: {
                     id?: number
@@ -77,6 +95,16 @@ export type Database = {
                     contacto?: string | null
                     etapa?: string | null
                     valor_estimado?: number | null
+                    valor_real_cierre?: number | null
+                    valor_implementacion_estimado?: number | null
+                    valor_implementacion_real_cierre?: number | null
+                    value_forecast_estimated?: number | null
+                    value_forecast_actual?: number | null
+                    implementation_forecast_estimated?: number | null
+                    implementation_forecast_actual?: number | null
+                    implementation_forecast_abs_error?: number | null
+                    implementation_forecast_pct_error?: number | null
+                    implementation_forecast_scored_at?: string | null
                     oportunidad?: string | null
                     calificacion?: number | null
                     notas?: string | null
@@ -89,9 +117,23 @@ export type Database = {
                     forecast_outcome?: number | null
                     forecast_scored_at?: string | null
                     probabilidad?: number | null
+                    forecast_close_date?: string | null
+                    close_date_forecast_estimated?: string | null
+                    close_date_forecast_actual?: string | null
+                    close_date_forecast_days_error?: number | null
+                    close_date_forecast_abs_days_error?: number | null
+                    close_date_forecast_score?: number | null
+                    close_date_forecast_scored_at?: string | null
                     probability_locked?: boolean | null
                     next_meeting_id?: string | null
                     last_snapshot_at?: string | null
+                    email?: string | null
+                    telefono?: string | null
+                    original_pre_lead_id?: number | null
+                    original_vendedor_id?: string | null
+                    converted_at?: string | null
+                    converted_by?: string | null
+                    closed_at_real?: string | null
                 }
                 Update: {
                     id?: number
@@ -101,6 +143,16 @@ export type Database = {
                     contacto?: string | null
                     etapa?: string | null
                     valor_estimado?: number | null
+                    valor_real_cierre?: number | null
+                    valor_implementacion_estimado?: number | null
+                    valor_implementacion_real_cierre?: number | null
+                    value_forecast_estimated?: number | null
+                    value_forecast_actual?: number | null
+                    implementation_forecast_estimated?: number | null
+                    implementation_forecast_actual?: number | null
+                    implementation_forecast_abs_error?: number | null
+                    implementation_forecast_pct_error?: number | null
+                    implementation_forecast_scored_at?: string | null
                     oportunidad?: string | null
                     calificacion?: number | null
                     notas?: string | null
@@ -113,9 +165,23 @@ export type Database = {
                     forecast_outcome?: number | null
                     forecast_scored_at?: string | null
                     probabilidad?: number | null
+                    forecast_close_date?: string | null
+                    close_date_forecast_estimated?: string | null
+                    close_date_forecast_actual?: string | null
+                    close_date_forecast_days_error?: number | null
+                    close_date_forecast_abs_days_error?: number | null
+                    close_date_forecast_score?: number | null
+                    close_date_forecast_scored_at?: string | null
                     probability_locked?: boolean | null
                     next_meeting_id?: string | null
                     last_snapshot_at?: string | null
+                    email?: string | null
+                    telefono?: string | null
+                    original_pre_lead_id?: number | null
+                    original_vendedor_id?: string | null
+                    converted_at?: string | null
+                    converted_by?: string | null
+                    closed_at_real?: string | null
                 }
             }
             pre_leads: {
@@ -365,6 +431,9 @@ export type Database = {
                     meeting_id: string
                     snapshot_number: number
                     probability: number
+                    forecast_value_amount: number | null
+                    forecast_implementation_amount: number | null
+                    forecast_close_date: string | null
                     snapshot_timestamp: string
                     source: string
                     created_at: string
@@ -376,6 +445,9 @@ export type Database = {
                     meeting_id: string
                     snapshot_number: number
                     probability: number
+                    forecast_value_amount?: number | null
+                    forecast_implementation_amount?: number | null
+                    forecast_close_date?: string | null
                     snapshot_timestamp: string
                     source?: string
                     created_at?: string
@@ -387,9 +459,153 @@ export type Database = {
                     meeting_id?: string
                     snapshot_number?: number
                     probability?: number
+                    forecast_value_amount?: number | null
+                    forecast_implementation_amount?: number | null
+                    forecast_close_date?: string | null
                     snapshot_timestamp?: string
                     source?: string
                     created_at?: string
+                }
+            }
+            lead_close_date_forecast_snapshots: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    seller_id: string | null
+                    estimated_close_date: string
+                    actual_close_date: string
+                    days_error: number
+                    abs_days_error: number
+                    score: number
+                    source: string
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    seller_id?: string | null
+                    estimated_close_date: string
+                    actual_close_date: string
+                    days_error: number
+                    abs_days_error: number
+                    score: number
+                    source?: string
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    seller_id?: string | null
+                    estimated_close_date?: string
+                    actual_close_date?: string
+                    days_error?: number
+                    abs_days_error?: number
+                    score?: number
+                    source?: string
+                    created_at?: string
+                }
+            }
+            lead_implementation_forecast_snapshots: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    seller_id: string | null
+                    estimated_value: number
+                    actual_value: number
+                    abs_error: number
+                    pct_error: number | null
+                    source: string
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    seller_id?: string | null
+                    estimated_value: number
+                    actual_value: number
+                    abs_error: number
+                    pct_error?: number | null
+                    source?: string
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    seller_id?: string | null
+                    estimated_value?: number
+                    actual_value?: number
+                    abs_error?: number
+                    pct_error?: number | null
+                    source?: string
+                    created_at?: string
+                }
+            }
+            seller_forecast_reliability_metrics: {
+                Row: {
+                    seller_id: string
+                    probability_reliability_score: number
+                    probability_reliability_samples: number
+                    probability_bias_pct_signed: number
+                    value_reliability_score: number
+                    value_reliability_samples: number
+                    value_bias_pct_signed: number
+                    value_mape_pct: number
+                    implementation_reliability_score: number
+                    implementation_reliability_samples: number
+                    implementation_bias_pct_signed: number
+                    implementation_mape_pct: number
+                    close_date_reliability_score: number
+                    close_date_reliability_samples: number
+                    close_date_bias_days_signed: number
+                    close_date_mae_days: number
+                    model_version: string
+                    last_recomputed_at: string
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    seller_id: string
+                    probability_reliability_score?: number
+                    probability_reliability_samples?: number
+                    probability_bias_pct_signed?: number
+                    value_reliability_score?: number
+                    value_reliability_samples?: number
+                    value_bias_pct_signed?: number
+                    value_mape_pct?: number
+                    implementation_reliability_score?: number
+                    implementation_reliability_samples?: number
+                    implementation_bias_pct_signed?: number
+                    implementation_mape_pct?: number
+                    close_date_reliability_score?: number
+                    close_date_reliability_samples?: number
+                    close_date_bias_days_signed?: number
+                    close_date_mae_days?: number
+                    model_version?: string
+                    last_recomputed_at?: string
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    seller_id?: string
+                    probability_reliability_score?: number
+                    probability_reliability_samples?: number
+                    probability_bias_pct_signed?: number
+                    value_reliability_score?: number
+                    value_reliability_samples?: number
+                    value_bias_pct_signed?: number
+                    value_mape_pct?: number
+                    implementation_reliability_score?: number
+                    implementation_reliability_samples?: number
+                    implementation_bias_pct_signed?: number
+                    implementation_mape_pct?: number
+                    close_date_reliability_score?: number
+                    close_date_reliability_samples?: number
+                    close_date_bias_days_signed?: number
+                    close_date_mae_days?: number
+                    model_version?: string
+                    last_recomputed_at?: string
+                    created_at?: string
+                    updated_at?: string
                 }
             }
             lead_history: {

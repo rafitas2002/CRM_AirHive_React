@@ -22,14 +22,18 @@ const normalizeLead = (lead: Lead) => ({
     nombre: lead.nombre || '',
     email: lead.email || '',
     telefono: lead.telefono || '',
-    etapa: lead.etapa || 'Prospección',
+    etapa: lead.etapa || 'Negociación',
     valor_estimado: lead.valor_estimado || 0,
     valor_real_cierre: (lead as any).valor_real_cierre ?? null,
+    valor_implementacion_estimado: (lead as any).valor_implementacion_estimado ?? 0,
+    valor_implementacion_real_cierre: (lead as any).valor_implementacion_real_cierre ?? null,
     oportunidad: lead.oportunidad || '',
     calificacion: lead.calificacion || 3,
     notas: lead.notas || '',
     empresa_id: lead.empresa_id || undefined,
-    probabilidad: (lead as any).probabilidad || 0
+    probabilidad: (lead as any).probabilidad || 0,
+    forecast_close_date: (lead as any).forecast_close_date || null,
+    closed_at_real: ((lead as any).closed_at_real ? String((lead as any).closed_at_real).slice(0, 10) : null)
 })
 
 import { useAuth } from '@/lib/auth'
@@ -62,6 +66,14 @@ function isWonStage(stage: unknown) {
 function isLostStage(stage: unknown) {
     const normalized = String(stage || '').trim().toLowerCase()
     return normalized === 'cerrado perdido' || normalized === 'cerrada perdida'
+}
+
+function toIsoFromDateOnly(dateOnly: string | null | undefined) {
+    if (!dateOnly) return null
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly)
+    if (!m) return null
+    const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0)
+    return Number.isNaN(dt.getTime()) ? null : dt.toISOString()
 }
 
 export default function LeadsPage() {
@@ -190,9 +202,8 @@ export default function LeadsPage() {
                 case 'etapa':
                     const etapaOrder: Record<string, number> = {
                         'Negociación': 1,
-                        'Prospección': 2,
-                        'Cerrado Ganado': 3,
-                        'Cerrado Perdido': 4
+                        'Cerrado Ganado': 2,
+                        'Cerrado Perdido': 3
                     }
                     comparison = (etapaOrder[a.etapa || ''] || 99) - (etapaOrder[b.etapa || ''] || 99)
                     break
@@ -264,7 +275,10 @@ export default function LeadsPage() {
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
-            const safeCreateStage = isWon ? 'Prospección' : leadData.etapa
+            const realImplementationValue = isWon
+                ? ((leadData as any).valor_implementacion_real_cierre ?? (leadData as any).valor_implementacion_estimado ?? 0)
+                : null
+            const safeCreateStage = isWon ? 'Negociación' : leadData.etapa
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
@@ -273,6 +287,9 @@ export default function LeadsPage() {
                 etapa: safeCreateStage,
                 valor_estimado: leadData.valor_estimado,
                 valor_real_cierre: isWon ? null : realClosureValue,
+                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                valor_implementacion_real_cierre: isWon ? null : realImplementationValue,
+                forecast_close_date: leadData.forecast_close_date || null,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -280,6 +297,9 @@ export default function LeadsPage() {
                 owner_id: currentUser.id,
                 owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
                 empresa_id: finalEmpresaId as string
+            }
+            if (isLostStage(leadData.etapa) || isWon) {
+                payload.closed_at_real = toIsoFromDateOnly((leadData as any).closed_at_real) || null
             }
 
             const { data, error } = await (supabase
@@ -297,7 +317,10 @@ export default function LeadsPage() {
                     const wonUpdatePayload: any = {
                         etapa: 'Cerrado Ganado',
                         valor_estimado: leadData.valor_estimado,
-                        valor_real_cierre: realClosureValue
+                        valor_real_cierre: realClosureValue,
+                        valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                        valor_implementacion_real_cierre: realImplementationValue,
+                        closed_at_real: toIsoFromDateOnly((leadData as any).closed_at_real) || new Date().toISOString()
                     }
 
                     const { error: wonUpdateError } = await (supabase
@@ -332,7 +355,8 @@ export default function LeadsPage() {
                 // Initial history entry
                 await (supabase.from('lead_history') as any).insert([
                     { lead_id: newId, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
-                    { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id }
+                    { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id },
+                    ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
                 ])
             }
         } else if (modalMode === 'edit' && currentLead) {
@@ -340,6 +364,7 @@ export default function LeadsPage() {
             const historyEntries: any[] = []
             const stageChanged = leadData.etapa !== currentLead.etapa
             const probChanged = leadData.probabilidad !== (currentLead as any).probabilidad
+            const forecastCloseDateChanged = (leadData.forecast_close_date || null) !== ((currentLead as any).forecast_close_date || null)
 
             if (stageChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'etapa', old_value: currentLead.etapa, new_value: leadData.etapa, changed_by: currentUser.id })
@@ -347,10 +372,22 @@ export default function LeadsPage() {
             if (probChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
             }
+            if (forecastCloseDateChanged) {
+                historyEntries.push({
+                    lead_id: currentLead.id,
+                    field_name: 'forecast_close_date',
+                    old_value: (currentLead as any).forecast_close_date ? String((currentLead as any).forecast_close_date) : null,
+                    new_value: leadData.forecast_close_date ? String(leadData.forecast_close_date) : null,
+                    changed_by: currentUser.id
+                })
+            }
 
             const isWon = isWonStage(leadData.etapa)
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
+                : null
+            const realImplementationValue = isWon
+                ? ((leadData as any).valor_implementacion_real_cierre ?? (leadData as any).valor_implementacion_estimado ?? 0)
                 : null
             const payload: any = {
                 empresa: finalEmpresaName,
@@ -360,11 +397,25 @@ export default function LeadsPage() {
                 etapa: leadData.etapa,
                 valor_estimado: leadData.valor_estimado,
                 valor_real_cierre: realClosureValue,
+                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                valor_implementacion_real_cierre: realImplementationValue,
+                forecast_close_date: leadData.forecast_close_date || null,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
                 probabilidad: leadData.probabilidad,
                 empresa_id: finalEmpresaId as string
+            }
+
+            if (isWon) {
+                payload.closed_at_real = toIsoFromDateOnly((leadData as any).closed_at_real) ||
+                    (isWonStage(currentLead.etapa)
+                        ? ((currentLead as any).closed_at_real || null)
+                        : new Date().toISOString())
+            } else {
+                payload.closed_at_real = isLostStage(leadData.etapa)
+                    ? (toIsoFromDateOnly((leadData as any).closed_at_real) || null)
+                    : null
             }
 
             // SCORING LOGIC
@@ -611,7 +662,7 @@ export default function LeadsPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Leads & Prospección
+                                    Leads
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
                                     Gestión y seguimiento de oportunidades comerciales.
@@ -634,7 +685,7 @@ export default function LeadsPage() {
                         >
                             <div className='flex items-center gap-2'>
                                 {isEditingMode ? (
-                                    <span>Bloquear Edición</span>
+                                    <span>Terminar Edición</span>
                                 ) : (
                                     <>
                                         <span>Editar Vista</span>
@@ -695,7 +746,6 @@ export default function LeadsPage() {
                                     className='ah-select-control'
                                 >
                                     <option value="All">Etapa: Todas</option>
-                                    <option value="Prospección">Prospección</option>
                                     <option value="Negociación">Negociación</option>
                                     <option value="Cerrado Ganado">Cerrado Ganado</option>
                                     <option value="Cerrado Perdido">Cerrado Perdido</option>

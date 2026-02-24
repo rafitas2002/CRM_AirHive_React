@@ -16,7 +16,7 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
     const totalValue = data.reduce((acc, d) => acc + d.value, 0)
     const maxCount = Math.max(1, ...data.map(d => d.count))
     const activeLeads = data
-        .filter((d) => d.stage === 'Prospección' || d.stage === 'Negociación')
+        .filter((d) => d.stage === 'Negociación')
         .reduce((acc, d) => acc + d.count, 0)
     const closedWon = data.find((d) => d.stage === 'Cerrado Ganado')?.count || 0
     const winRate = activeLeads > 0 ? (closedWon / activeLeads) * 100 : 0

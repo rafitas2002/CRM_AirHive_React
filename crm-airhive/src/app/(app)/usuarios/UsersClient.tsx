@@ -1,12 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Briefcase, Filter, Users, User, Building2 } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Search, Briefcase, Filter, Users, User, Building2, Building, MessageSquareQuote, ThumbsUp, Gem, MapPin, Medal, Shield, Trophy, Calendar, Layers, Ruler, Flame, Target, type LucideIcon } from 'lucide-react'
 import DetailedUserModal from '@/components/DetailedUserModal'
 import RoleBadge from '@/components/RoleBadge'
+import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useTheme } from '@/lib/ThemeContext'
+import BadgeMedallion from '@/components/BadgeMedallion'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 
 interface UsersClientProps {
     initialUsers: any[]
@@ -19,6 +24,155 @@ interface AreaColorMeta {
     bgStrong: string
     borderStrong: string
 }
+
+type ShowcaseBadge = {
+    source: 'industry' | 'special'
+    type: string
+    key: string
+    label: string
+    level: number
+    progress: number
+    meta?: {
+        isGrantableAdminBadge?: boolean
+        grantsGivenCount?: number
+    }
+}
+
+function getSpecialBadgeShowcaseVisual(badge: ShowcaseBadge) {
+    const metallic = 'bg-gradient-to-br from-[#475569] to-[#0f172a]'
+    const type = String(badge?.type || '')
+    const key = String(badge?.key || '')
+    const labelLower = String(badge?.label || '').toLowerCase()
+    const shared = getSpecialBadgeVisualSpec(type, String(badge?.label || ''), key)
+    if (shared) {
+        return {
+            title: shared.title,
+            category: shared.category,
+            icon: shared.icon,
+            className: shared.centerGradientClass,
+            iconClassName: shared.iconClassName,
+            ringStyle: shared.ringStyle,
+            coreBorderColorClassName: shared.coreBorderColorClassName
+        }
+    }
+
+    if (type === 'admin_granted') {
+        const adminGradient = labelLower.includes('jesus gracia')
+            ? 'from-[#a855f7] to-[#6d28d9]'
+            : labelLower.includes('rafael sedas')
+                ? 'from-[#ef4444] to-[#991b1b]'
+                : labelLower.includes('alberto castro')
+                    ? 'from-[#3b82f6] to-[#1e3a8a]'
+                    : labelLower.includes('eduardo castro')
+                        ? 'from-[#22c55e] to-[#166534]'
+                        : 'from-[#22c55e] to-[#15803d]'
+        const ringStyle: 'royal' = 'royal'
+        return { title: 'Distinción Admin', category: 'Distinción directiva', icon: AwardIcon, className: `bg-gradient-to-br ${adminGradient}`, iconClassName: 'text-white', ringStyle }
+    }
+    if (type === 'company_size') {
+        return { title: 'Tamaño Empresa', category: 'Comercial y cobertura', icon: Building2, className: 'bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'all_company_sizes') {
+        return { title: 'Todos los Tamaños', category: 'Comercial y cobertura', icon: Ruler, className: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'multi_industry') {
+        return { title: 'Multi-Industria', category: 'Comercial y cobertura', icon: Layers, className: 'bg-gradient-to-br from-[#d946ef] to-[#a21caf]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'deal_value_tier') {
+        const valueClass = labelLower.includes('10k+')
+            ? 'bg-gradient-to-br from-[#7c3aed] to-[#5b21b6]'
+            : labelLower.includes('5k-10k')
+                ? 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]'
+                : labelLower.includes('2k-5k')
+                    ? 'bg-gradient-to-br from-[#10b981] to-[#047857]'
+                    : 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]'
+        return { title: 'Mensualidad', category: 'Mensualidad (valor real)', icon: Gem, className: valueClass, iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'location_city') {
+        const cityClass = ['monterrey', 'guadalajara', 'cdmx', 'ciudad de mexico', 'puebla', 'queretaro', 'querétaro', 'tijuana', 'merida', 'mérida']
+            .some((city) => labelLower.includes(city))
+            ? 'bg-gradient-to-br from-[#10b981] to-[#047857]'
+            : 'bg-gradient-to-br from-[#f97316] to-[#c2410c]'
+        return { title: 'Ubicación Ciudad', category: 'Comercial y cobertura', icon: MapPin, className: cityClass, iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'location_country') {
+        const countryClass = labelLower.includes('mex')
+            ? 'bg-gradient-to-br from-[#ef4444] to-[#b91c1c]'
+            : 'bg-gradient-to-br from-[#06b6d4] to-[#0e7490]'
+        return { title: 'Ubicación País', category: 'Comercial y cobertura', icon: MapPin, className: countryClass, iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'closure_milestone') {
+        return { title: 'Cierres', category: 'Rendimiento', icon: Building, className: 'bg-gradient-to-br from-[#f97316] to-[#c2410c]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'quote_contribution') {
+        return { title: 'Aportación de Frases', category: 'Frases', icon: MessageSquareQuote, className: 'bg-gradient-to-br from-[#2563eb] to-[#1d4ed8]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'quote_likes_received') {
+        return { title: 'Frases con Likes', category: 'Frases', icon: ThumbsUp, className: 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'badge_leader') {
+        return { title: 'Líder de Badges', category: 'Badge especial', icon: Medal, className: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'reliability_score') {
+        return { title: 'Confiabilidad', category: 'Rendimiento', icon: Shield, className: 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+    if (type === 'closing_streak') {
+        const streakClass = labelLower.includes('pausada')
+            ? 'bg-gradient-to-br from-[#6b7280] to-[#374151]'
+            : 'bg-gradient-to-br from-[#f97316] to-[#b45309]'
+        return { title: 'Racha Imparable', category: 'Rendimiento', icon: Flame, className: streakClass, iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+
+    if (key.includes('value')) {
+        return { title: 'Valor de Cierre', category: 'Valor de cierre', icon: Gem, className: 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]', iconClassName: 'text-white', ringStyle: 'match' as const }
+    }
+
+    return { title: 'Badge especial', category: 'Badge especial', icon: Trophy, className: metallic, iconClassName: 'text-white', ringStyle: 'match' as const }
+}
+
+function shouldUseWhiteCoreBorderForShowcaseBadge(type?: string) {
+    return type === 'deal_value_tier'
+        || type === 'company_size'
+        || type === 'all_company_sizes'
+        || type === 'multi_industry'
+        || type === 'closure_milestone'
+        || type === 'seniority_years'
+        || type === 'prelead_registered'
+        || type === 'lead_registered'
+        || type === 'meeting_completed'
+        || type === 'reliability_score'
+        || type === 'quote_contribution'
+        || type === 'quote_likes_received'
+}
+
+function getSpecialBadgeOverlayNumber(badge: ShowcaseBadge): string | null {
+    const type = String(badge?.type || '')
+    if (type === 'company_size') {
+        const fromKey = String(badge?.key || '').match(/size_(\d+)/)?.[1]
+        if (fromKey) return fromKey
+        const fromLabel = String(badge?.label || '').match(/(\d+)/)?.[1]
+        return fromLabel || null
+    }
+    if (type === 'seniority_years' || type === 'tenure_years') {
+        const years = Math.max(0, Number(badge?.progress || badge?.level || 0))
+        return years > 0 ? String(years) : null
+    }
+    if (type === 'closing_streak') {
+        const streak = Math.max(0, Number(badge?.progress || 0))
+        return streak > 0 ? String(streak) : null
+    }
+    if (type === 'deal_value_tier') {
+        const key = String(badge?.key || '')
+        if (key === 'value_1k_2k') return '1k'
+        if (key === 'value_2k_5k') return '2k'
+        if (key === 'value_5k_10k') return '5k'
+        if (key === 'value_10k_100k' || key === 'value_10k_plus') return '10k'
+        return null
+    }
+    return null
+}
+
+const AwardIcon = Medal
 
 function getUserAreaIds(user: any): string[] {
     const detailAreas = user?.details?.area_ids ?? user?.details?.areas_ids ?? user?.details?.areas
@@ -217,6 +371,20 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [catalogs, setCatalogs] = useState<Record<string, any[]>>({})
 
+    const industryVisualMap = useMemo(() => {
+        const industryRows = (catalogs.industras || catalogs.industrias || []) as any[]
+        const extras = users.flatMap((user: any) => {
+            const featured = Array.isArray(user?.badgeShowcase?.featuredBadges) ? user.badgeShowcase.featuredBadges : []
+            return featured
+                .filter((badge: ShowcaseBadge) => badge?.source === 'industry' && badge?.key)
+                .map((badge: ShowcaseBadge) => ({ id: String(badge.key), name: String(badge.label || 'Industria') }))
+        })
+        return buildIndustryBadgeVisualMap([
+            ...industryRows.map((row: any) => ({ id: String(row?.id || ''), name: String(row?.name || '') })),
+            ...extras
+        ].filter((row) => row.id))
+    }, [catalogs, users])
+
     useEffect(() => {
         const fetchCats = async () => {
             const res = await getCatalogs()
@@ -253,6 +421,108 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
             if (area?.id) acc[area.id] = getSemanticAreaColor(area.name || '', index)
             return acc
         }, {})
+
+    const renderShowcaseBadge = (
+        badge: ShowcaseBadge,
+        slotKey: string,
+        options?: { align?: 'center' | 'start' | 'end'; placement?: 'top' | 'bottom'; tenureStartDate?: string | null }
+    ) => {
+        if (!badge) return null
+        const align = options?.align || 'center'
+        const placement = options?.placement || 'top'
+
+        if (badge.source === 'industry') {
+            const visual = getIndustryBadgeVisualFromMap(String(badge.key || ''), industryVisualMap, String(badge.label || 'Industria'))
+            return (
+                <BadgeInfoTooltip
+                    key={slotKey}
+                    title={String(badge.label || 'Industria')}
+                    subtitle='Badge de industria'
+                    rows={[
+                        { label: 'Niv.', value: String(badge.level || 0) },
+                        { label: 'Cier.', value: String(badge.progress || 0) }
+                    ]}
+                    placement={placement}
+                    align={align}
+                    density='compact'
+                    className='inline-flex cursor-pointer relative z-[2] hover:z-[20] focus-within:z-[20]'
+                >
+                    <div className='w-11 h-11 flex items-center justify-center shrink-0'>
+                        <BadgeMedallion
+                            icon={visual.icon}
+                            centerClassName={visual.containerClass}
+                            iconClassName={visual.iconClass || 'text-white'}
+                            ringStyle='match'
+                            size='sm'
+                            iconSize={12}
+                            strokeWidth={2.3}
+                        />
+                    </div>
+                </BadgeInfoTooltip>
+            )
+        }
+
+        const visual = getSpecialBadgeShowcaseVisual(badge)
+        const isSeniorityBadge = String(badge?.type || '') === 'seniority_years' || String(badge?.type || '') === 'tenure_years'
+        const tenureMetrics = isSeniorityBadge ? getTenureBadgeMetrics(options?.tenureStartDate || null) : null
+        const isGrantableAdminBadge = Boolean(badge?.meta?.isGrantableAdminBadge)
+        const grantsGivenCount = Number(badge?.meta?.grantsGivenCount ?? badge?.progress ?? 0)
+        return (
+            <BadgeInfoTooltip
+                key={slotKey}
+                title={String(badge.label || visual.title || 'Badge especial')}
+                subtitle={isGrantableAdminBadge ? 'Distinción que puede otorgar' : String(visual.category || 'Badge especial')}
+                rows={isGrantableAdminBadge
+                    ? [{ label: 'Otorg.', value: String(grantsGivenCount) }]
+                    : isSeniorityBadge && tenureMetrics
+                        ? [
+                            { label: 'Años', value: String(tenureMetrics.years) },
+                            { label: 'Tiempo', value: formatTenureExactLabel(tenureMetrics) },
+                            { label: 'Prog.', value: `${tenureMetrics.progressPctToNextLevel.toFixed(2)}%` },
+                            { label: 'Sig.', value: `${tenureMetrics.nextLevelYears} años` }
+                        ]
+                    : [
+                        { label: 'Niv.', value: String(badge.level || 0) },
+                        { label: 'Prog.', value: String(badge.progress || 0) }
+                    ]}
+                placement={placement}
+                align={align}
+                density='compact'
+                className='inline-flex cursor-pointer relative z-[2] hover:z-[20] focus-within:z-[20]'
+            >
+                <div className='w-11 h-11 flex items-center justify-center shrink-0'>
+                    <BadgeMedallion
+                        icon={visual.icon as LucideIcon}
+                        centerClassName={visual.className}
+                        iconClassName={visual.iconClassName}
+                        ringStyle={visual.ringStyle}
+                        overlayText={isSeniorityBadge ? null : getSpecialBadgeOverlayNumber(badge as any)}
+                        footerBubbleText={isSeniorityBadge ? String(tenureMetrics?.years ?? Math.max(0, Number(badge.level || badge.progress || 0))) : null}
+                        coreBorderColorClassName={String((visual as any)?.coreBorderColorClassName || '')
+                            || (shouldUseWhiteCoreBorderForShowcaseBadge(String(badge?.type || '')) ? 'border-white/90' : '')}
+                        size='sm'
+                        iconSize={12}
+                        strokeWidth={2.3}
+                    />
+                </div>
+            </BadgeInfoTooltip>
+        )
+    }
+
+    const renderEmptyBadgeSlot = (slotKey: string, tone: 'royal' | 'default' = 'default') => (
+        <div
+            key={slotKey}
+            className='w-11 h-11 rounded-full border flex items-center justify-center shrink-0'
+            style={{
+                borderColor: tone === 'royal' ? 'rgba(148,163,184,0.35)' : 'rgba(255,255,255,0.10)',
+                background: tone === 'royal'
+                    ? 'linear-gradient(135deg, rgba(71,85,105,0.22), rgba(30,41,59,0.18))'
+                    : 'rgba(255,255,255,0.03)'
+            }}
+        >
+            <div className='w-3 h-3 rounded-full' style={{ background: 'rgba(255,255,255,0.06)' }} />
+        </div>
+    )
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -367,6 +637,16 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                         ? 'group-hover:text-amber-300'
                         : 'group-hover:text-emerald-300'
                     const areaIds = getUserAreaIds(user)
+                    const adminDistinctions = (Array.isArray(user?.badgeShowcase?.adminDistinctions) ? user.badgeShowcase.adminDistinctions : []) as ShowcaseBadge[]
+                    const grantableAdminBadge = (user?.badgeShowcase?.grantableAdminBadge || null) as ShowcaseBadge | null
+                    const isGrantingAdmin = Boolean(grantableAdminBadge)
+                    const rawFeaturedBadges = (Array.isArray(user?.badgeShowcase?.featuredBadges) ? user.badgeShowcase.featuredBadges : []) as ShowcaseBadge[]
+                    const seniorityBadge = rawFeaturedBadges.find(
+                        (badge) => badge.type === 'seniority_years' || badge.type === 'tenure_years'
+                    ) || null
+                    const featuredBadges = rawFeaturedBadges.filter(
+                        (badge) => badge.type !== 'seniority_years' && badge.type !== 'tenure_years'
+                    )
                     const jobPositionNames = getUserJobPositionIds(user).map(id => resolve('job_positions', id)).filter(Boolean)
                     const areaItems = areaIds
                         .map(areaId => {
@@ -382,35 +662,99 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                 setSelectedUser(user)
                                 setIsModalOpen(true)
                             }}
-                            className={`group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 transition-all cursor-pointer hover:shadow-2xl relative overflow-hidden active:scale-[0.98] ${cardHoverClass}`}
+                            className={`group bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 transition-all cursor-pointer hover:shadow-2xl relative overflow-visible active:scale-[0.98] ${cardHoverClass}`}
                         >
                             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
 
-                            <div className="flex flex-col items-center text-center space-y-4">
-                                <div className={`w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] overflow-hidden transition-colors shadow-lg ${avatarHoverClass}`}>
-                                    {user.avatar_url ? (
-                                        <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div
-                                            className="w-full h-full flex items-center justify-center"
-                                            style={{ background: 'var(--hover-bg)' }}
+                            <div className="flex flex-col items-center text-center min-h-[420px]">
+                                {!isGrantingAdmin ? (
+                                    <div className='w-full mb-5'>
+                                        <p className='text-[9px] font-black uppercase tracking-[0.16em] mb-2 opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                            Distinciones directivas
+                                        </p>
+                                        <div className='w-full rounded-2xl border px-3 py-2 flex items-center justify-center gap-2'
+                                            style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
                                         >
-                                            <User size={32} strokeWidth={1.9} style={{ color: silhouetteColor }} />
+                                            {Array.from({ length: 4 }).map((_, idx) =>
+                                                adminDistinctions[idx]
+                                                    ? renderShowcaseBadge(adminDistinctions[idx], `admin-${user.id}-${idx}`, {
+                                                        align: idx === 0 ? 'start' : idx === 3 ? 'end' : 'center',
+                                                        placement: 'bottom'
+                                                    })
+                                                    : renderEmptyBadgeSlot(`admin-empty-${user.id}-${idx}`, 'royal')
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+                                ) : null}
+
+                                <div className='relative'>
+                                    <div className={`w-20 h-20 rounded-2xl border-2 border-[var(--card-border)] overflow-hidden transition-colors shadow-lg ${avatarHoverClass}`}>
+                                        {user.avatar_url ? (
+                                            <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div
+                                                className="w-full h-full flex items-center justify-center"
+                                                style={{ background: 'var(--hover-bg)' }}
+                                            >
+                                                <User size={32} strokeWidth={1.9} style={{ color: silhouetteColor }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {grantableAdminBadge ? (
+                                        <div className='absolute -top-3 -right-3 z-[6]'>
+                                            {renderShowcaseBadge(grantableAdminBadge, `grantable-admin-${user.id}`, {
+                                                align: 'end',
+                                                placement: 'bottom'
+                                            })}
+                                        </div>
+                                    ) : null}
                                 </div>
 
-                                <div>
-                                    <h3 className={`text-lg font-black text-[var(--text-primary)] transition-colors line-clamp-1 ${nameHoverClass}`}>
-                                        {user.full_name}
-                                    </h3>
+                                <div className='mt-4 w-full'>
+                                    <div className='flex items-center justify-center gap-2 min-w-0'>
+                                        <h3 className={`min-w-0 text-lg font-black text-[var(--text-primary)] transition-colors line-clamp-1 ${nameHoverClass}`}>
+                                            {user.full_name}
+                                        </h3>
+                                        {seniorityBadge && renderShowcaseBadge(seniorityBadge, `seniority-name-${user.id}`, {
+                                            align: 'end',
+                                            placement: 'bottom',
+                                            tenureStartDate: user?.details?.start_date || null
+                                        })}
+                                    </div>
                                     <p className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] mt-1">
                                         {jobPositionNames.length > 0 ? jobPositionNames.join(' / ') : roleMeta.label}
                                     </p>
                                     <RoleBadge role={user.role} className='mt-2' compact />
                                 </div>
 
+                                <div className='mt-auto w-full pt-4'>
+                                    <div className='w-full rounded-2xl border px-3 py-3 mb-3'
+                                        style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+                                    >
+                                        <div className='flex items-center justify-between gap-2 mb-2'>
+                                            <p className='text-[9px] font-black uppercase tracking-[0.16em] opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                                Badges destacados
+                                            </p>
+                                            <span className='text-[9px] font-black opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                                5 slots
+                                            </span>
+                                        </div>
+                                        <div className='grid grid-cols-5 gap-2 justify-items-center items-center'>
+                                            {Array.from({ length: 5 }).map((_, idx) =>
+                                                featuredBadges[idx]
+                                                    ? renderShowcaseBadge(featuredBadges[idx], `featured-${user.id}-${idx}`, {
+                                                        align: idx === 0 ? 'start' : idx === 4 ? 'end' : 'center',
+                                                        placement: 'top'
+                                                    })
+                                                    : renderEmptyBadgeSlot(`featured-empty-${user.id}-${idx}`)
+                                            )}
+                                        </div>
+                                    </div>
+
                                 <div className="w-full pt-4 border-t border-[var(--card-border)] flex flex-col gap-2">
+                                    <p className="text-[9px] font-black uppercase tracking-[0.16em] opacity-70 text-center" style={{ color: 'var(--text-secondary)' }}>
+                                        Áreas
+                                    </p>
                                     {areaItems.length > 0 ? (
                                         <div className="flex flex-wrap items-center justify-center gap-1.5">
                                             {areaItems.map(area => {
@@ -437,6 +781,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                     <span className="text-[10px] font-bold text-[var(--text-secondary)] opacity-60">
                                         {user.username || user.email || ''}
                                     </span>
+                                </div>
                                 </div>
                             </div>
                         </div>

@@ -22,6 +22,7 @@ export default function ForecastDashboard() {
     const router = useRouter()
     const [leads, setLeads] = useState<Lead[]>([])
     const [history, setHistory] = useState<History[]>([])
+    const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, any>>({})
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
 
@@ -38,6 +39,22 @@ export default function ForecastDashboard() {
 
         if (!error && data) {
             setLeads(data)
+        }
+
+        const { data: reliabilityRows } = await (supabase
+            .from('seller_forecast_reliability_metrics') as any)
+            .select('*')
+
+        if (Array.isArray(reliabilityRows)) {
+            const nextMap: Record<string, any> = {}
+            reliabilityRows.forEach((row: any) => {
+                const sellerId = String(row?.seller_id || '')
+                if (!sellerId) return
+                nextMap[sellerId] = row
+            })
+            setReliabilityMetricsBySellerId(nextMap)
+        } else {
+            setReliabilityMetricsBySellerId({})
         }
 
         // Fetch history to recover probabilities for old leads
@@ -99,6 +116,7 @@ export default function ForecastDashboard() {
     const statsPerSeller = useMemo(() => {
         const map: Record<string, {
             name: string,
+            sellerId: string | null,
             leads: Lead[],
             historicalLeads: Lead[],
             activeLeads: Lead[],
@@ -110,7 +128,26 @@ export default function ForecastDashboard() {
             pipelineAdjustedValue: number,
             valueCalibrationFactor: number,
             pipelineValueForecastAdjusted: number,
-            valueMeanPctError: number
+            valueMeanPctError: number,
+            pipelineImplementationExpectedValue: number,
+            implementationCalibrationFactor: number,
+            pipelineImplementationForecastAdjusted: number,
+            implementationMeanPctError: number,
+            confidence: {
+                probabilityScore: number,
+                monthlyScore: number,
+                implementationScore: number,
+                closeDateScore: number,
+                probabilitySamples: number,
+                monthlySamples: number,
+                implementationSamples: number,
+                closeDateSamples: number,
+                probabilityBiasPct: number,
+                monthlyBiasPct: number,
+                implementationBiasPct: number,
+                closeDateBiasDays: number,
+                modelVersion: string | null
+            }
         }> = {}
 
         // Global Win Rate for baseline (only from closed leads)
@@ -127,6 +164,7 @@ export default function ForecastDashboard() {
             if (!map[seller]) {
                 map[seller] = {
                     name: seller,
+                    sellerId: lead.owner_id ?? null,
                     leads: [],
                     historicalLeads: [],
                     activeLeads: [],
@@ -138,9 +176,29 @@ export default function ForecastDashboard() {
                     pipelineAdjustedValue: 0,
                     valueCalibrationFactor: 1,
                     pipelineValueForecastAdjusted: 0,
-                    valueMeanPctError: 0
+                    valueMeanPctError: 0,
+                    pipelineImplementationExpectedValue: 0,
+                    implementationCalibrationFactor: 1,
+                    pipelineImplementationForecastAdjusted: 0,
+                    implementationMeanPctError: 0,
+                    confidence: {
+                        probabilityScore: 0,
+                        monthlyScore: 0,
+                        implementationScore: 0,
+                        closeDateScore: 0,
+                        probabilitySamples: 0,
+                        monthlySamples: 0,
+                        implementationSamples: 0,
+                        closeDateSamples: 0,
+                        probabilityBiasPct: 0,
+                        monthlyBiasPct: 0,
+                        implementationBiasPct: 0,
+                        closeDateBiasDays: 0,
+                        modelVersion: null
+                    }
                 }
             }
+            if (!map[seller].sellerId && lead.owner_id) map[seller].sellerId = lead.owner_id
             map[seller].leads.push(lead)
 
             // Check if lead is closed based on Stage (etapa)
@@ -223,20 +281,91 @@ export default function ForecastDashboard() {
                 ? valuePairs.reduce((acc, v) => acc + (Math.abs(v.actual - v.estimated) / v.estimated), 0) / valuePairs.length
                 : 0
 
+            const implementationPairs = wonLeads
+                .map((l: any) => ({
+                    estimated: Number(l.implementation_forecast_estimated ?? l.valor_implementacion_estimado ?? 0),
+                    actual: Number(l.implementation_forecast_actual ?? l.valor_implementacion_real_cierre ?? l.valor_implementacion_estimado ?? 0)
+                }))
+                .filter((v) => Number.isFinite(v.estimated) && Number.isFinite(v.actual) && v.estimated > 0)
+
+            const implementationEstimatedTotal = implementationPairs.reduce((acc, v) => acc + v.estimated, 0)
+            const implementationActualTotal = implementationPairs.reduce((acc, v) => acc + v.actual, 0)
+            const rawImplementationCalibration = implementationEstimatedTotal > 0 ? (implementationActualTotal / implementationEstimatedTotal) : 1
+            const implementationCalibrationFactor = Math.max(0.5, Math.min(1.6, rawImplementationCalibration))
+            const pipelineImplementationExpectedValue = negotiationLeads.reduce((acc, l: any) => {
+                const prob = (Number(l.probabilidad || 0) / 100)
+                const val = Number(l.valor_implementacion_estimado || 0)
+                return acc + (prob * val)
+            }, 0)
+            const pipelineImplementationForecastAdjusted = pipelineImplementationExpectedValue * (reliabilityScore / 100) * implementationCalibrationFactor
+            const implementationMeanPctError = implementationPairs.length > 0
+                ? implementationPairs.reduce((acc, v) => acc + (Math.abs(v.actual - v.estimated) / v.estimated), 0) / implementationPairs.length
+                : 0
+
+            const closeDateForecastAccuracySamples = wonLeads
+                .map((c: any) => {
+                    const predictedRaw = c.forecast_close_date
+                    const actualRaw = c.closed_at_real ?? c.forecast_scored_at ?? null
+                    if (!predictedRaw || !actualRaw) return null
+                    const predicted = new Date(`${String(predictedRaw).slice(0, 10)}T00:00:00.000Z`)
+                    const actual = new Date(actualRaw)
+                    if (Number.isNaN(predicted.getTime()) || Number.isNaN(actual.getTime())) return null
+                    const actualDay = new Date(Date.UTC(actual.getUTCFullYear(), actual.getUTCMonth(), actual.getUTCDate()))
+                    const diffDays = Math.abs(Math.round((actualDay.getTime() - predicted.getTime()) / (1000 * 60 * 60 * 24)))
+                    if (diffDays === 0) return 100
+                    if (diffDays <= 3) return 90
+                    if (diffDays <= 7) return 75
+                    if (diffDays <= 14) return 55
+                    if (diffDays <= 30) return 35
+                    return 15
+                })
+                .filter((v): v is Exclude<typeof v, null> => v !== null)
+            const closeDateForecastAccuracy = closeDateForecastAccuracySamples.length > 0
+                ? closeDateForecastAccuracySamples.reduce((acc, v) => acc + Number(v), 0) / closeDateForecastAccuracySamples.length
+                : 0
+
+            const implementationAccuracySamples = implementationPairs
+                .map((v) => Math.max(0, 100 - Math.min(100, (Math.abs(v.actual - v.estimated) / Math.max(v.actual, 1)) * 100)))
+            const implementationForecastAccuracy = implementationAccuracySamples.length > 0
+                ? implementationAccuracySamples.reduce((acc, v) => acc + v, 0) / implementationAccuracySamples.length
+                : 0
+
+            const persistedReliability = s.sellerId ? reliabilityMetricsBySellerId[String(s.sellerId)] : null
+            const confidence = {
+                probabilityScore: Number(persistedReliability?.probability_reliability_score ?? reliabilityScore ?? 0),
+                monthlyScore: Number(persistedReliability?.value_reliability_score ?? (100 - Math.min(100, valueMeanPctError * 100))),
+                implementationScore: Number(persistedReliability?.implementation_reliability_score ?? implementationForecastAccuracy ?? 0),
+                closeDateScore: Number(persistedReliability?.close_date_reliability_score ?? closeDateForecastAccuracy ?? 0),
+                probabilitySamples: Number(persistedReliability?.probability_reliability_samples ?? scoredN ?? 0),
+                monthlySamples: Number(persistedReliability?.value_reliability_samples ?? valuePairs.length ?? 0),
+                implementationSamples: Number(persistedReliability?.implementation_reliability_samples ?? implementationPairs.length ?? 0),
+                closeDateSamples: Number(persistedReliability?.close_date_reliability_samples ?? closeDateForecastAccuracySamples.length ?? 0),
+                probabilityBiasPct: Number(persistedReliability?.probability_bias_pct_signed ?? 0),
+                monthlyBiasPct: Number(persistedReliability?.value_bias_pct_signed ?? 0),
+                implementationBiasPct: Number(persistedReliability?.implementation_bias_pct_signed ?? 0),
+                closeDateBiasDays: Number(persistedReliability?.close_date_bias_days_signed ?? 0),
+                modelVersion: persistedReliability?.model_version ? String(persistedReliability.model_version) : null
+            }
+
             return {
                 ...s,
                 avgLogLoss: scoredN > 0 ? (1 - rawAccuracy) : 0, // Now Mean Quadratic Error
                 winRate,
                 avgProb: scoredN > 0 ? (scoredLeads.reduce((acc, l) => acc + (l.forecast_evaluated_probability || 0), 0) / scoredN) : 0,
-                score: reliabilityScore,
+                score: confidence.probabilityScore,
                 pipelineExpectedValue: pipelineEV,
                 pipelineAdjustedValue: pipelineAdj,
                 valueCalibrationFactor,
                 pipelineValueForecastAdjusted,
-                valueMeanPctError
+                valueMeanPctError,
+                pipelineImplementationExpectedValue,
+                implementationCalibrationFactor,
+                pipelineImplementationForecastAdjusted,
+                implementationMeanPctError,
+                confidence
             }
         }).sort((a, b) => b.score - a.score)
-    }, [leads, filteredLeads, history])
+    }, [leads, filteredLeads, history, reliabilityMetricsBySellerId])
 
     // Global Stats for the top cards
     const globalStats = useMemo(() => {
@@ -411,10 +540,12 @@ export default function ForecastDashboard() {
                             <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--table-header-bg)', color: 'var(--text-secondary)' }}>
                                 <tr>
                                     <th className='px-8 py-5 whitespace-nowrap'>Vendedor</th>
-                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Conf. (Score)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Conf. x Pronóstico</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Negoc.</th>
-                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Valor (Adj)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Mens. (Adj)</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Forecast Impl. (Adj)</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Tasa Cierre</th>
+                                    <th className='px-8 py-5 whitespace-nowrap text-center'>Sesgos</th>
                                     <th className='px-8 py-5 whitespace-nowrap text-center'>Muestra</th>
                                 </tr>
                             </thead>
@@ -430,18 +561,30 @@ export default function ForecastDashboard() {
                                             </div>
                                         </td>
                                         <td className='px-8 py-5 text-center'>
-                                            <div className='flex flex-col items-center gap-2'>
-                                                <span className={`text-base font-black ${s.score > 70 ? 'text-emerald-500' : s.score > 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                                                    {s.score > 0 ? s.score.toFixed(1) : (s.historicalLeads.length > 0 ? 'Sin datos' : 'N/A')}
-                                                </span>
-                                                <div className='w-20 h-1.5 bg-gray-500/10 rounded-full overflow-hidden'>
+                                            <div className='flex flex-col items-center gap-2 min-w-[180px]'>
+                                                <div className='grid grid-cols-2 gap-x-4 gap-y-1 text-left'>
+                                                    {[
+                                                        { label: 'Prob.', value: s.confidence.probabilityScore, samples: s.confidence.probabilitySamples },
+                                                        { label: 'Mens.', value: s.confidence.monthlyScore, samples: s.confidence.monthlySamples },
+                                                        { label: 'Impl.', value: s.confidence.implementationScore, samples: s.confidence.implementationSamples },
+                                                        { label: 'Fecha', value: s.confidence.closeDateScore, samples: s.confidence.closeDateSamples }
+                                                    ].map((m) => (
+                                                        <div key={m.label} className='flex items-baseline gap-1.5 whitespace-nowrap'>
+                                                            <span className='text-[9px] font-black uppercase tracking-widest opacity-60' style={{ color: 'var(--text-secondary)' }}>{m.label}</span>
+                                                            <span className={`text-[12px] font-black ${m.value > 70 ? 'text-emerald-500' : m.value > 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                                                                {m.value > 0 ? m.value.toFixed(0) : (m.samples > 0 ? 'SD' : 'N/A')}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className='w-28 h-1.5 bg-gray-500/10 rounded-full overflow-hidden'>
                                                     <div
-                                                        className={`h-full transition-all duration-700 ${s.score > 70 ? 'bg-emerald-500' : s.score > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                                        style={{ width: `${s.score}%`, boxShadow: '0 0 10px currentColor' }}
+                                                        className={`h-full transition-all duration-700 ${s.confidence.probabilityScore > 70 ? 'bg-emerald-500' : s.confidence.probabilityScore > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                        style={{ width: `${Math.max(0, Math.min(100, s.confidence.probabilityScore || 0))}%`, boxShadow: '0 0 10px currentColor' }}
                                                     />
                                                 </div>
                                                 <p className='text-[8px] font-black uppercase tracking-[0.1em] opacity-40' style={{ color: 'var(--text-secondary)' }}>
-                                                    {s.historicalLeads.length} leads
+                                                    Modelo {s.confidence.modelVersion?.replace('forecast_calibration_', '') || 'local'}
                                                 </p>
                                             </div>
                                         </td>
@@ -454,14 +597,32 @@ export default function ForecastDashboard() {
                                             <p className='text-[8px] font-black text-[#2048FF]/60 uppercase tracking-widest'>x{(s.valueCalibrationFactor || 1).toFixed(2)} calib.</p>
                                             <p className='text-[8px] font-black text-[#2048FF]/45 uppercase tracking-widest'>err {((s.valueMeanPctError || 0) * 100).toFixed(1)}%</p>
                                         </td>
+                                        <td className='px-8 py-5 text-center' style={{ backgroundColor: 'rgba(16, 185, 129, 0.03)' }}>
+                                            <p className='font-black text-emerald-500 text-base'>${s.pipelineImplementationForecastAdjusted.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+                                            <p className='text-[8px] font-black text-emerald-500/60 uppercase tracking-widest'>x{(s.implementationCalibrationFactor || 1).toFixed(2)} calib.</p>
+                                            <p className='text-[8px] font-black text-emerald-500/45 uppercase tracking-widest'>err {((s.implementationMeanPctError || 0) * 100).toFixed(1)}%</p>
+                                        </td>
                                         <td className='px-8 py-5 text-center font-black text-sm' style={{ color: 'var(--text-primary)' }}>{s.winRate.toFixed(1)}%</td>
                                         <td className='px-8 py-5 text-center'>
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${s.historicalLeads.length < 10
-                                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-600'
-                                                : 'bg-blue-500/10 border-blue-500/20 text-[#2048FF]'
-                                                }`}>
-                                                {s.historicalLeads.length} {s.historicalLeads.length < 10 && '⚠️'}
-                                            </span>
+                                            <div className='text-[9px] font-black uppercase tracking-wider space-y-1' style={{ color: 'var(--text-secondary)' }}>
+                                                <p>P {s.confidence.probabilityBiasPct >= 0 ? '+' : ''}{s.confidence.probabilityBiasPct.toFixed(1)}%</p>
+                                                <p>M {s.confidence.monthlyBiasPct >= 0 ? '+' : ''}{s.confidence.monthlyBiasPct.toFixed(1)}%</p>
+                                                <p>I {s.confidence.implementationBiasPct >= 0 ? '+' : ''}{s.confidence.implementationBiasPct.toFixed(1)}%</p>
+                                                <p>F {s.confidence.closeDateBiasDays >= 0 ? '+' : ''}{s.confidence.closeDateBiasDays.toFixed(0)}d</p>
+                                            </div>
+                                        </td>
+                                        <td className='px-8 py-5 text-center'>
+                                            <div className='flex flex-col items-center gap-1'>
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${s.confidence.probabilitySamples < 10
+                                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600'
+                                                    : 'bg-blue-500/10 border-blue-500/20 text-[#2048FF]'
+                                                    }`}>
+                                                    P:{s.confidence.probabilitySamples} M:{s.confidence.monthlySamples} I:{s.confidence.implementationSamples} F:{s.confidence.closeDateSamples}
+                                                </span>
+                                                <p className='text-[8px] font-black uppercase tracking-wider opacity-50' style={{ color: 'var(--text-secondary)' }}>
+                                                    Hist.: {s.historicalLeads.length} {s.confidence.probabilitySamples < 10 && '⚠️'}
+                                                </p>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Save, Eye, EyeOff, Briefcase, Activity, ChevronRight, User, Plus, Trash2 } from 'lucide-react'
 import CatalogSelect from './CatalogSelect'
+import { FriendlyDatePicker } from './FriendlyDatePickers'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
@@ -729,8 +730,14 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee, readO
                                                         <span className='text-[var(--input-focus)] font-medium'>{calculateAge(formData.details.birth_date)}</span>
                                                     )}
                                                 </label>
-                                                <input type='date' className='input' disabled={!isRH || !canEdit}
-                                                    value={formData.details.birth_date} onChange={e => updateDetail('birth_date', e.target.value)} />
+                                                <FriendlyDatePicker
+                                                    disabled={!isRH || !canEdit}
+                                                    value={formData.details.birth_date || null}
+                                                    onChange={(next) => updateDetail('birth_date', next || '')}
+                                                    yearStart={1940}
+                                                    yearEnd={new Date().getFullYear()}
+                                                    className='input w-full text-left cursor-pointer'
+                                                />
                                             </div>
 
                                             <div className='col-span-2'>

@@ -38,17 +38,37 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { getUserActivitySummary } from '@/app/actions/admin'
+import { getUserPublicBadgesSummary } from '@/app/actions/badges'
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
+import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
+import BadgeMedallion from '@/components/BadgeMedallion'
 
 interface DetailedUserModalProps {
     isOpen: boolean
     onClose: () => void
     user: any // The user data fetched
     catalogs: Record<string, any[]>
+}
+
+function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
+    return type === 'deal_value_tier'
+        || type === 'company_size'
+        || type === 'all_company_sizes'
+        || type === 'multi_industry'
+        || type === 'closure_milestone'
+        || type === 'seniority_years'
+        || type === 'prelead_registered'
+        || type === 'lead_registered'
+        || type === 'meeting_completed'
+        || type === 'reliability_score'
+        || type === 'quote_contribution'
+        || type === 'quote_likes_received'
 }
 
 export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: DetailedUserModalProps) {
@@ -58,6 +78,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
     const [activeTab, setActiveTab] = useState('profile')
     const [activityData, setActivityData] = useState<any>(null)
     const [loadingActivity, setLoadingActivity] = useState(false)
+    const [loadingBadges, setLoadingBadges] = useState(false)
 
     const isSelf = currentUser?.id === user?.id
     const isAdmin = currentUser?.role === 'admin'
@@ -73,13 +94,34 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         setLoadingActivity(false)
     }
 
+    async function fetchBadgesOnly() {
+        if (!user?.id) return
+        setLoadingBadges(true)
+        const res = await getUserPublicBadgesSummary(user.id)
+        if (res.success) {
+            setActivityData((prev: any) => ({
+                ...(prev || {}),
+                badges: res.data?.badges || { industry: [], special: [] }
+            }))
+        }
+        setLoadingBadges(false)
+    }
+
     useEffect(() => {
         if (isOpen && isAdmin && user?.id) {
             fetchActivity()
         }
     }, [isOpen, user?.id, isAdmin])
 
-    const visibleTab = isAdmin ? activeTab : 'profile'
+    useEffect(() => {
+        if (!isOpen || !user?.id) return
+        if (isAdmin) return
+        if (activeTab !== 'badges') return
+        if (activityData?.badges) return
+        void fetchBadgesOnly()
+    }, [isOpen, user?.id, isAdmin, activeTab, activityData?.badges])
+
+    const visibleTab = isAdmin ? activeTab : (activeTab === 'badges' ? 'badges' : 'profile')
     const industryCatalog = Array.isArray(catalogs?.industrias) ? catalogs.industrias : []
     const industryExtras = ((activityData?.badges?.industry || []).map((badge: any) => ({
         id: String(badge?.key || ''),
@@ -111,6 +153,8 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             category: 'Especial'
         })))
     ]
+    const industryAccumulatedBadges = accumulatedBadges.filter((badge) => badge.category === 'Industria')
+    const specialAccumulatedBadges = accumulatedBadges.filter((badge) => badge.category === 'Especial')
 
     const getAccumulatedBadgeVisual = (badge: any) => {
         const badgeType = String(badge?.type || '')
@@ -125,6 +169,16 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                 icon: industryVisual.icon,
                 className: industryVisual.containerClass,
                 iconClassName: industryVisual.iconClass
+            }
+        }
+        const shared = getSpecialBadgeVisualSpec(badgeType, String(badge?.label || ''), String(badge?.key || ''))
+        if (shared) {
+            return {
+                icon: shared.icon,
+                className: `${metallic} ${shared.centerGradientClass}`,
+                iconClassName: shared.iconClassName,
+                ringStyle: shared.ringStyle,
+                coreBorderColorClassName: shared.coreBorderColorClassName
             }
         }
         if (badgeType === 'company_size') {
@@ -171,7 +225,16 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             }
         }
         if (badgeType === 'seniority_years') {
-            return { icon: Calendar, className: `${metallic} bg-gradient-to-br from-[#2563eb] to-[#1e3a8a]` }
+            return { icon: Calendar, className: `${metallic} bg-gradient-to-br from-[#4b5563] to-[#111827]` }
+        }
+        if (badgeType === 'prelead_registered') {
+            return { icon: Briefcase, className: `${metallic} bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]` }
+        }
+        if (badgeType === 'lead_registered') {
+            return { icon: Users, className: `${metallic} bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]` }
+        }
+        if (badgeType === 'meeting_completed') {
+            return { icon: Calendar, className: `${metallic} bg-gradient-to-br from-[#7c3aed] to-[#4c1d95]` }
         }
         if (badgeType === 'closure_milestone') {
             return { icon: Building, className: `${metallic} bg-gradient-to-br from-[#f97316] to-[#c2410c]` }
@@ -188,11 +251,13 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
         if (badgeType === 'deal_value_tier') {
             return {
                 icon: Gem,
-                className: badgeLabel.includes('1m')
+                className: badgeLabel.includes('10k+')
                     ? `${metallic} bg-gradient-to-br from-[#7c3aed] to-[#5b21b6]`
-                    : badgeLabel.includes('500')
+                    : badgeLabel.includes('5k-10k')
                         ? `${metallic} bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]`
-                        : `${metallic} bg-gradient-to-br from-[#10b981] to-[#047857]`
+                        : badgeLabel.includes('2k-5k')
+                            ? `${metallic} bg-gradient-to-br from-[#10b981] to-[#047857]`
+                            : `${metallic} bg-gradient-to-br from-[#f59e0b] to-[#b45309]`
             }
         }
         if (badgeType === 'reliability_score') {
@@ -208,7 +273,17 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             return { icon: MapPinned, className: `${metallic} bg-gradient-to-br from-[#f97316] to-[#c2410c]` }
         }
         if (badgeType === 'admin_granted') {
-            return { icon: Medal, className: `${metallic} bg-gradient-to-br from-[#22c55e] to-[#166534]` }
+            const labelLower = badgeLabel.toLowerCase()
+            const adminGradient = labelLower.includes('jesus gracia')
+                ? 'from-[#a855f7] to-[#6d28d9]'
+                : labelLower.includes('rafael sedas')
+                    ? 'from-[#ef4444] to-[#991b1b]'
+                    : labelLower.includes('alberto castro')
+                        ? 'from-[#3b82f6] to-[#1e3a8a]'
+                        : labelLower.includes('eduardo castro')
+                            ? 'from-[#22c55e] to-[#166534]'
+                            : 'from-[#22c55e] to-[#15803d]'
+            return { icon: Medal, className: `${metallic} bg-gradient-to-br ${adminGradient}` }
         }
         return { icon: Award, className: `${metallic} bg-gradient-to-br from-[#6b7280] to-[#374151]` }
     }
@@ -219,6 +294,14 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             if (fromKey) return fromKey
             const fromLabel = String(badge?.label || '').match(/(\d+)/)?.[1]
             return fromLabel || null
+        }
+        if (String(badge?.type || '') === 'deal_value_tier') {
+            const key = String(badge?.key || '')
+            if (key === 'value_1k_2k') return '1k'
+            if (key === 'value_2k_5k') return '2k'
+            if (key === 'value_5k_10k') return '5k'
+            if (key === 'value_10k_100k' || key === 'value_10k_plus') return '10k'
+            return null
         }
         return null
     }
@@ -347,11 +430,11 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         className="ah-modal-panel w-full max-w-5xl"
                     >
                         {/* Header Section */}
-                        <div className="relative h-48 shrink-0" style={{ background: headerTheme.background }}>
+                        <div className="relative h-36 md:h-40 shrink-0" style={{ background: headerTheme.background }}>
                             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" style={{ opacity: headerTheme.overlayOpacity }} />
                             <button
                                 onClick={onClose}
-                                className="absolute top-6 right-6 p-2 rounded-full transition-all z-10 cursor-pointer"
+                                className="absolute top-4 right-4 md:top-5 md:right-5 p-2 rounded-full transition-all z-10 cursor-pointer"
                                 style={{
                                     background: headerTheme.closeBg,
                                     border: `1px solid ${headerTheme.closeBorder}`,
@@ -361,22 +444,22 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                 <X size={20} />
                             </button>
 
-                            <div className="absolute -bottom-16 left-12 flex items-end gap-6">
+                            <div className="absolute -bottom-10 md:-bottom-12 left-5 md:left-8 flex items-end gap-4 md:gap-5">
                                 <div
-                                    className="w-32 h-32 rounded-3xl border-4 overflow-hidden shadow-2xl"
+                                    className="w-20 h-20 md:w-24 md:h-24 rounded-2xl md:rounded-3xl border-[3px] md:border-4 overflow-hidden shadow-2xl"
                                     style={{ borderColor: avatarFrameBorder || headerTheme.avatarBorder, background: headerTheme.avatarBackground }}
                                 >
                                     {user.avatar_url ? (
                                         <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center" style={{ background: headerTheme.avatarFallbackBg }}>
-                                            <User size={42} strokeWidth={1.9} style={{ color: silhouetteColor }} />
+                                            <User size={30} strokeWidth={1.9} style={{ color: silhouetteColor }} />
                                         </div>
                                     )}
                                 </div>
-                                <div className="mb-4">
-                                    <h2 className="text-3xl font-black tracking-tight" style={{ color: headerTheme.titleColor }}>{user.full_name}</h2>
-                                    <div className="flex items-center gap-3 mt-1">
+                                <div className="mb-1 md:mb-2">
+                                    <h2 className="text-2xl md:text-3xl font-black tracking-tight leading-tight" style={{ color: headerTheme.titleColor }}>{user.full_name}</h2>
+                                    <div className="flex flex-wrap items-center gap-2.5 mt-1">
                                         <RoleBadge role={user.role} />
                                         <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -388,36 +471,34 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         </div>
 
                         {/* Tabs Navigation */}
-                        <div className="mt-20 px-12 pb-2 border-b flex gap-8" style={{ borderColor: 'var(--card-border)' }}>
+                        <div className="mt-14 md:mt-16 px-5 md:px-8 pb-1 border-b flex flex-wrap gap-x-6 gap-y-1" style={{ borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={() => setActiveTab('profile')}
-                                className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'profile' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
+                                className={`pb-3 text-[10px] font-black uppercase tracking-[0.18em] transition-all border-b-2 cursor-pointer ${visibleTab === 'profile' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
                                 style={visibleTab === 'profile' ? undefined : { color: 'var(--text-secondary)' }}
                             >
                                 Perfil Profesional
                             </button>
                             {isAdmin && (
-                                <>
-                                    <button
-                                        onClick={() => setActiveTab('performance')}
-                                        className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'performance' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
-                                        style={visibleTab === 'performance' ? undefined : { color: 'var(--text-secondary)' }}
-                                    >
-                                        Desempeño & Actividad
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('badges')}
-                                        className={`pb-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2 ${visibleTab === 'badges' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
-                                        style={visibleTab === 'badges' ? undefined : { color: 'var(--text-secondary)' }}
-                                    >
-                                        Badges acumuladas
-                                    </button>
-                                </>
+                                <button
+                                    onClick={() => setActiveTab('performance')}
+                                    className={`pb-3 text-[10px] font-black uppercase tracking-[0.18em] transition-all border-b-2 cursor-pointer ${visibleTab === 'performance' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
+                                    style={visibleTab === 'performance' ? undefined : { color: 'var(--text-secondary)' }}
+                                >
+                                    Desempeño & Actividad
+                                </button>
                             )}
+                            <button
+                                onClick={() => setActiveTab('badges')}
+                                className={`pb-3 text-[10px] font-black uppercase tracking-[0.18em] transition-all border-b-2 cursor-pointer ${visibleTab === 'badges' ? 'border-[var(--input-focus)] text-[var(--input-focus)]' : 'border-transparent hover:text-[var(--input-focus)]'}`}
+                                style={visibleTab === 'badges' ? undefined : { color: 'var(--text-secondary)' }}
+                            >
+                                Badges acumuladas
+                            </button>
                         </div>
 
                         {/* Content Area */}
-                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar">
                             {visibleTab === 'profile' ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
@@ -463,7 +544,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                             ) : visibleTab === 'performance' ? (
                                 <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                         {/* Metrics Grid */}
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-6">
                                             <MetricCard
                                                 icon={TrendingUp}
                                                 label="Ventas Últ. Carrera"
@@ -488,6 +569,20 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                                 label="Forecast Accuracy"
                                                 value={`${activityData?.metrics?.forecastAccuracy?.toFixed(0) || '0'}%`}
                                                 color="indigo"
+                                            />
+                                            <MetricCard
+                                                icon={BarChart3}
+                                                label="Confiab. Valor"
+                                                value={`${activityData?.metrics?.valueForecastAccuracy?.toFixed(0) || '0'}%`}
+                                                subtext={`${activityData?.metrics?.valueForecastAccuracySamples || 0} cierres`}
+                                                color="blue"
+                                            />
+                                            <MetricCard
+                                                icon={Calendar}
+                                                label="Confiab. Fecha"
+                                                value={`${activityData?.metrics?.closeDateForecastAccuracy?.toFixed(0) || '0'}%`}
+                                                subtext={`${activityData?.metrics?.closeDateForecastAccuracySamples || 0} cierres`}
+                                                color="purple"
                                             />
                                             <MetricCard
                                                 icon={Zap}
@@ -577,38 +672,63 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                         </section>
                                 </div>
                             ) : (
-                                <div className='animate-in fade-in slide-in-from-bottom-4 duration-500'>
-                                    <div className="rounded-3xl border p-5" style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
-                                        <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] mb-4" style={{ color: 'var(--input-focus)' }}>
+                                <div className='animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4'>
+                                    <div className="rounded-3xl border p-5 md:p-6" style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                        <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] mb-2" style={{ color: 'var(--input-focus)' }}>
                                             <Award size={14} /> Badges acumuladas
                                         </h3>
-                                        <div className="max-h-[560px] overflow-y-auto custom-scrollbar pr-1">
-                                            {accumulatedBadges.length === 0 ? (
+                                        <p className="text-sm font-semibold mb-5" style={{ color: 'var(--text-secondary)', opacity: 0.9 }}>
+                                            Vista unificada de badges de industria y especiales. Hover para ver detalle completo.
+                                        </p>
+                                        <div className="space-y-5">
+                                            {loadingBadges && !isAdmin && !activityData?.badges ? (
+                                                <div className="rounded-2xl border px-4 py-5 text-center text-xs font-bold" style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                                    Cargando badges...
+                                                </div>
+                                            ) : accumulatedBadges.length === 0 ? (
                                                 <div className="rounded-2xl border px-4 py-5 text-center text-xs font-bold" style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
                                                     Sin badges acumuladas
                                                 </div>
                                             ) : (
-                                                <div className='grid grid-cols-4 sm:grid-cols-5 gap-3'>
-                                                    {accumulatedBadges.map((badge) => {
-                                                        const visual = getAccumulatedBadgeVisual(badge)
-                                                        const BadgeIcon = visual.icon
-                                                        const overlayNumber = getBadgeOverlayNumber(badge)
-                                                        return (
-                                                            <div
-                                                                key={badge.id}
-                                                                className={`relative overflow-hidden w-14 h-14 rounded-xl border flex items-center justify-center cursor-default ${visual.className}`}
-                                                            >
-                                                                <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                                                <BadgeIcon size={21} strokeWidth={2.5} className={String((visual as any)?.iconClassName || 'text-white')} />
-                                                                {overlayNumber && (
-                                                                    <span className='absolute bottom-[2px] left-1/2 -translate-x-1/2 text-[8px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
-                                                                        {overlayNumber}
-                                                                    </span>
-                                                                )}
+                                                <>
+                                                    {industryAccumulatedBadges.length > 0 && (
+                                                        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                            <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-3" style={{ color: 'var(--text-secondary)' }}>
+                                                                Badges por industria
                                                             </div>
-                                                        )
-                                                    })}
-                                                </div>
+                                                            <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3'>
+                                                                {industryAccumulatedBadges.map((badge) => (
+                                                                    <AccumulatedBadgeCard
+                                                                        key={badge.id}
+                                                                        badge={badge}
+                                                                        visual={getAccumulatedBadgeVisual(badge)}
+                                                                        overlayNumber={getBadgeOverlayNumber(badge)}
+                                                                        tenureStartDate={user?.details?.start_date || user?.details?.startDate || null}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {specialAccumulatedBadges.length > 0 && (
+                                                        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                            <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-3" style={{ color: 'var(--text-secondary)' }}>
+                                                                Badges especiales
+                                                            </div>
+                                                            <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3'>
+                                                                {specialAccumulatedBadges.map((badge) => (
+                                                                    <AccumulatedBadgeCard
+                                                                        key={badge.id}
+                                                                        badge={badge}
+                                                                        visual={getAccumulatedBadgeVisual(badge)}
+                                                                        overlayNumber={getBadgeOverlayNumber(badge)}
+                                                                        tenureStartDate={user?.details?.start_date || user?.details?.startDate || null}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -616,7 +736,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                             )}
 
                             {/* System Info (Always at bottom) */}
-                            <section className="mt-12 pt-8 border-t flex flex-wrap gap-8 items-center justify-between" style={{ borderColor: 'var(--card-border)' }}>
+                            <section className="mt-8 pt-6 border-t flex flex-wrap gap-6 items-center justify-between" style={{ borderColor: 'var(--card-border)' }}>
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--hover-bg)', color: 'var(--text-secondary)' }}>
                                         <Clock size={18} />
@@ -639,10 +759,10 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         </div>
 
                         {/* Footer / Actions */}
-                        <div className="p-8 border-t flex justify-end" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className="p-5 md:p-6 border-t flex justify-end" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
                             <button
                                 onClick={onClose}
-                                className="px-8 py-3 bg-[var(--input-focus)] hover:brightness-95 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20"
+                                className="px-6 py-3 bg-[var(--input-focus)] hover:brightness-95 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20 cursor-pointer"
                             >
                                 Cerrar Perfil
                             </button>
@@ -677,6 +797,75 @@ function MetricCard({ icon: Icon, label, value, subtext, color }: { icon: any, l
                 <p className="text-xl font-black">{value}</p>
             </div>
         </div>
+    )
+}
+
+function AccumulatedBadgeCard({
+    badge,
+    visual,
+    overlayNumber,
+    tenureStartDate
+}: {
+    badge: any
+    visual: any
+    overlayNumber: string | null
+    tenureStartDate?: string | null
+}) {
+    const BadgeIcon = visual.icon
+    const label = String(badge?.label || 'Badge')
+    const category = String(badge?.category || 'Especial')
+    const level = Number(badge?.level || 0)
+    const progress = Number(badge?.progress || 0)
+    const isSeniorityBadge = String(badge?.type || '') === 'seniority_years' || String(badge?.type || '') === 'tenure_years'
+    const tenureMetrics = isSeniorityBadge ? getTenureBadgeMetrics(tenureStartDate || null) : null
+
+    return (
+        <BadgeInfoTooltip
+            title={label}
+            subtitle={category}
+            rows={isSeniorityBadge && tenureMetrics
+                ? [
+                    { label: 'Años', value: String(tenureMetrics.years) },
+                    { label: 'Antigüedad', value: formatTenureExactLabel(tenureMetrics) },
+                    { label: 'Progreso', value: `${tenureMetrics.progressPctToNextLevel.toFixed(2)}%` },
+                    { label: 'Siguiente', value: `${tenureMetrics.nextLevelYears} años` }
+                ]
+                : [
+                    { label: 'Nivel', value: String(level) },
+                    { label: 'Progreso', value: String(progress) },
+                    { label: 'Tipo', value: String(badge?.type || 'special') }
+                ]}
+            className='w-full cursor-pointer relative z-[2] hover:z-[40] focus-within:z-[40]'
+        >
+            <div
+                className='rounded-2xl border p-3 transition-colors hover:border-blue-400/45'
+                style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+            >
+                <div className='flex items-center gap-3'>
+                    <BadgeMedallion
+                        icon={BadgeIcon}
+                        centerClassName={visual.className}
+                        iconClassName={String((visual as any)?.iconClassName || 'text-white')}
+                        overlayText={isSeniorityBadge ? null : overlayNumber}
+                        footerBubbleText={isSeniorityBadge ? String(tenureMetrics?.years ?? overlayNumber ?? '') : null}
+                        ringStyle={String((visual as any)?.ringStyle || 'match') as any}
+                        coreBorderColorClassName={String((visual as any)?.coreBorderColorClassName || '')
+                            || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.type || '')) ? 'border-white/90' : '')}
+                        size='md'
+                        iconSize={18}
+                        strokeWidth={2.5}
+                    />
+                    <div className='min-w-0'>
+                        <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }}>
+                            {label}
+                        </p>
+                        <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--input-focus)' }}>
+                            Nivel {level} · {category}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </BadgeInfoTooltip>
     )
 }
 

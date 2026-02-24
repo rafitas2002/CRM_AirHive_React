@@ -17,6 +17,7 @@ import {
     Zap
 } from 'lucide-react'
 import SellerRace from '@/components/SellerRace'
+import RaceForecastTable from '@/components/RaceForecastTable'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
 import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 import MyTasksWidget from '@/components/MyTasksWidget'
@@ -30,6 +31,23 @@ type History = {
     new_value: string | null
     created_at: string
 }
+
+const normalizeStage = (stage: string | null | undefined) => String(stage || '').trim().toLowerCase()
+const isWonStage = (stage: string | null | undefined) => normalizeStage(stage).includes('ganad')
+const isClosedStage = (stage: string | null | undefined) => normalizeStage(stage).includes('cerrado')
+const isNegotiationStage = (stage: string | null | undefined) => normalizeStage(stage).includes('negoci')
+const isCurrentUtcMonth = (isoLike: string | null | undefined) => {
+    if (!isoLike) return false
+    const d = new Date(isoLike)
+    if (Number.isNaN(d.getTime())) return false
+    const now = new Date()
+    return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
+}
+const getRealCloseValue = (lead: Lead) => Number((lead as any).valor_real_cierre ?? lead.valor_estimado ?? 0)
+const getRealCloseTimestamp = (lead: Lead) =>
+    ((lead as any).closed_at_real as string | null)
+    || (lead.forecast_scored_at as string | null)
+    || (lead.created_at as string | null)
 
 function AdminDashboardView({ username }: { username: string }) {
     const [leads, setLeads] = useState<Lead[]>([])
@@ -56,16 +74,30 @@ function AdminDashboardView({ username }: { username: string }) {
             historicalLeads: Lead[],
             activeLeads: Lead[],
             score: number,
-            negotiationPipeline: number
+            negotiationPipeline: number,
+            raceRealClosedValue: number,
+            raceForecastValue: number,
+            raceForecastLeadCount: number
         }> = {}
 
-        const closed = leads.filter(l => l.etapa?.toLowerCase().includes('cerrado'))
-        const active = leads.filter(l => !l.etapa?.toLowerCase().includes('cerrado'))
+        const closed = leads.filter(l => isClosedStage(l.etapa))
+        const active = leads.filter(l => !isClosedStage(l.etapa))
 
         leads.forEach(lead => {
             const seller = lead.owner_username || 'Unknown'
-            if (!map[seller]) map[seller] = { name: seller, historicalLeads: [], activeLeads: [], score: 0, negotiationPipeline: 0 }
-            if (lead.etapa?.toLowerCase().includes('cerrado')) map[seller].historicalLeads.push(lead)
+            if (!map[seller]) {
+                map[seller] = {
+                    name: seller,
+                    historicalLeads: [],
+                    activeLeads: [],
+                    score: 0,
+                    negotiationPipeline: 0,
+                    raceRealClosedValue: 0,
+                    raceForecastValue: 0,
+                    raceForecastLeadCount: 0
+                }
+            }
+            if (isClosedStage(lead.etapa)) map[seller].historicalLeads.push(lead)
             else map[seller].activeLeads.push(lead)
         })
 
@@ -89,16 +121,31 @@ function AdminDashboardView({ username }: { username: string }) {
             const relScore = scoredN > 0 ? (rawAcc * (scoredN / (scoredN + 4))) * 100 : 0
 
             const negPipeline = s.activeLeads
-                .filter(l => l.etapa === 'Negociación')
+                .filter(l => isNegotiationStage(l.etapa))
                 .reduce((acc, l) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
 
-            return { ...s, score: relScore, negotiationPipeline: negPipeline }
-        }).sort((a, b) => b.negotiationPipeline - a.negotiationPipeline)
+            const negotiationLeads = s.activeLeads.filter((l) => isNegotiationStage(l.etapa))
+            const raceForecastValue = negotiationLeads
+                .reduce((acc, l) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
+
+            const raceRealClosedValue = s.historicalLeads
+                .filter((l) => isWonStage(l.etapa) && isCurrentUtcMonth(getRealCloseTimestamp(l)))
+                .reduce((acc, l) => acc + getRealCloseValue(l), 0)
+
+            return {
+                ...s,
+                score: relScore,
+                negotiationPipeline: negPipeline,
+                raceRealClosedValue,
+                raceForecastValue,
+                raceForecastLeadCount: negotiationLeads.length
+            }
+        }).sort((a, b) => b.raceRealClosedValue - a.raceRealClosedValue)
 
         const totalPipeline = active.reduce((acc, l) => acc + (l.valor_estimado || 0), 0)
         const adjustedForecast = sellers.reduce((acc, s) => acc + (s.negotiationPipeline * (s.score / 100)), 0)
 
-        const stages = ['Prospección', 'Negociación', 'Cerrado Ganado', 'Cerrado Perdido']
+        const stages = ['Negociación', 'Cerrado Ganado', 'Cerrado Perdido']
         const funnel = stages.map(stage => ({
             stage,
             count: leads.filter(l => l.etapa === stage).length,
@@ -118,10 +165,10 @@ function AdminDashboardView({ username }: { username: string }) {
 
     if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
-    const teamGoal = Math.max(...stats.sellers.map(s => s.negotiationPipeline)) * 1.5 || 1000000
+    const teamGoal = Math.max(...stats.sellers.map(s => s.raceRealClosedValue)) * 1.5 || 1000000
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
-    const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.negotiationPipeline)
+    const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.raceRealClosedValue)
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
@@ -245,8 +292,18 @@ function AdminDashboardView({ username }: { username: string }) {
                             maxGoal={teamGoal}
                             sellers={stats.sellers.map(s => ({
                                 name: s.name,
-                                value: s.negotiationPipeline,
-                                percentage: (s.negotiationPipeline / teamGoal) * 100,
+                                value: s.raceRealClosedValue,
+                                percentage: (s.raceRealClosedValue / teamGoal) * 100,
+                                reliability: s.score
+                            }))}
+                            subtitle='Cierres reales ganados del mes (fecha real de cierre) vs meta de equipo'
+                        />
+
+                        <RaceForecastTable
+                            sellers={stats.sellers.map((s) => ({
+                                name: s.name,
+                                forecastValue: s.raceForecastValue,
+                                activeNegotiationLeads: s.raceForecastLeadCount,
                                 reliability: s.score
                             }))}
                         />
@@ -284,8 +341,8 @@ function AdminDashboardView({ username }: { username: string }) {
                                             </div>
                                         </div>
                                         <div className='text-right'>
-                                            <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>${(s.negotiationPipeline * (s.score / 100)).toLocaleString()}</p>
-                                            <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Forecast Adj</p>
+                                            <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>${s.raceRealClosedValue.toLocaleString()}</p>
+                                            <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)' }}>Cierre real</p>
                                         </div>
                                     </div>
                                     )

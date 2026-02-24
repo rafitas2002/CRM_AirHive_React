@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
+import BadgeMedallion from '@/components/BadgeMedallion'
 
 type SpecialBadgeEventRow = {
     id: string
@@ -556,10 +559,13 @@ export default function GlobalBadgeCelebration() {
     const industryVisual = current.sourceType === 'industry' && current.industria_id
         ? getIndustryBadgeVisualFromMap(current.industria_id, visualMap, current.industryName)
         : null
-    const specialVisual = getSpecialVisual(current.badgeType, current.badgeLabel)
-    const Icon = industryVisual?.icon || specialVisual.icon
-    const containerClass = industryVisual?.containerClass || specialVisual.containerClass
-    const iconClass = industryVisual?.iconClass || specialVisual.iconClass
+    const popupSpecialSpec = current.sourceType === 'special'
+        ? getSpecialBadgeVisualSpec(current.badgeType, current.badgeLabel, current.badgeKey)
+        : null
+    const specialVisual = getSpecialVisual(current.badgeType, current.badgeLabel, current.badgeKey)
+    const Icon = industryVisual?.icon || popupSpecialSpec?.icon || specialVisual.icon
+    const containerClass = industryVisual?.containerClass || popupSpecialSpec?.centerGradientClass || specialVisual.containerClass
+    const iconClass = industryVisual?.iconClass || popupSpecialSpec?.iconClassName || specialVisual.iconClass
     const isUnlocked = current.eventType === 'unlocked'
     const specialBadgeOverlay = getSpecialBadgeOverlayNumber(current.badgeType, current.badgeKey, current.badgeLabel)
     const closeCta = isUnlocked ? 'Recibir Reconocimiento' : 'Seguir Sumando'
@@ -615,15 +621,33 @@ export default function GlobalBadgeCelebration() {
 
                 <div className='p-6 md:p-8'>
                     <div className='flex items-center gap-5 md:gap-6'>
-                        <div className={`relative overflow-hidden w-24 h-24 md:w-28 md:h-28 rounded-2xl border flex items-center justify-center shadow-xl ${containerClass}`}>
-                            <span className='absolute top-[3px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                            <Icon size={42} strokeWidth={2.5} className={iconClass} />
-                            {specialBadgeOverlay && (
-                                <span className='absolute bottom-[7px] left-1/2 -translate-x-1/2 text-[12px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
-                                    {specialBadgeOverlay}
-                                </span>
-                            )}
-                        </div>
+                        <BadgeInfoTooltip
+                            title={current.sourceType === 'industry' ? String(current.industryName || 'Industria') : String(current.badgeLabel || 'Badge especial')}
+                            subtitle={current.sourceType === 'industry' ? 'Badge de industria' : 'Badge especial'}
+                            rows={[
+                                { label: 'Nivel', value: String(current.level) },
+                                { label: 'Progreso', value: `${current.progressCount} ${current.sourceType === 'industry' ? 'cierres' : 'pts'}` },
+                                { label: 'Evento', value: isUnlocked ? 'Desbloqueado' : 'Subió de nivel' }
+                            ]}
+                        >
+                            {(() => {
+                                return (
+                                    <BadgeMedallion
+                                icon={Icon}
+                                centerClassName={containerClass}
+                                iconClassName={iconClass}
+                                overlayText={specialBadgeOverlay}
+                                ringStyle={current.sourceType === 'special'
+                                    ? (popupSpecialSpec?.ringStyle || 'match')
+                                    : 'match'}
+                                coreBorderColorClassName={popupSpecialSpec?.coreBorderColorClassName || ''}
+                                size='xl'
+                                iconSize={42}
+                                strokeWidth={2.5}
+                            />
+                                )
+                            })()}
+                        </BadgeInfoTooltip>
                         <div className='min-w-0'>
                             <p className='text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]'>
                                 {current.sourceType === 'industry' ? 'Industria' : 'Badge especial'}
@@ -798,8 +822,16 @@ export default function GlobalBadgeCelebration() {
     )
 }
 
-function getSpecialVisual(badgeType?: string, badgeLabel?: string) {
+function getSpecialVisual(badgeType?: string, badgeLabel?: string, badgeKey?: string | null) {
     const label = String(badgeLabel || '').toLowerCase()
+    const shared = getSpecialBadgeVisualSpec(badgeType, badgeLabel || null, badgeKey || null)
+    if (shared) {
+        return {
+            icon: shared.icon,
+            containerClass: shared.centerGradientClass,
+            iconClass: shared.iconClassName || 'text-white'
+        }
+    }
     const metallic = 'border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15),0_6px_14px_rgba(15,23,42,0.22)]'
     const iconClass = 'text-white'
 
@@ -816,11 +848,13 @@ function getSpecialVisual(badgeType?: string, badgeLabel?: string) {
     if (badgeType === 'deal_value_tier') {
         return {
             icon: Gem,
-            containerClass: label.includes('1m')
+            containerClass: label.includes('10k+')
                 ? `${metallic} bg-gradient-to-br from-[#7c3aed] to-[#5b21b6]`
-                : label.includes('500')
+                : label.includes('5k-10k')
                     ? `${metallic} bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]`
-                    : `${metallic} bg-gradient-to-br from-[#10b981] to-[#047857]`,
+                    : label.includes('2k-5k')
+                        ? `${metallic} bg-gradient-to-br from-[#10b981] to-[#047857]`
+                        : `${metallic} bg-gradient-to-br from-[#f59e0b] to-[#b45309]`,
             iconClass
         }
     }
@@ -873,9 +907,19 @@ function getSpecialVisual(badgeType?: string, badgeLabel?: string) {
 }
 
 function getSpecialBadgeOverlayNumber(badgeType?: string, badgeKey?: string, badgeLabel?: string) {
-    if (badgeType !== 'company_size') return null
-    const fromKey = String(badgeKey || '').match(/size_(\d+)/)?.[1]
-    if (fromKey) return fromKey
-    const fromLabel = String(badgeLabel || '').match(/(\d+)/)?.[1]
-    return fromLabel || null
+    if (badgeType === 'company_size') {
+        const fromKey = String(badgeKey || '').match(/size_(\d+)/)?.[1]
+        if (fromKey) return fromKey
+        const fromLabel = String(badgeLabel || '').match(/(\d+)/)?.[1]
+        return fromLabel || null
+    }
+    if (badgeType === 'deal_value_tier') {
+        const key = String(badgeKey || '')
+        if (key === 'value_1k_2k') return '1k'
+        if (key === 'value_2k_5k') return '2k'
+        if (key === 'value_5k_10k') return '5k'
+        if (key === 'value_10k_100k' || key === 'value_10k_plus') return '10k'
+        return null
+    }
+    return null
 }
