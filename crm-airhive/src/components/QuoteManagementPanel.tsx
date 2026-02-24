@@ -265,6 +265,32 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
         return () => { cancelled = true }
     }, [isAdmin])
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const onReactionUpdated = (event: Event) => {
+            const custom = event as CustomEvent<{
+                quoteId?: number
+                likes_count?: number
+                dislikes_count?: number
+                current_user_reaction?: 'like' | 'dislike' | null
+            }>
+            const quoteId = Number(custom.detail?.quoteId || 0)
+            if (!Number.isFinite(quoteId) || quoteId <= 0) return
+            setQuotes((prev) => prev.map((item) => (
+                item.id === quoteId
+                    ? {
+                        ...item,
+                        likes_count: Number(custom.detail?.likes_count || 0),
+                        dislikes_count: Number(custom.detail?.dislikes_count || 0),
+                        current_user_reaction: custom.detail?.current_user_reaction || null
+                    }
+                    : item
+            )))
+        }
+        window.addEventListener('airhive:quote-reaction-updated', onReactionUpdated as EventListener)
+        return () => window.removeEventListener('airhive:quote-reaction-updated', onReactionUpdated as EventListener)
+    }, [])
+
     const reload = async () => {
         const result = isAdmin ? await getAllQuotesForAdmin() : await getActiveQuotes()
         if (result.success) setQuotes(result.data as QuoteRow[])

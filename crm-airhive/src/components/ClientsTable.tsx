@@ -2,11 +2,13 @@
 
 import { Database } from '@/lib/supabase'
 import { Mail, MessageCircle } from 'lucide-react'
+import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
 interface ClientsTableProps {
     clientes: Cliente[]
+    sellerProfilesById?: Record<string, { fullName?: string | null; avatarUrl?: string | null }>
     isEditingMode?: boolean
     onEdit?: (cliente: Cliente) => void
     onDelete?: (id: number) => void
@@ -15,7 +17,27 @@ interface ClientsTableProps {
     userEmail?: string
 }
 
-export default function ClientsTable({ clientes, isEditingMode = false, onEdit, onDelete, onRowClick, onEmailClick, userEmail }: ClientsTableProps) {
+function formatSellerDisplayName(raw?: string | null) {
+    const value = String(raw || '').trim()
+    if (!value) return '-'
+    if (value.includes('.')) {
+        return value
+            .split('.')
+            .filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ')
+    }
+    if (value === value.toUpperCase()) {
+        return value
+            .split(/\s+/)
+            .filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ')
+    }
+    return value
+}
+
+export default function ClientsTable({ clientes, sellerProfilesById = {}, isEditingMode = false, onEdit, onDelete, onRowClick, onEmailClick, userEmail }: ClientsTableProps) {
     if (!clientes || clientes.length === 0) {
         return (
             <div className='w-full p-8 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm'>
@@ -73,12 +95,23 @@ export default function ClientsTable({ clientes, isEditingMode = false, onEdit, 
                             {/* Vendedor */}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-3'>
-                                    <div className='w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-[10px] shadow-sm flex-shrink-0' style={{ background: 'var(--accent-primary, #2048FF)' }}>
-                                        {cliente.owner_username?.charAt(0).toUpperCase() || '?'}
-                                    </div>
-                                    <span className='font-bold text-xs uppercase tracking-tighter whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>
-                                        {cliente.owner_username || '-'}
-                                    </span>
+                                    {(() => {
+                                        const sellerId = String((cliente as any).owner_id || '')
+                                        const profile = sellerId ? sellerProfilesById[sellerId] : undefined
+                                        const displayName = String(profile?.fullName || formatSellerDisplayName(cliente.owner_username))
+                                        return (
+                                            <>
+                                                <TableEmployeeAvatar
+                                                    name={displayName}
+                                                    avatarUrl={profile?.avatarUrl}
+                                                    size='sm'
+                                                />
+                                                <span className='font-black text-sm whitespace-nowrap' style={{ color: 'var(--text-primary)' }}>
+                                                    {displayName}
+                                                </span>
+                                            </>
+                                        )
+                                    })()}
                                 </div>
                             </td>
                             {/* Empresa */}

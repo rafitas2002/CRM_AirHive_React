@@ -335,6 +335,41 @@ body {
   z-index: 560;
 }
 
+.ah-badge-tooltip-bubble--portal {
+  position: fixed !important;
+  left: 0;
+  top: 0;
+  bottom: auto !important;
+  right: auto !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none;
+  z-index: 10090;
+}
+
+.ah-badge-tooltip-bubble--portal::after {
+  left: var(--ah-tooltip-arrow-left, 50%) !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+}
+
+.ah-badge-tooltip-bubble--portal[data-side='top']::after {
+  top: 100%;
+  bottom: auto;
+  border-right: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  border-bottom: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  border-top: none;
+}
+
+.ah-badge-tooltip-bubble--portal[data-side='bottom']::after {
+  top: auto;
+  bottom: 100%;
+  border-right: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  border-bottom: none;
+  border-top: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+}
+
 .ah-badge-tooltip[data-placement='bottom'] .ah-badge-tooltip-bubble {
   bottom: auto;
   top: calc(100% + 10px);

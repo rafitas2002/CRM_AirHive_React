@@ -20,6 +20,10 @@ interface BadgeMedallionProps {
     strokeWidth?: number
     ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
     coreBorderColorClassName?: string
+    cornerTagText?: string | null
+    cornerTagClassName?: string
+    cornerTagVariant?: 'label' | 'dot'
+    cornerTagPlacement?: 'top-right' | 'bottom'
 }
 
 const SIZE_MAP: Record<BadgeMedallionSize, {
@@ -119,7 +123,11 @@ export default function BadgeMedallion({
     iconSize,
     strokeWidth = 2.5,
     ringStyle = 'match',
-    coreBorderColorClassName = ''
+    coreBorderColorClassName = '',
+    cornerTagText = null,
+    cornerTagClassName = '',
+    cornerTagVariant = 'label',
+    cornerTagPlacement = 'top-right'
 }: BadgeMedallionProps) {
     const s = SIZE_MAP[size]
     const showIsolatedRing = BADGE_ISOLATED_RING_EXPERIMENT
@@ -225,6 +233,20 @@ export default function BadgeMedallion({
                     </>
                 ) : null}
             </span>
+            {(cornerTagText || (cornerTagVariant === 'dot' && cornerTagClassName.trim())) ? (
+                cornerTagVariant === 'dot' ? (
+                    <span
+                        aria-hidden='true'
+                        className={`absolute ${cornerTagPlacement === 'bottom' ? '-bottom-0.5 left-1/2 -translate-x-1/2' : '-top-0.5 -right-0.5'} z-[4] rounded-full border w-3.5 h-1.5 shadow-[0_4px_10px_rgba(0,0,0,0.25)] ${cornerTagClassName}`.trim()}
+                    />
+                ) : (
+                    <span
+                        className={`absolute ${cornerTagPlacement === 'bottom' ? '-bottom-1 left-1/2 -translate-x-1/2' : '-top-1 -right-1'} z-[4] rounded-full border px-1.5 py-[1px] text-[7px] leading-none font-black uppercase tracking-[0.08em] shadow-[0_4px_10px_rgba(0,0,0,0.25)] ${cornerTagClassName}`.trim()}
+                    >
+                        {cornerTagText}
+                    </span>
+                )
+            ) : null}
         </span>
     )
 }

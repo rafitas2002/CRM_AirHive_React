@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 import { TrendingUp, RotateCw, Filter, LayoutDashboard, AlertCircle, Info } from 'lucide-react'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
@@ -554,9 +555,7 @@ export default function ForecastDashboard() {
                                     <tr key={s.name} className='transition-colors group hover:bg-black/5'>
                                         <td className='px-8 py-5'>
                                             <div className='flex items-center gap-3'>
-                                                <span className='w-8 h-8 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] text-white flex items-center justify-center font-black text-[10px] shadow-sm'>
-                                                    {s.name.charAt(0).toUpperCase()}
-                                                </span>
+                                                <TableEmployeeAvatar name={s.name} size='sm' />
                                                 <span className='font-bold text-sm' style={{ color: 'var(--text-primary)' }}>{s.name}</span>
                                             </div>
                                         </td>

@@ -649,6 +649,8 @@ export async function toggleQuoteReaction(quoteId: number, reactionType: QuoteRe
         }
 
         const reactionStats = await buildReactionStatsByQuote(dbClient, [quoteId], current.userId)
+        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings')
         return {
             success: true,
             data: reactionStats[quoteId] || { likes_count: 0, dislikes_count: 0, current_user_reaction: null }
@@ -724,6 +726,77 @@ export async function getQuoteReactionUsers(quoteId: number, reactionType: Quote
         })
 
         return { success: true, data: details }
+    } catch (error: any) {
+        return { success: false, error: error.message, data: [] as any[] }
+    }
+}
+
+export async function getQuoteLikeNotificationsForCurrentUser(limit = 10) {
+    try {
+        const current = await getCurrentUserAndRole()
+        const cookieStore = await cookies()
+        const supabase = createClient(cookieStore)
+        let dbClient: any = supabase
+        try {
+            dbClient = createAdminClient()
+        } catch {
+            dbClient = supabase
+        }
+
+        const safeLimit = Math.min(Math.max(Math.trunc(Number(limit) || 10), 1), 25)
+
+        const { data: reactions, error: reactionsError } = await (dbClient
+            .from('crm_quote_reactions') as any)
+            .select('id, quote_id, user_id, reaction_type, created_at, crm_quotes!inner(id, quote_author, quote_text, contributed_by)')
+            .eq('reaction_type', 'like')
+            .eq('crm_quotes.contributed_by', current.userId)
+            .neq('user_id', current.userId)
+            .order('created_at', { ascending: false })
+            .limit(safeLimit)
+
+        if (reactionsError) {
+            if (isMissingTableError(reactionsError, 'crm_quote_reactions')) {
+                return { success: true, data: [] as any[] }
+            }
+            throw reactionsError
+        }
+
+        const rows = Array.isArray(reactions) ? reactions : []
+        const likerIds = Array.from(new Set(
+            rows
+                .map((row: any) => String(row?.user_id || ''))
+                .filter(Boolean)
+        ))
+
+        let likerNameById = new Map<string, string>()
+        if (likerIds.length > 0) {
+            const { data: profiles, error: profilesError } = await (dbClient
+                .from('profiles') as any)
+                .select('id, full_name')
+                .in('id', likerIds)
+            if (profilesError) throw profilesError
+            likerNameById = new Map(
+                (Array.isArray(profiles) ? profiles : []).map((p: any) => [
+                    String(p?.id || ''),
+                    String(p?.full_name || 'Usuario')
+                ])
+            )
+        }
+
+        const items = rows.map((row: any) => {
+            const quote = Array.isArray(row?.crm_quotes) ? row.crm_quotes[0] : row?.crm_quotes
+            return {
+                id: Number(row?.id || 0),
+                quote_id: Number(row?.quote_id || 0),
+                liker_user_id: String(row?.user_id || ''),
+                liker_name: likerNameById.get(String(row?.user_id || '')) || 'Usuario',
+                created_at: String(row?.created_at || ''),
+                quote_author: String(quote?.quote_author || ''),
+                quote_text: String(quote?.quote_text || '')
+            }
+        }).filter((item) => item.id > 0 && item.created_at)
+
+        return { success: true, data: items }
     } catch (error: any) {
         return { success: false, error: error.message, data: [] as any[] }
     }

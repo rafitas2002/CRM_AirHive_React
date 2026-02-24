@@ -29,6 +29,7 @@ import {
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import CorrelationScatterWindow from '@/components/insights/CorrelationScatterWindow'
 import PostponeForecastWindow from '@/components/insights/PostponeForecastWindow'
+import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type CorrelationScope = 'team' | 'individual'
@@ -843,9 +844,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                         <tr key={item.userId} className='transition-colors group hover:bg-black/5'>
                                             <td className='px-8 py-5'>
                                                 <div className='flex items-center gap-3'>
-                                                    <div className='w-10 h-10 rounded-full bg-gradient-to-tr from-[#2048FF] to-[#8B5CF6] flex items-center justify-center text-white font-black text-sm shadow-md'>
-                                                        {item.name.charAt(0)}
-                                                    </div>
+                                                    <TableEmployeeAvatar name={item.name} size='md' />
                                                     <p className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>{item.name}</p>
                                                 </div>
                                             </td>
