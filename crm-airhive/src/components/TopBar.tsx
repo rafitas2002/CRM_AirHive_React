@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
+import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
 import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
@@ -27,6 +28,15 @@ export default function TopBar() {
         requester_name: string
         created_at: string
     }>>([])
+    const [quoteLikeNotificationItems, setQuoteLikeNotificationItems] = useState<Array<{
+        id: number
+        quote_id: number
+        liker_user_id: string
+        liker_name: string
+        created_at: string
+        quote_author: string
+        quote_text: string
+    }>>([])
     const [badgeNotificationItems, setBadgeNotificationItems] = useState<Array<{
         id: string
         label: string
@@ -39,13 +49,16 @@ export default function TopBar() {
         badgeKey?: string
     }>>([])
     const [badgeUnreadCount, setBadgeUnreadCount] = useState(0)
+    const [quoteLikeUnreadCount, setQuoteLikeUnreadCount] = useState(0)
     const [industryCatalog, setIndustryCatalog] = useState<Array<{ id: string; name: string }>>([])
     const quoteNotificationsRef = useRef<HTMLDivElement | null>(null)
     const lastBadgeListSignatureRef = useRef('')
     const lastQuoteListSignatureRef = useRef('')
+    const lastQuoteLikeListSignatureRef = useRef('')
     const logoDimensions = { width: 248, height: 36 }
     const dropdownIconClass = 'w-[18px] h-[18px] text-white/80 group-hover/item:text-white transition-colors'
     const badgeSeenStorageKey = userId ? `airhive_seen_badge_notifications_${userId}` : ''
+    const quoteLikeSeenStorageKey = userId ? `airhive_seen_quote_like_notifications_${userId}` : ''
     const badgeIndustryVisualMap = useMemo(() => buildIndustryBadgeVisualMap(industryCatalog), [industryCatalog])
     const industryNameById = useMemo(
         () => new Map(industryCatalog.map((row) => [String(row.id), String(row.name)])),
@@ -172,6 +185,80 @@ export default function TopBar() {
             supabase.removeChannel(channel)
         }
     }, [isAdmin, userId, supabase])
+
+    useEffect(() => {
+        if (!userId) return
+        let cancelled = false
+
+        const readSeen = () => {
+            if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return new Set<string>()
+            try {
+                const raw = localStorage.getItem(quoteLikeSeenStorageKey)
+                const parsed = raw ? JSON.parse(raw) : []
+                if (!Array.isArray(parsed)) return new Set<string>()
+                return new Set(parsed.map((x) => String(x)))
+            } catch {
+                return new Set<string>()
+            }
+        }
+
+        const persistSeen = (ids: Set<string>) => {
+            if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return
+            try {
+                localStorage.setItem(quoteLikeSeenStorageKey, JSON.stringify(Array.from(ids).slice(-200)))
+            } catch {
+                // noop
+            }
+        }
+
+        const loadQuoteLikeNotifications = async () => {
+            const result = await getQuoteLikeNotificationsForCurrentUser(12)
+            if (cancelled || !result?.success) return
+
+            const items = (Array.isArray(result.data) ? result.data : [])
+                .map((row: any) => ({
+                    id: Number(row?.id || 0),
+                    quote_id: Number(row?.quote_id || 0),
+                    liker_user_id: String(row?.liker_user_id || ''),
+                    liker_name: String(row?.liker_name || 'Usuario'),
+                    created_at: String(row?.created_at || ''),
+                    quote_author: String(row?.quote_author || ''),
+                    quote_text: String(row?.quote_text || '')
+                }))
+                .filter((item) => item.id > 0 && item.created_at)
+
+            const signature = items.map((item) => `${item.id}:${item.created_at}`).join('|')
+            if (signature !== lastQuoteLikeListSignatureRef.current) {
+                lastQuoteLikeListSignatureRef.current = signature
+                setQuoteLikeNotificationItems(items)
+            }
+
+            const seen = readSeen()
+            const validIds = new Set(items.map((item) => `qlike:${item.id}`))
+            const prunedSeen = new Set(Array.from(seen).filter((id) => validIds.has(id)))
+            if (prunedSeen.size !== seen.size) persistSeen(prunedSeen)
+
+            const unread = items.filter((item) => !prunedSeen.has(`qlike:${item.id}`)).length
+            setQuoteLikeUnreadCount((prev) => (prev === unread ? prev : unread))
+        }
+
+        void loadQuoteLikeNotifications()
+        const interval = setInterval(loadQuoteLikeNotifications, 30000)
+        const channel = supabase
+            .channel(`topbar-quote-likes-${userId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'crm_quote_reactions' },
+                () => { void loadQuoteLikeNotifications() }
+            )
+            .subscribe()
+
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+            supabase.removeChannel(channel)
+        }
+    }, [userId, quoteLikeSeenStorageKey, supabase])
 
     useEffect(() => {
         if (!userId) return
@@ -433,7 +520,7 @@ export default function TopBar() {
         return () => document.removeEventListener('mousedown', onClickOutside)
     }, [])
 
-    const totalNotificationCount = quotePendingCount + badgeUnreadCount
+    const totalNotificationCount = quotePendingCount + badgeUnreadCount + quoteLikeUnreadCount
 
     const markBadgeNotificationsAsRead = () => {
         if (typeof window === 'undefined' || !badgeSeenStorageKey) return
@@ -441,6 +528,17 @@ export default function TopBar() {
             const ids = badgeNotificationItems.map((item) => item.id).slice(0, 200)
             localStorage.setItem(badgeSeenStorageKey, JSON.stringify(ids))
             setBadgeUnreadCount(0)
+        } catch {
+            // noop
+        }
+    }
+
+    const markQuoteLikeNotificationsAsRead = () => {
+        if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return
+        try {
+            const ids = quoteLikeNotificationItems.map((item) => `qlike:${item.id}`).slice(0, 200)
+            localStorage.setItem(quoteLikeSeenStorageKey, JSON.stringify(ids))
+            setQuoteLikeUnreadCount(0)
         } catch {
             // noop
         }
@@ -674,7 +772,10 @@ export default function TopBar() {
                             onClick={() => {
                                 setQuoteNotificationOpen((prev) => {
                                     const next = !prev
-                                    if (next) markBadgeNotificationsAsRead()
+                                    if (next) {
+                                        markBadgeNotificationsAsRead()
+                                        markQuoteLikeNotificationsAsRead()
+                                    }
                                     return next
                                 })
                             }}
@@ -704,8 +805,8 @@ export default function TopBar() {
                                     </span>
                                 </div>
                                 <div className='max-h-[340px] overflow-y-auto'>
-                                    {badgeNotificationItems.length === 0 && !isAdmin && (
-                                        <p className='px-4 py-4 text-sm text-white/70'>Sin notificaciones de badges por ahora.</p>
+                                    {badgeNotificationItems.length === 0 && quoteLikeNotificationItems.length === 0 && !isAdmin && (
+                                        <p className='px-4 py-4 text-sm text-white/70'>Sin notificaciones por ahora.</p>
                                     )}
 
                                     {badgeNotificationItems.length > 0 && (
@@ -755,6 +856,32 @@ export default function TopBar() {
                                                 </div>
                                                 )
                                             })}
+                                        </>
+                                    )}
+
+                                    {quoteLikeNotificationItems.length > 0 && (
+                                        <>
+                                            <div className='px-4 py-2 border-b border-white/10'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300'>
+                                                    Likes en tus frases
+                                                </p>
+                                            </div>
+                                            {quoteLikeNotificationItems.map((item) => (
+                                                <div
+                                                    key={`quote-like-${item.id}`}
+                                                    className='px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
+                                                >
+                                                    <p className='text-sm font-semibold text-white'>
+                                                        {item.liker_name} le dio like a tu frase
+                                                    </p>
+                                                    <p className='text-xs mt-1 text-white/75 truncate'>
+                                                        {item.quote_author ? `Autor: ${item.quote_author} • ` : ''}"{item.quote_text}"
+                                                    </p>
+                                                    <p className='text-[11px] mt-1 text-emerald-300/90'>
+                                                        {new Date(item.created_at).toLocaleString('es-MX')}
+                                                    </p>
+                                                </div>
+                                            ))}
                                         </>
                                     )}
 
