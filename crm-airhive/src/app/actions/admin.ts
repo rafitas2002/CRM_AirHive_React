@@ -94,7 +94,10 @@ export async function getAdminCorrelationData() {
             { data: taskHistory, error: taskError },
             { data: preLeads, error: preError },
             { data: crmEvents, error: eventsError },
-            { data: reliabilityMetricsRows, error: reliabilityMetricsError }
+            { data: reliabilityMetricsRows, error: reliabilityMetricsError },
+            { data: companyProjectAssignments, error: companyProjectAssignmentsError },
+            { data: sellerIndustryBadgesRows, error: sellerIndustryBadgesError },
+            { data: sellerSpecialBadgesRows, error: sellerSpecialBadgesError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name') as any,
             dbClient.from('employee_profiles').select('*') as any,
@@ -109,7 +112,11 @@ export async function getAdminCorrelationData() {
             dbClient.from('crm_events')
                 .select('user_id, event_type, created_at')
                 .gte('created_at', eventsWindowStart.toISOString()) as any,
-            dbClient.from('seller_forecast_reliability_metrics').select('*') as any
+            dbClient.from('seller_forecast_reliability_metrics').select('*') as any,
+            dbClient.from('empresa_proyecto_asignaciones')
+                .select('proyecto_id, source_lead_id, assigned_by, assignment_stage') as any,
+            dbClient.from('seller_industry_badges').select('seller_id, level').gt('level', 0) as any,
+            dbClient.from('seller_special_badges').select('seller_id, level').gt('level', 0) as any
         ])
 
         if (profError) throw profError
@@ -128,6 +135,15 @@ export async function getAdminCorrelationData() {
         if (reliabilityMetricsError && reliabilityMetricsError.code !== '42P01') {
             throw reliabilityMetricsError
         }
+        if (companyProjectAssignmentsError && companyProjectAssignmentsError.code !== '42P01') {
+            throw companyProjectAssignmentsError
+        }
+        if (sellerIndustryBadgesError && sellerIndustryBadgesError.code !== '42P01') {
+            throw sellerIndustryBadgesError
+        }
+        if (sellerSpecialBadgesError && sellerSpecialBadgesError.code !== '42P01') {
+            throw sellerSpecialBadgesError
+        }
 
         const reliabilityMetricsByUser = new Map<string, any>(
             ((reliabilityMetricsRows || []) as any[]).map((row: any) => [row.seller_id, row])
@@ -139,6 +155,18 @@ export async function getAdminCorrelationData() {
             acc[evt.user_id].push(evt)
             return acc
         }, {})
+
+        const badgesAccumulatedBySeller = new Map<string, number>()
+        ;((sellerIndustryBadgesRows || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.seller_id || '')
+            if (!sellerId) return
+            badgesAccumulatedBySeller.set(sellerId, (badgesAccumulatedBySeller.get(sellerId) || 0) + 1)
+        })
+        ;((sellerSpecialBadgesRows || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.seller_id || '')
+            if (!sellerId) return
+            badgesAccumulatedBySeller.set(sellerId, (badgesAccumulatedBySeller.get(sellerId) || 0) + 1)
+        })
 
         // 3. Aggregate Performance by User
         const performanceMap: Record<string, {
@@ -184,6 +212,26 @@ export async function getAdminCorrelationData() {
         const preLeadById = new Map<number, any>(
             (preLeads || []).map((pl: any) => [pl.id, pl])
         )
+        const clientById = new Map<number, any>(
+            (clients || []).map((c: any) => [Number(c.id), c])
+        )
+
+        const implementedProjectsBySeller = new Map<string, { totalClosedProjects: number, uniqueProjectIds: Set<string> }>()
+        ;((companyProjectAssignments || []) as any[])
+            .filter((row: any) => String(row?.assignment_stage || '') === 'implemented_real')
+            .forEach((row: any) => {
+                const sourceLeadId = Number(row?.source_lead_id || 0)
+                const sourceLead = sourceLeadId ? clientById.get(sourceLeadId) : null
+                const sellerId = String(sourceLead?.owner_id || row?.assigned_by || '')
+                const projectId = String(row?.proyecto_id || '')
+                if (!sellerId || !projectId) return
+                if (!implementedProjectsBySeller.has(sellerId)) {
+                    implementedProjectsBySeller.set(sellerId, { totalClosedProjects: 0, uniqueProjectIds: new Set<string>() })
+                }
+                const bucket = implementedProjectsBySeller.get(sellerId)!
+                bucket.totalClosedProjects += 1
+                bucket.uniqueProjectIds.add(projectId)
+            })
 
         const pearson = (pairs: Array<{ x: number, y: number }>) => {
             const valid = pairs.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
@@ -345,6 +393,8 @@ export async function getAdminCorrelationData() {
 
             // Activity telemetry (last 90 days) from crm_events
             const userEvents = eventsByUser[p.id] || []
+            const projectStats = implementedProjectsBySeller.get(String(p.id))
+            const badgesAccumulated = Number(badgesAccumulatedBySeller.get(String(p.id)) || 0)
             const activityDays = new Set(
                 userEvents
                     .map((evt: any) => evt.created_at ? new Date(evt.created_at).toISOString().slice(0, 10) : null)
@@ -368,6 +418,7 @@ export async function getAdminCorrelationData() {
                 medalScore,
                 medalRatio,
                 completedTasks,
+                badgesAccumulated,
                 growth,
                 meetingsPerClose,
                 forecastAccuracy,
@@ -398,6 +449,9 @@ export async function getAdminCorrelationData() {
                 taskStatusChangedEvents90d: countByType.task_status_changed || 0,
                 preLeadCreatedEvents90d: countByType.pre_lead_created || 0,
                 preLeadConvertedEvents90d: countByType.pre_lead_converted || 0
+                ,
+                closedProjectsCount: Number(projectStats?.totalClosedProjects || 0),
+                closedDistinctProjectsCount: Number(projectStats?.uniqueProjectIds?.size || 0)
             }
         })
 

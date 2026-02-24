@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Trophy, TrendingUp, Info } from 'lucide-react'
+import { Trophy, TrendingUp, Info, Sparkles, X } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
 import { rankRaceItems } from '@/lib/raceRanking'
 
@@ -11,6 +12,7 @@ interface SellerRaceData {
     value: number
     percentage: number // Progress percentage (e.g., vs goal)
     reliability: number
+    rawValueBeforeAdjustment?: number
 }
 
 interface SellerRaceProps {
@@ -19,6 +21,16 @@ interface SellerRaceProps {
     title?: string
     subtitle?: string
     goalLabel?: string
+    forecastRace?: {
+        sellers: SellerRaceData[]
+        maxGoal: number
+        title?: string
+        subtitle?: string
+        goalLabel?: string
+    } | null
+    showInfoButton?: boolean
+    showForecastButton?: boolean
+    animationSpeed?: 'normal' | 'fast'
 }
 
 export default function SellerRace({
@@ -26,9 +38,14 @@ export default function SellerRace({
     maxGoal,
     title = 'Carrera de Cierre',
     subtitle = 'Valor en Negociación vs Meta de Equipo',
-    goalLabel = 'Meta'
+    goalLabel = 'Meta',
+    forecastRace = null,
+    showInfoButton = true,
+    showForecastButton = true,
+    animationSpeed = 'normal'
 }: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
+    const [isForecastOpen, setIsForecastOpen] = useState(false)
     const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
     const orderedSellers = rankedSellers.map((entry) => entry.item)
 
@@ -58,6 +75,16 @@ export default function SellerRace({
         return positions
     }, [orderedSellers])
 
+    const moneyFormatter = useMemo(() => new Intl.NumberFormat('es-MX', {
+        maximumFractionDigits: 0
+    }), [])
+
+    const isFastAnimation = animationSpeed === 'fast'
+    const barDuration = isFastAnimation ? 0.55 : 1.5
+    const barDelayStep = isFastAnimation ? 0.04 : 0.1
+    const mascotDuration = isFastAnimation ? 1.15 : 4.5
+    const mascotDelayStep = isFastAnimation ? 0.06 : 0.2
+
     return (
         <div className='p-8 rounded-3xl border shadow-sm space-y-8 relative' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='flex justify-between items-end'>
@@ -67,13 +94,25 @@ export default function SellerRace({
                             <Trophy className='w-5 h-5 text-amber-500' />
                             {title}
                         </h3>
-                        <button
-                            onClick={() => setIsINFOOpen(true)}
-                            className='w-7 h-7 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] hover:bg-blue-500/10 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-105'
-                            title="Ver Detalles y Medallero"
-                        >
-                            <Info size={14} />
-                        </button>
+                        {showForecastButton && forecastRace && forecastRace.sellers.length > 0 && (
+                            <button
+                                onClick={() => setIsForecastOpen(true)}
+                                className='h-7 px-2.5 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] hover:bg-blue-500/10 transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer hover:scale-[1.02]'
+                                title='Abrir carrera de pronóstico ajustado'
+                            >
+                                <Sparkles size={12} />
+                                <span className='text-[9px] font-black uppercase tracking-[0.14em]'>Pronóstico</span>
+                            </button>
+                        )}
+                        {showInfoButton && (
+                            <button
+                                onClick={() => setIsINFOOpen(true)}
+                                className='w-7 h-7 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] text-[var(--text-secondary)] hover:text-[#2048FF] hover:border-[#2048FF] hover:bg-blue-500/10 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-105'
+                                title="Ver Detalles y Medallero"
+                            >
+                                <Info size={14} />
+                            </button>
+                        )}
                     </div>
                     <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>{subtitle}</p>
                 </div>
@@ -105,8 +144,46 @@ export default function SellerRace({
                                     <span className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{seller.name}</span>
                                 </div>
                                 <div className='flex items-center gap-3'>
-                                    <div className='text-right'>
-                                        <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>${seller.value.toLocaleString()}</p>
+                                    <div className='text-right relative'>
+                                        <p
+                                            className={`text-xs font-black ${typeof seller.rawValueBeforeAdjustment === 'number' ? 'cursor-help' : ''}`}
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            ${moneyFormatter.format(Math.round(seller.value))}
+                                        </p>
+                                        {typeof seller.rawValueBeforeAdjustment === 'number' && (
+                                            <div className='pointer-events-none absolute right-0 bottom-full mb-2 z-30 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0'>
+                                                <div
+                                                    className='min-w-[180px] max-w-[240px] rounded-xl border shadow-xl px-3 py-2 text-left backdrop-blur-md'
+                                                    style={{
+                                                        background: 'color-mix(in srgb, var(--card-bg) 84%, black 16%)',
+                                                        borderColor: 'var(--card-border)'
+                                                    }}
+                                                >
+                                                    <p
+                                                        className='text-[9px] font-black uppercase tracking-[0.14em]'
+                                                        style={{ color: 'var(--text-secondary)', opacity: 0.8 }}
+                                                    >
+                                                        Registrado sin ajuste
+                                                    </p>
+                                                    <p
+                                                        className='text-xs font-black mt-1 tabular-nums'
+                                                        style={{ color: 'var(--text-primary)' }}
+                                                    >
+                                                        ${moneyFormatter.format(Math.round(seller.rawValueBeforeAdjustment))}
+                                                    </p>
+                                                    <div
+                                                        className='absolute right-3 -bottom-1.5 w-3 h-3 rotate-45 border'
+                                                        style={{
+                                                            background: 'color-mix(in srgb, var(--card-bg) 84%, black 16%)',
+                                                            borderColor: 'var(--card-border)',
+                                                            borderLeft: 'none',
+                                                            borderTop: 'none'
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                         <p className='text-[8px] font-bold uppercase' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>Conf: {seller.reliability.toFixed(1)}%</p>
                                     </div>
                                 </div>
@@ -117,7 +194,7 @@ export default function SellerRace({
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${Math.min(100, progress)}%` }}
-                                        transition={{ duration: 1.5, delay: index * 0.1, ease: 'easeOut' }}
+                                        transition={{ duration: barDuration, delay: index * barDelayStep, ease: 'easeOut' }}
                                         className={`h-full rounded-full shadow-lg relative ${position === 1 ? 'bg-gradient-to-r from-[#1700AC] to-[#2048FF]' :
                                             position === 2 ? 'bg-gradient-to-r from-[#4F46E5] to-[#6366F1]' :
                                                 'bg-gradient-to-r from-gray-400 to-gray-500'
@@ -142,7 +219,7 @@ export default function SellerRace({
                                         scaleX: -1
                                     }}
                                     transition={{
-                                        left: { duration: 4.5, delay: index * 0.2, ease: 'easeInOut' },
+                                        left: { duration: mascotDuration, delay: index * mascotDelayStep, ease: 'easeInOut' },
                                         y: { repeat: Infinity, duration: 1.0, ease: 'easeInOut' },
                                         rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' }
                                     }}
@@ -175,7 +252,58 @@ export default function SellerRace({
                 <span>Meta</span>
             </div>
 
-            <RaceInfoModal isOpen={isINFOOpen} onClose={() => setIsINFOOpen(false)} />
+            {showInfoButton && (
+                <RaceInfoModal isOpen={isINFOOpen} onClose={() => setIsINFOOpen(false)} />
+            )}
+
+            {showForecastButton && forecastRace && isForecastOpen && typeof document !== 'undefined' && createPortal((
+                <div className='fixed inset-0 z-[10060] pointer-events-none'>
+                    <div
+                        className='absolute inset-0 bg-black/30'
+                        onClick={() => setIsForecastOpen(false)}
+                    />
+
+                    <div className='absolute inset-x-0 top-[70px] bottom-0 flex items-center justify-center p-4 md:p-6 pointer-events-none'>
+                        <div className='w-full max-w-5xl max-h-[calc(100vh-110px)] rounded-[28px] border shadow-2xl overflow-hidden pointer-events-auto animate-in slide-in-from-bottom duration-300'
+                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-6 md:px-8 py-4 flex items-center justify-between border-b shrink-0' style={{ borderBottomColor: 'var(--card-border)', background: 'var(--background)' }}>
+                        <div>
+                            <p className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>
+                                Carrera pronosticada
+                            </p>
+                            <p className='text-sm font-bold mt-1' style={{ color: 'var(--text-primary)' }}>
+                                Pronóstico ajustado con confiabilidad de probabilidad, valor y fecha
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setIsForecastOpen(false)}
+                            className='h-11 px-5 rounded-2xl border font-black transition-all uppercase text-[10px] tracking-widest hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95 inline-flex items-center gap-2 cursor-pointer'
+                            style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                            title='Regresar'
+                        >
+                            <X size={14} />
+                            Regresar
+                        </button>
+                    </div>
+
+                    <div className='overflow-y-auto custom-scrollbar p-4 md:p-8 max-h-[calc(100vh-190px)]'>
+                        <div className='max-w-5xl mx-auto'>
+                            <SellerRace
+                                sellers={forecastRace.sellers}
+                                maxGoal={forecastRace.maxGoal}
+                                title={forecastRace.title ?? 'Carrera de Pronóstico'}
+                                subtitle={forecastRace.subtitle ?? 'Pronóstico ajustado del mes'}
+                                goalLabel={forecastRace.goalLabel ?? goalLabel}
+                                showInfoButton={false}
+                                showForecastButton={false}
+                                animationSpeed='fast'
+                            />
+                        </div>
+                    </div>
+                </div>
+                    </div>
+                </div>
+            ), document.body)}
         </div>
     )
 }
