@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { getUserActivitySummary } from '@/app/actions/admin'
-import { getUserPublicBadgesSummary } from '@/app/actions/badges'
+import { getUserPublicBadgesSummary, grantAdminBadgeToSeller } from '@/app/actions/badges'
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
@@ -48,6 +48,14 @@ import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
+import { getIndustryBadgeLevelMedallionVisual } from '@/lib/industryBadgeVisuals'
+
+const BADGE_GRANT_ALLOWED_ADMINS = new Set([
+    'Jesus Gracia',
+    'Rafael Sedas',
+    'Eduardo Castro',
+    'Alberto Castro'
+])
 
 interface DetailedUserModalProps {
     isOpen: boolean
@@ -79,10 +87,20 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
     const [activityData, setActivityData] = useState<any>(null)
     const [loadingActivity, setLoadingActivity] = useState(false)
     const [loadingBadges, setLoadingBadges] = useState(false)
+    const [grantingAdminBadge, setGrantingAdminBadge] = useState(false)
+    const [grantAdminBadgeNotice, setGrantAdminBadgeNotice] = useState<string>('')
+    const [grantAdminBadgeError, setGrantAdminBadgeError] = useState<string>('')
 
     const isSelf = currentUser?.id === user?.id
     const isAdmin = currentUser?.role === 'admin'
     const canSeeAll = isSelf || isAdmin
+    const viewerName = String(currentUser?.full_name || '').trim()
+    const viewedUserIsGrantingAdmin = String(user?.role || '') === 'admin'
+        && BADGE_GRANT_ALLOWED_ADMINS.has(String(user?.full_name || '').trim())
+    const canGrantAdminBadge = isAdmin
+        && !isSelf
+        && !viewedUserIsGrantingAdmin
+        && BADGE_GRANT_ALLOWED_ADMINS.has(viewerName)
 
     async function fetchActivity() {
         if (!user?.id) return
@@ -105,6 +123,30 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             }))
         }
         setLoadingBadges(false)
+    }
+
+    async function handleGrantAdminBadgeFromModal() {
+        if (!canGrantAdminBadge || grantingAdminBadge || !user?.id) return
+        const confirmed = window.confirm('¿Deseas otorgar tu Distinción Administrativa a este usuario? Recuerda: solo puedes otorgar un badge al mes.')
+        if (!confirmed) return
+
+        setGrantAdminBadgeNotice('')
+        setGrantAdminBadgeError('')
+        setGrantingAdminBadge(true)
+        const res = await grantAdminBadgeToSeller(String(user.id))
+        setGrantingAdminBadge(false)
+
+        if (!res.success) {
+            setGrantAdminBadgeError(String(res.error || 'No se pudo otorgar el badge.'))
+            return
+        }
+
+        setGrantAdminBadgeNotice(String(res.message || 'Badge otorgado correctamente.'))
+        if (isAdmin) {
+            await fetchActivity()
+        } else {
+            await fetchBadgesOnly()
+        }
     }
 
     useEffect(() => {
@@ -165,10 +207,14 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
 
         if (badgeType === 'industry') {
             const industryVisual = getIndustryBadgeVisualFromMap(String(badge?.key || ''), industryVisualMap, String(badge?.label || 'Industria'))
+            const levelVisual = getIndustryBadgeLevelMedallionVisual(Number(badge?.level || 1), industryVisual)
             return {
                 icon: industryVisual.icon,
                 className: industryVisual.containerClass,
-                iconClassName: industryVisual.iconClass
+                iconClassName: industryVisual.iconClass,
+                coreBorderColorClassName: levelVisual.coreBorderColorClassName,
+                coreBorderStyle: levelVisual.coreBorderStyle,
+                ringStyle: levelVisual.ringStyle
             }
         }
         const shared = getSpecialBadgeVisualSpec(badgeType, String(badge?.label || ''), String(badge?.key || ''))
@@ -674,12 +720,36 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                             ) : (
                                 <div className='animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4'>
                                     <div className="rounded-3xl border p-5 md:p-6" style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
-                                        <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] mb-2" style={{ color: 'var(--input-focus)' }}>
-                                            <Award size={14} /> Badges acumuladas
-                                        </h3>
-                                        <p className="text-sm font-semibold mb-5" style={{ color: 'var(--text-secondary)', opacity: 0.9 }}>
-                                            Vista unificada de badges de industria y especiales. Hover para ver detalle completo.
-                                        </p>
+                                        <div className='flex flex-wrap items-start justify-between gap-3 mb-2'>
+                                            <div>
+                                                <h3 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: 'var(--input-focus)' }}>
+                                                    <Award size={14} /> Badges acumuladas
+                                                </h3>
+                                                <p className="text-sm font-semibold mt-2" style={{ color: 'var(--text-secondary)', opacity: 0.9 }}>
+                                                    Vista unificada de badges de industria y especiales. Hover para ver detalle completo.
+                                                </p>
+                                            </div>
+                                            {canGrantAdminBadge && (
+                                                <button
+                                                    type='button'
+                                                    onClick={handleGrantAdminBadgeFromModal}
+                                                    disabled={grantingAdminBadge}
+                                                    className='px-4 py-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-colors cursor-pointer bg-emerald-500/15 border-emerald-400/35 text-emerald-200 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed'
+                                                >
+                                                    {grantingAdminBadge ? 'Otorgando...' : 'Otorgar Distinción'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {grantAdminBadgeNotice && (
+                                            <div className='mb-4 rounded-xl border px-3 py-2 text-xs font-bold' style={{ borderColor: 'rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.10)', color: '#86efac' }}>
+                                                {grantAdminBadgeNotice}
+                                            </div>
+                                        )}
+                                        {grantAdminBadgeError && (
+                                            <div className='mb-4 rounded-xl border px-3 py-2 text-xs font-bold' style={{ borderColor: 'rgba(244,63,94,0.35)', background: 'rgba(244,63,94,0.08)', color: '#fda4af' }}>
+                                                {grantAdminBadgeError}
+                                            </div>
+                                        )}
                                         <div className="space-y-5">
                                             {loadingBadges && !isAdmin && !activityData?.badges ? (
                                                 <div className="rounded-2xl border px-4 py-5 text-center text-xs font-bold" style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
@@ -850,7 +920,7 @@ function AccumulatedBadgeCard({
                         footerBubbleText={isSeniorityBadge ? String(tenureMetrics?.years ?? overlayNumber ?? '') : null}
                         ringStyle={String((visual as any)?.ringStyle || 'match') as any}
                         coreBorderColorClassName={String((visual as any)?.coreBorderColorClassName || '')
-                            || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.type || '')) ? 'border-white/90' : '')}
+                            || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.type || '')) ? '!border-white/90' : '')}
                         size='md'
                         iconSize={18}
                         strokeWidth={2.5}

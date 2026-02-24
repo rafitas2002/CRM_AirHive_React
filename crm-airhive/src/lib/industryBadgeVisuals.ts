@@ -99,7 +99,20 @@ export type BadgeVisual = {
     icon: LucideIcon
     containerClass: string
     iconClass: string
+    coreBorderColorClassName?: string
+    accentCoreBorderColorHex?: string
 }
+
+export type IndustryBadgeRingStyle =
+    | 'match'
+    | 'gold'
+    | 'bronze'
+    | 'silver'
+    | 'royal'
+    | 'royal_dark'
+    | 'royal_dark_vivid'
+    | 'royal_gold'
+    | 'royal_purple'
 
 const METALLIC_CONTAINER =
     'border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15),0_6px_14px_rgba(15,23,42,0.22)]'
@@ -199,7 +212,7 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
     { keywords: ['biotecnologia', 'laboratorio'], icons: [Microscope, TestTube, Beaker, FlaskConical, HeartPulse] }
 ]
 
-const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string }> = [
+const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string; coreBorderColorClassName?: string; accentCoreBorderColorHex?: string }> = [
     {
         keywords: ['salud farmaceut', 'farmaceutica', 'farmacéutica', 'pharma'],
         icon: Pill,
@@ -238,7 +251,9 @@ const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon;
     {
         keywords: ['alimentos', 'bebidas', 'restaur', 'food'],
         icon: Utensils,
-        colorClass: 'bg-gradient-to-br from-[#fb923c] to-[#ea580c]'
+        colorClass: 'bg-gradient-to-br from-[#fb923c] to-[#ea580c]',
+        coreBorderColorClassName: '!border-[#fdba74]',
+        accentCoreBorderColorHex: '#fdba74'
     }
 ]
 
@@ -258,11 +273,23 @@ function hashString(value: string) {
     return Math.abs(hash)
 }
 
-function buildVisual(icon: LucideIcon, colorClass: string): BadgeVisual {
+function getFirstHexFromGradientClass(colorClass: string): string | undefined {
+    const match = colorClass.match(/#([0-9a-fA-F]{6})/g)
+    return match?.[0]
+}
+
+function buildVisual(
+    icon: LucideIcon,
+    colorClass: string,
+    coreBorderColorClassName = '!border-white/80',
+    accentCoreBorderColorHex?: string
+): BadgeVisual {
     return {
         icon,
         containerClass: `${METALLIC_CONTAINER} ${colorClass}`,
-        iconClass: 'text-white'
+        iconClass: 'text-white',
+        coreBorderColorClassName,
+        accentCoreBorderColorHex: accentCoreBorderColorHex || getFirstHexFromGradientClass(colorClass)
     }
 }
 
@@ -309,11 +336,41 @@ function getFixedIndustryVisual(industryName?: string): BadgeVisual | null {
 
     for (const rule of FIXED_INDUSTRY_VISUAL_RULES) {
         if (rule.keywords.some((k) => normalized.includes(k))) {
-            return buildVisual(rule.icon, rule.colorClass)
+            return buildVisual(
+                rule.icon,
+                rule.colorClass,
+                rule.coreBorderColorClassName || '!border-white/80',
+                rule.accentCoreBorderColorHex
+            )
         }
     }
 
     return null
+}
+
+export function getIndustryBadgeLevelMedallionVisual(
+    level: number | undefined | null,
+    badgeVisual?: BadgeVisual | null
+): {
+    ringStyle: IndustryBadgeRingStyle
+    coreBorderColorClassName?: string
+    coreBorderStyle?: { borderColor?: string }
+} {
+    const safeLevel = Math.max(1, Math.min(8, Number(level || 1)))
+    const accentHex = badgeVisual?.accentCoreBorderColorHex
+
+    const colorCore = accentHex
+        ? { coreBorderStyle: { borderColor: accentHex } }
+        : { coreBorderColorClassName: badgeVisual?.coreBorderColorClassName || '!border-white/80' }
+
+    if (safeLevel === 1) return { ringStyle: 'match', coreBorderColorClassName: '!border-white' }
+    if (safeLevel === 2) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#cd7f32]' }
+    if (safeLevel === 3) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#e2e8f0]' }
+    if (safeLevel === 4) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#fde047]' }
+    if (safeLevel === 5) return { ringStyle: 'bronze', ...colorCore }
+    if (safeLevel === 6) return { ringStyle: 'silver', ...colorCore }
+    if (safeLevel === 7) return { ringStyle: 'gold', ...colorCore }
+    return { ringStyle: 'royal', ...colorCore }
 }
 
 export function buildIndustryBadgeVisualMap(

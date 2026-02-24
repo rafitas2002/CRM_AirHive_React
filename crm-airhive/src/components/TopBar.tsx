@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
 import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
-import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 
 export default function TopBar() {
@@ -1009,6 +1009,7 @@ function TopBarBadgeNotificationMedallion({
     item: {
         id: string
         label: string
+        level: number
         sourceType: 'industry' | 'special'
         industriaId?: string
         badgeType?: string
@@ -1018,11 +1019,15 @@ function TopBarBadgeNotificationMedallion({
 }) {
     if (item.sourceType === 'industry') {
         const visual = getIndustryBadgeVisualFromMap(item.industriaId, industryVisualMap, item.label)
+        const levelVisual = getIndustryBadgeLevelMedallionVisual(item.level, visual)
         return (
             <BadgeMedallion
                 icon={visual.icon}
                 centerClassName={visual.containerClass}
                 iconClassName={visual.iconClass}
+                ringStyle={levelVisual.ringStyle}
+                coreBorderColorClassName={levelVisual.coreBorderColorClassName}
+                coreBorderStyle={levelVisual.coreBorderStyle}
                 size='sm'
                 iconSize={16}
                 strokeWidth={2.4}

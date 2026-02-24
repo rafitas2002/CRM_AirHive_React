@@ -1,5 +1,6 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 type BadgeMedallionSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
@@ -20,6 +21,7 @@ interface BadgeMedallionProps {
     strokeWidth?: number
     ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
     coreBorderColorClassName?: string
+    coreBorderStyle?: CSSProperties
     cornerTagText?: string | null
     cornerTagClassName?: string
     cornerTagVariant?: 'label' | 'dot'
@@ -124,6 +126,7 @@ export default function BadgeMedallion({
     strokeWidth = 2.5,
     ringStyle = 'match',
     coreBorderColorClassName = '',
+    coreBorderStyle,
     cornerTagText = null,
     cornerTagClassName = '',
     cornerTagVariant = 'label',
@@ -211,7 +214,10 @@ export default function BadgeMedallion({
                 />
             ) : null}
 
-            <span className={`absolute ${activeCoreInset} rounded-full overflow-hidden ${coreBorderClass} ${defaultCoreBorderToneClass} flex items-center justify-center ${centerClassName} ${coreBorderColorClassName}`.trim()}>
+            <span
+                className={`absolute ${activeCoreInset} rounded-full overflow-hidden ${coreBorderClass} ${defaultCoreBorderToneClass} flex items-center justify-center ${centerClassName} ${coreBorderColorClassName}`.trim()}
+                style={coreBorderStyle}
+            >
                 <span className='absolute inset-0 opacity-30 bg-[linear-gradient(140deg,rgba(255,255,255,0.65),transparent_42%,transparent_60%,rgba(255,255,255,0.22))]' />
                 <span className='absolute top-[12%] left-[14%] w-[72%] h-[1px] bg-white/85 rounded-full pointer-events-none' />
                 <Icon

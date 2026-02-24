@@ -6,7 +6,7 @@ import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, Gra
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
-import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap, type BadgeVisual } from '@/lib/industryBadgeVisuals'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap, type BadgeVisual } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import { useAuth } from '@/lib/auth'
 import { grantAdminBadgeToSeller } from '@/app/actions/badges'
@@ -39,6 +39,17 @@ const PROFILE_CATALOG_TABLES = [
     'industrias'
 ] as const
 
+const INDUSTRY_BADGE_EVOLUTION_DEFAULT_LEVELS = [
+    { level: 1, min_closures: 1 },
+    { level: 2, min_closures: 3 },
+    { level: 3, min_closures: 5 },
+    { level: 4, min_closures: 8 },
+    { level: 5, min_closures: 12 },
+    { level: 6, min_closures: 20 },
+    { level: 7, min_closures: 30 },
+    { level: 8, min_closures: 50 } // Nivel final usa aro distintivo.
+] as const
+
 type ProfileViewCachePayload = {
     savedAt: number
     profile: any
@@ -68,6 +79,30 @@ function normalizeComparableName(value: unknown) {
         .toLowerCase()
 }
 
+function getIndustryEvolutionLevels(
+    dbLevels: Array<{ level: number, min_closures: number }>
+): Array<{ level: number, min_closures: number }> {
+    const normalized = (Array.isArray(dbLevels) ? dbLevels : [])
+        .map((row) => ({
+            level: Number(row?.level || 0),
+            min_closures: Number(row?.min_closures || 0)
+        }))
+        .filter((row) => row.level > 0 && row.min_closures > 0)
+        .sort((a, b) => a.level - b.level)
+
+    const byLevel = new Map<number, { level: number, min_closures: number }>()
+    for (const row of INDUSTRY_BADGE_EVOLUTION_DEFAULT_LEVELS) {
+        byLevel.set(row.level, { level: row.level, min_closures: row.min_closures })
+    }
+    for (const row of normalized) {
+        byLevel.set(row.level, row)
+    }
+
+    return Array.from(byLevel.values())
+        .filter((row) => row.level >= 1 && row.level <= 8)
+        .sort((a, b) => a.level - b.level)
+}
+
 function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
     return type === 'deal_value_tier'
         || type === 'company_size'
@@ -90,6 +125,15 @@ function getDealValueTierRankByKey(key?: string | null) {
     if (value === 'value_2k_5k') return 2
     if (value === 'value_1k_2k') return 1
     return 0
+}
+
+function getDealValueTierShortLabelByKey(key?: string | null) {
+    const value = String(key || '')
+    if (value === 'value_1k_2k') return 'Mensualidad 1k'
+    if (value === 'value_2k_5k') return 'Mensualidad 2k'
+    if (value === 'value_5k_10k') return 'Mensualidad 5k'
+    if (value === 'value_10k_100k' || value === 'value_10k_plus') return 'Mensualidad 10k'
+    return null
 }
 
 export default function ProfileView({ userId }: ProfileViewProps) {
@@ -724,14 +768,22 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                         className='w-full'
                                     >
                                         <div className='w-full flex items-center gap-3'>
+                                            {(() => {
+                                                const industryLevelVisual = getIndustryBadgeLevelMedallionVisual(level, badgeVisual)
+                                                return (
                                             <BadgeMedallion
                                                 icon={IndustryIcon}
                                                 centerClassName={badgeVisual.containerClass}
                                                 iconClassName={badgeVisual.iconClass}
+                                                ringStyle={industryLevelVisual.ringStyle}
+                                                coreBorderColorClassName={industryLevelVisual.coreBorderColorClassName}
+                                                coreBorderStyle={industryLevelVisual.coreBorderStyle}
                                                 size='md'
                                                 iconSize={18}
                                                 strokeWidth={2.7}
                                             />
+                                                )
+                                            })()}
                                             <div className='min-w-0'>
                                                 <p className='text-sm font-black truncate text-[var(--text-primary)]'>{industryName}</p>
                                                 <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--accent-secondary)]'>
@@ -781,7 +833,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                                         overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
                                                         footerBubbleText={isSeniorityBadge ? String(tenureBadgeMetrics?.years ?? badgeOverlayNumber ?? '') : null}
                                                         ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
-                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
                                                         size='sm'
                                                         iconSize={15}
                                                         strokeWidth={2.7}
@@ -969,6 +1021,17 @@ function AllBadgesModal({
                     const ao = getSpecialBadgeOrder(a?.badge_type)
                     const bo = getSpecialBadgeOrder(b?.badge_type)
                     if (ao !== bo) return ao - bo
+
+                    if (a?.badge_type === 'deal_value_tier' && b?.badge_type === 'deal_value_tier') {
+                        return getDealValueTierRankByKey(a?.badge_key) - getDealValueTierRankByKey(b?.badge_key)
+                    }
+
+                    if (a?.badge_type === 'company_size' && b?.badge_type === 'company_size') {
+                        const an = Number(String(a?.badge_key || '').replace('size_', '')) || 0
+                        const bn = Number(String(b?.badge_key || '').replace('size_', '')) || 0
+                        return an - bn
+                    }
+
                     return String(a?.badge_label || '').localeCompare(String(b?.badge_label || ''), 'es')
                 })
             }))
@@ -995,7 +1058,29 @@ function AllBadgesModal({
         [catalogBadgeFilter, groupedSpecialBadges]
     )
     const specialMultiLevelEvolutionBadges = useMemo(
-        () => specialBadgeCatalog.filter((badge) => getSpecialBadgeEvolutionMilestones(badge).length > 1),
+        () => specialBadgeCatalog
+            .filter((badge) => getSpecialBadgeEvolutionMilestones(badge).length > 1)
+            .sort((a, b) => {
+                const categoryA = getSpecialBadgeCategoryMeta(a?.badge_type)
+                const categoryB = getSpecialBadgeCategoryMeta(b?.badge_type)
+                if (categoryA.order !== categoryB.order) return categoryA.order - categoryB.order
+
+                const typeOrderA = getSpecialBadgeOrder(a?.badge_type)
+                const typeOrderB = getSpecialBadgeOrder(b?.badge_type)
+                if (typeOrderA !== typeOrderB) return typeOrderA - typeOrderB
+
+                if (a?.badge_type === 'deal_value_tier' && b?.badge_type === 'deal_value_tier') {
+                    return getDealValueTierRankByKey(a?.badge_key) - getDealValueTierRankByKey(b?.badge_key)
+                }
+
+                if (a?.badge_type === 'company_size' && b?.badge_type === 'company_size') {
+                    const an = Number(String(a?.badge_key || '').replace('size_', '')) || 0
+                    const bn = Number(String(b?.badge_key || '').replace('size_', '')) || 0
+                    return an - bn
+                }
+
+                return String(a?.badge_label || '').localeCompare(String(b?.badge_label || ''), 'es')
+            }),
         [specialBadgeCatalog]
     )
     const allBadgesTenureMetrics = useMemo(
@@ -1125,15 +1210,23 @@ function AllBadgesModal({
                                                 align='start'
                                                 placement='bottom'
                                             >
+                                                {(() => {
+                                                    const industryLevelVisual = getIndustryBadgeLevelMedallionVisual(level || 1, badgeVisual)
+                                                    return (
                                                 <HoverRevealBadgeMedallion
                                                     locked={!unlocked}
                                                     icon={IndustryIcon}
                                                     centerClassName={badgeVisual.containerClass}
                                                     iconClassName={`${badgeVisual.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
+                                                    ringStyle={industryLevelVisual.ringStyle}
+                                                    coreBorderColorClassName={industryLevelVisual.coreBorderColorClassName}
+                                                    coreBorderStyle={industryLevelVisual.coreBorderStyle}
                                                     size='sm'
                                                     iconSize={17}
                                                     strokeWidth={2.7}
                                                 />
+                                                    )
+                                                })()}
                                             </BadgeInfoTooltip>
                                             <div className='min-w-0'>
                                                 <p className='text-sm font-black truncate text-[var(--text-primary)]'>
@@ -1234,7 +1327,7 @@ function AllBadgesModal({
                                                         overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
                                                         footerBubbleText={isSeniorityBadge ? String(allBadgesTenureMetrics?.years ?? badgeOverlayNumber ?? '') : null}
                                                         ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
-                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(badge.badge_type) ? 'border-white/90' : '')}
+                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(badge.badge_type) ? '!border-white/90' : '')}
                                                         size='sm'
                                                         iconSize={16}
                                                         strokeWidth={2.7}
@@ -1446,26 +1539,29 @@ function IndustryBadgeEvolutionCard({
     const currentLevel = Number(badge?.level || 0)
     const closures = Number(badge?.closures_count || 0)
     const unlocked = currentLevel > 0
-    const milestones = badgeLevels.length > 0 ? badgeLevels : [
-        { level: 1, min_closures: 1 },
-        { level: 2, min_closures: 3 },
-        { level: 3, min_closures: 5 },
-        { level: 4, min_closures: 10 }
-    ]
+    const milestones = getIndustryEvolutionLevels(badgeLevels)
 
     return (
         <div className='group rounded-xl border p-4 bg-[var(--card-bg)] border-[var(--card-border)] hover:border-blue-400/35 transition-colors'>
             <div className='flex items-center justify-between gap-3'>
                 <div className='min-w-0 flex items-center gap-3'>
+                    {(() => {
+                        const industryLevelVisual = getIndustryBadgeLevelMedallionVisual(currentLevel || 1, badgeVisual)
+                        return (
                     <HoverRevealBadgeMedallion
                         locked={!unlocked}
                         icon={IndustryIcon}
                         centerClassName={badgeVisual.containerClass}
                         iconClassName={badgeVisual.iconClass}
+                        ringStyle={industryLevelVisual.ringStyle}
+                        coreBorderColorClassName={industryLevelVisual.coreBorderColorClassName}
+                        coreBorderStyle={industryLevelVisual.coreBorderStyle}
                         size='md'
                         iconSize={18}
                         strokeWidth={2.6}
                     />
+                        )
+                    })()}
                     <div className='min-w-0'>
                         <p className='text-sm font-black truncate text-[var(--text-primary)]'>
                             {industry.name}
@@ -1491,6 +1587,7 @@ function IndustryBadgeEvolutionCard({
                 icon={IndustryIcon}
                 centerClassName={badgeVisual.containerClass}
                 iconClassName={badgeVisual.iconClass}
+                getNodeMedallionVisual={(node) => getIndustryBadgeLevelMedallionVisual(node.level, badgeVisual)}
             />
         </div>
     )
@@ -1503,6 +1600,16 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
     if (milestones.length <= 1) return null
     const unlocked = Number(badge?.level || 0) > 0
     const isSeniorityBadge = String(badge?.badge_type || '') === 'seniority_years'
+    const isClosureBadge = String(badge?.badge_type || '') === 'closure_milestone'
+    const isCompanySizeBadge = String(badge?.badge_type || '') === 'company_size'
+    const isDealValueBadge = String(badge?.badge_type || '') === 'deal_value_tier'
+    const closureHeaderVisual = isClosureBadge ? getClosureMilestoneBadgeLevelMedallionVisual(Number(badge?.level || 1)) : null
+    const generic8TierHeaderVisual = (isCompanySizeBadge || isDealValueBadge)
+        ? getGenericEightTierBadgeLevelMedallionVisual(
+            Number(badge?.level || 1),
+            getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
+        )
+        : null
 
     return (
         <div className='group rounded-xl border p-4 bg-[var(--card-bg)] border-[var(--card-border)] hover:border-fuchsia-400/30 transition-colors'>
@@ -1515,8 +1622,9 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                         iconClassName={typeMeta.iconClass}
                         overlayText={isSeniorityBadge ? null : getSpecialBadgeOverlayNumber(badge)}
                         footerBubbleText={isSeniorityBadge ? String(getSpecialBadgeOverlayNumber(badge) ?? '') : null}
-                        ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
-                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+                        ringStyle={closureHeaderVisual?.ringStyle || generic8TierHeaderVisual?.ringStyle || getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
+                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
+                        coreBorderStyle={closureHeaderVisual?.coreBorderStyle || generic8TierHeaderVisual?.coreBorderStyle}
                         size='md'
                         iconSize={17}
                         strokeWidth={2.6}
@@ -1541,7 +1649,17 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                 centerClassName={typeMeta.containerClass}
                 iconClassName={typeMeta.iconClass}
                 ringStyle='match'
-                coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+                coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
+                getNodeMedallionVisual={
+                    isClosureBadge
+                        ? (node) => getClosureMilestoneBadgeLevelMedallionVisual(node.level)
+                        : (isCompanySizeBadge || isDealValueBadge)
+                            ? (node) => getGenericEightTierBadgeLevelMedallionVisual(
+                                node.level,
+                                getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
+                            )
+                            : undefined
+                }
             />
         </div>
     )
@@ -1555,7 +1673,9 @@ function BadgeLevelEvolutionTrack({
     centerClassName,
     iconClassName,
     ringStyle = 'match',
-    coreBorderColorClassName
+    coreBorderColorClassName,
+    coreBorderStyle,
+    getNodeMedallionVisual
 }: {
     nodes: Array<{ level: number, threshold: number, caption: string }>
     currentLevel: number
@@ -1565,13 +1685,29 @@ function BadgeLevelEvolutionTrack({
     iconClassName: string
     ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
     coreBorderColorClassName?: string
+    coreBorderStyle?: { borderColor?: string }
+    getNodeMedallionVisual?: (node: { level: number, threshold: number, caption: string }) => {
+        ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
+        coreBorderColorClassName?: string
+        coreBorderStyle?: { borderColor?: string }
+    }
 }) {
+    const columnsPerRow = nodes.length > 4 ? 4 : Math.max(1, nodes.length)
+    const nodeRows = Array.from({ length: Math.ceil(nodes.length / columnsPerRow) }, (_, rowIndex) =>
+        nodes.slice(rowIndex * columnsPerRow, rowIndex * columnsPerRow + columnsPerRow)
+    )
+
     return (
         <div className='mt-4 rounded-xl border p-3 bg-[var(--hover-bg)] border-[var(--card-border)]'>
-            <div className='relative'>
-                <div className='absolute left-4 right-4 top-5 h-[2px] bg-gradient-to-r from-white/10 via-white/30 to-white/10 pointer-events-none' />
-                <div className='grid gap-2' style={{ gridTemplateColumns: `repeat(${nodes.length}, minmax(0, 1fr))` }}>
-                    {nodes.map((node, index) => {
+            <div className='space-y-3'>
+                {nodeRows.map((rowNodes, rowIndex) => (
+                    <div key={`evo-row-${rowIndex}`} className='relative'>
+                        {rowNodes.length > 1 && (
+                            <div className='absolute left-6 right-6 top-5 h-px bg-white/15 pointer-events-none' />
+                        )}
+                        <div className='grid gap-2' style={{ gridTemplateColumns: `repeat(${rowNodes.length}, minmax(0, 1fr))` }}>
+                    {rowNodes.map((node, localIndex) => {
+                        const index = rowIndex * columnsPerRow + localIndex
                         const achieved = currentLevel >= node.level
                         const current = !achieved && index > 0
                             ? currentLevel >= nodes[index - 1].level
@@ -1581,7 +1717,7 @@ function BadgeLevelEvolutionTrack({
                         const evoStyle = getEvolutionVisualTier(index, achieved, next, current)
                         const isLocked = !achieved
                         const medallionStateClass = achieved
-                            ? 'brightness-110 saturate-110'
+                            ? ''
                             : 'opacity-80 group-hover/evo:opacity-100'
                         const medallionWrapStateClass = achieved
                             ? ''
@@ -1589,20 +1725,14 @@ function BadgeLevelEvolutionTrack({
                         const decorationStateClass = achieved
                             ? ''
                             : 'grayscale group-hover/evo:grayscale-0'
-                        const statusLabel = achieved ? 'Desbloqueado' : next ? 'Siguiente' : 'Bloqueado'
+                        const statusLabel = achieved ? '' : next ? 'Siguiente' : 'Bloqueado'
+                        const nodeMedallionVisual = getNodeMedallionVisual?.(node)
+                        const effectiveCoreBorderColorClassName = nodeMedallionVisual?.coreBorderColorClassName
+                            || (node.level === 1 ? '!border-white' : coreBorderColorClassName)
 
                         return (
                             <div key={`${node.level}-${node.threshold}`} className='relative flex flex-col items-center text-center gap-2 group/evo'>
                                 <div className={`relative rounded-xl p-2 ${evoStyle.nodeFrameClass}`}>
-                                    <span className={`absolute left-2 right-2 top-2 h-px rounded-full ${evoStyle.accentLineClass}`} />
-                                    <span className={`absolute left-2 right-2 bottom-2 h-5 rounded-md border ${evoStyle.plaqueClass}`} />
-                                    <span className={`absolute left-2 top-2 w-2 h-2 rounded-tl-md border-l border-t ${evoStyle.cornerClass}`} />
-                                    <span className={`absolute right-2 top-2 w-2 h-2 rounded-tr-md border-r border-t ${evoStyle.cornerClass}`} />
-                                    <span className={`absolute left-2 bottom-2 w-2 h-2 rounded-bl-md border-l border-b ${evoStyle.cornerClass}`} />
-                                    <span className={`absolute right-2 bottom-2 w-2 h-2 rounded-br-md border-r border-b ${evoStyle.cornerClass}`} />
-                                    <span className={`absolute top-1.5 left-1/2 -translate-x-1/2 px-1.5 py-[2px] rounded-full border text-[7px] font-black uppercase tracking-[0.14em] ${evoStyle.tierChipClass}`}>
-                                        {evoStyle.tierLabel}
-                                    </span>
                                     <div className={`relative isolate inline-flex items-center justify-center ${evoStyle.mountClass}`}>
                                         {evoStyle.showWings && (
                                             <>
@@ -1662,21 +1792,22 @@ function BadgeLevelEvolutionTrack({
                                                 icon={icon}
                                                 centerClassName={`${centerClassName} ${achieved ? medallionStateClass : ''}`}
                                                 iconClassName={iconClassName}
-                                                overlayText={String(node.level)}
-                                                ringStyle={evoStyle.ringStyle || ringStyle}
-                                                coreBorderColorClassName={coreBorderColorClassName}
+                                                ringStyle={nodeMedallionVisual?.ringStyle || evoStyle.ringStyle || ringStyle}
+                                                coreBorderColorClassName={effectiveCoreBorderColorClassName}
+                                                coreBorderStyle={nodeMedallionVisual?.coreBorderStyle || coreBorderStyle}
                                                 className={achieved ? medallionWrapStateClass : ''}
-                                                size='sm'
+                                                size='md'
+                                                iconSize={16}
                                                 strokeWidth={2.4}
                                             />
                                         </div>
                                     </div>
-                                    {isLocked && (
-                                        <div className='absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(2,6,23,0.03),rgba(2,6,23,0.14))] pointer-events-none' />
-                                    )}
-                                    <div className={`absolute inset-x-1 bottom-1 px-1 py-0.5 rounded-md border text-[8px] font-black uppercase tracking-[0.12em] backdrop-blur-sm transition-colors ${evoStyle.statusPillClass}`}>
-                                        {statusLabel}
-                                    </div>
+                                    {isLocked && <div className='absolute inset-0 rounded-xl bg-black/5 pointer-events-none' />}
+                                    {statusLabel ? (
+                                        <div className={`absolute inset-x-1 bottom-1 px-1 py-0.5 rounded-md border text-[8px] font-black uppercase tracking-[0.12em] backdrop-blur-sm transition-colors ${evoStyle.statusPillClass}`}>
+                                            {statusLabel}
+                                        </div>
+                                    ) : null}
                                 </div>
                                 <div>
                                     <p className={`text-[10px] font-black uppercase tracking-[0.12em] ${achieved ? 'text-emerald-300' : next ? 'text-blue-300' : 'text-[var(--text-secondary)]'}`}>
@@ -1694,8 +1825,10 @@ function BadgeLevelEvolutionTrack({
                             </div>
                         )
                     })}
+                        </div>
+                    </div>
+                ))}
                 </div>
-            </div>
         </div>
     )
 }
@@ -1866,9 +1999,26 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
     }
     if (type === 'closure_milestone') {
         return [
-            { level: 1, threshold: 10, caption: '10 cierres' },
-            { level: 2, threshold: 20, caption: '20 cierres' },
-            { level: 3, threshold: 50, caption: '50 cierres' }
+            { level: 1, threshold: 1, caption: '1 cierre' },
+            { level: 2, threshold: 5, caption: '5 cierres' },
+            { level: 3, threshold: 10, caption: '10 cierres' },
+            { level: 4, threshold: 15, caption: '15 cierres' },
+            { level: 5, threshold: 20, caption: '20 cierres' },
+            { level: 6, threshold: 30, caption: '30 cierres' },
+            { level: 7, threshold: 40, caption: '40 cierres' },
+            { level: 8, threshold: 50, caption: '50 cierres' }
+        ]
+    }
+    if (type === 'company_size' || type === 'deal_value_tier') {
+        return [
+            { level: 1, threshold: 1, caption: '1 cierre' },
+            { level: 2, threshold: 3, caption: '3 cierres' },
+            { level: 3, threshold: 5, caption: '5 cierres' },
+            { level: 4, threshold: 8, caption: '8 cierres' },
+            { level: 5, threshold: 12, caption: '12 cierres' },
+            { level: 6, threshold: 20, caption: '20 cierres' },
+            { level: 7, threshold: 30, caption: '30 cierres' },
+            { level: 8, threshold: 50, caption: '50 cierres' }
         ]
     }
     if (type === 'prelead_registered') {
@@ -2171,7 +2321,7 @@ function getSpecialDefaultThreshold(badgeType?: string) {
     if (badgeType === 'multi_industry') return 5
     if (badgeType === 'all_company_sizes') return 5
     if (badgeType === 'seniority_years') return 1
-    if (badgeType === 'closure_milestone') return 10
+    if (badgeType === 'closure_milestone') return 1
     if (badgeType === 'reliability_score') return 80
     if (badgeType === 'prelead_registered') return 1
     if (badgeType === 'lead_registered') return 1
@@ -2213,8 +2363,24 @@ function buildSpecialBadgeCatalog(
     const seniorityYears = Math.max(0, Number(options?.sellerStats?.seniorityYears || 0))
     const totalClosures = Math.max(0, Number(options?.sellerStats?.totalClosures || 0))
     const reliabilityScore = Math.max(0, Math.min(100, Number(options?.sellerStats?.reliabilityScore || 0)))
-    const closureLevel = totalClosures >= 50 ? 3 : totalClosures >= 20 ? 2 : totalClosures >= 10 ? 1 : 0
-    const closureNextThreshold = closureLevel === 0 ? 10 : closureLevel === 1 ? 20 : closureLevel === 2 ? 50 : null
+    const closureLevel = totalClosures >= 50 ? 8
+        : totalClosures >= 40 ? 7
+        : totalClosures >= 30 ? 6
+        : totalClosures >= 20 ? 5
+        : totalClosures >= 15 ? 4
+        : totalClosures >= 10 ? 3
+        : totalClosures >= 5 ? 2
+        : totalClosures >= 1 ? 1
+        : 0
+    const closureNextThreshold = closureLevel === 0 ? 1
+        : closureLevel === 1 ? 5
+        : closureLevel === 2 ? 10
+        : closureLevel === 3 ? 15
+        : closureLevel === 4 ? 20
+        : closureLevel === 5 ? 30
+        : closureLevel === 6 ? 40
+        : closureLevel === 7 ? 50
+        : null
     const reliabilityThreshold = 80
     const unlockedCompanySizeCount = Array.from(
         new Set(
@@ -2317,7 +2483,7 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-value-1k-2k',
             badge_type: 'deal_value_tier',
             badge_key: 'value_1k_2k',
-            badge_label: 'Mensualidad 1,000-1,999 USD',
+            badge_label: 'Mensualidad 1k',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
@@ -2326,7 +2492,7 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-value-2k-5k',
             badge_type: 'deal_value_tier',
             badge_key: 'value_2k_5k',
-            badge_label: 'Mensualidad 2,000-4,999 USD',
+            badge_label: 'Mensualidad 2k',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
@@ -2335,7 +2501,7 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-value-5k-10k',
             badge_type: 'deal_value_tier',
             badge_key: 'value_5k_10k',
-            badge_label: 'Mensualidad 5,000-9,999 USD',
+            badge_label: 'Mensualidad 5k',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
@@ -2344,7 +2510,7 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-value-10k-100k',
             badge_type: 'deal_value_tier',
             badge_key: 'value_10k_100k',
-            badge_label: 'Mensualidad 10,000-100,000 USD',
+            badge_label: 'Mensualidad 10k',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
@@ -2562,7 +2728,13 @@ function buildSpecialBadgeCatalog(
         const prev = map.get(key)
 
         if (!prev) {
-            map.set(key, { ...badge, badge_key: badge?.badge_key || normalizedKey })
+            map.set(key, {
+                ...badge,
+                badge_key: badge?.badge_key || normalizedKey,
+                badge_label: type === 'deal_value_tier'
+                    ? (getDealValueTierShortLabelByKey(badge?.badge_key) || badge?.badge_label)
+                    : badge?.badge_label
+            })
             continue
         }
 
@@ -2573,6 +2745,9 @@ function buildSpecialBadgeCatalog(
                 ...prev,
                 ...badge,
                 badge_key: badge?.badge_key || normalizedKey,
+                badge_label: type === 'deal_value_tier'
+                    ? (getDealValueTierShortLabelByKey(badge?.badge_key) || badge?.badge_label)
+                    : (badge?.badge_label || prev?.badge_label),
                 progress_count: Math.max(prev?.progress_count || 0, badge?.progress_count || 0),
                 level: Math.max(prevLevel, nextLevel),
                 next_level_threshold: (prev?.next_level_threshold ?? badge?.next_level_threshold)
@@ -2589,6 +2764,10 @@ function buildSpecialBadgeCatalog(
             const an = Number(String(a?.badge_key || '').replace('size_', '')) || 0
             const bn = Number(String(b?.badge_key || '').replace('size_', '')) || 0
             return an - bn
+        }
+
+        if (a?.badge_type === 'deal_value_tier' && b?.badge_type === 'deal_value_tier') {
+            return getDealValueTierRankByKey(a?.badge_key) - getDealValueTierRankByKey(b?.badge_key)
         }
 
         return String(a?.badge_label || '').localeCompare(String(b?.badge_label || ''), 'es')
@@ -2686,4 +2865,59 @@ function getSpecialBadgeOverlayNumber(badge: any): string | null {
 
 function getSpecialBadgeRingStyleByType(type?: string, label?: string | null, key?: string | null): 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple' {
     return getSpecialBadgeVisualSpec(type, label || null, key || null)?.ringStyle || 'match'
+}
+
+function getClosureMilestoneBadgeLevelMedallionVisual(level: number | undefined | null): {
+    ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal'
+    coreBorderColorClassName?: string
+    coreBorderStyle?: { borderColor?: string }
+} {
+    const safeLevel = Math.max(1, Math.min(8, Number(level || 1)))
+    const closureAccent = '#fb923c'
+
+    if (safeLevel === 1) return { ringStyle: 'match', coreBorderColorClassName: '!border-white' }
+    if (safeLevel === 2) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#cd7f32]' }
+    if (safeLevel === 3) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#e2e8f0]' }
+    if (safeLevel === 4) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#fde047]' }
+    if (safeLevel === 5) return { ringStyle: 'bronze', coreBorderStyle: { borderColor: closureAccent } }
+    if (safeLevel === 6) return { ringStyle: 'silver', coreBorderStyle: { borderColor: closureAccent } }
+    if (safeLevel === 7) return { ringStyle: 'gold', coreBorderStyle: { borderColor: closureAccent } }
+    return { ringStyle: 'royal', coreBorderStyle: { borderColor: closureAccent } }
+}
+
+function getGenericEightTierBadgeLevelMedallionVisual(
+    level: number | undefined | null,
+    accentColorHex = '#3b82f6'
+): {
+    ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal'
+    coreBorderColorClassName?: string
+    coreBorderStyle?: { borderColor?: string }
+} {
+    const safeLevel = Math.max(1, Math.min(8, Number(level || 1)))
+
+    if (safeLevel === 1) return { ringStyle: 'match', coreBorderColorClassName: '!border-white' }
+    if (safeLevel === 2) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#cd7f32]' }
+    if (safeLevel === 3) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#e2e8f0]' }
+    if (safeLevel === 4) return { ringStyle: 'match', coreBorderColorClassName: '!border-[#fde047]' }
+    if (safeLevel === 5) return { ringStyle: 'bronze', coreBorderStyle: { borderColor: accentColorHex } }
+    if (safeLevel === 6) return { ringStyle: 'silver', coreBorderStyle: { borderColor: accentColorHex } }
+    if (safeLevel === 7) return { ringStyle: 'gold', coreBorderStyle: { borderColor: accentColorHex } }
+    return { ringStyle: 'royal', coreBorderStyle: { borderColor: accentColorHex } }
+}
+
+function getSpecialBadgeAccentColor(badgeType: string, badgeKey?: string | null, badgeLabel?: string | null): string {
+    if (badgeType === 'company_size') return '#3b82f6'
+    if (badgeType === 'deal_value_tier') {
+        const key = String(badgeKey || '')
+        if (key === 'value_10k_100k' || key === 'value_10k_plus') return '#7c3aed'
+        if (key === 'value_5k_10k') return '#0ea5e9'
+        if (key === 'value_2k_5k') return '#10b981'
+        if (key === 'value_1k_2k') return '#f59e0b'
+        const label = String(badgeLabel || '').toLowerCase()
+        if (label.includes('10,000')) return '#7c3aed'
+        if (label.includes('5,000')) return '#0ea5e9'
+        if (label.includes('2,000')) return '#10b981'
+        return '#f59e0b'
+    }
+    return '#3b82f6'
 }

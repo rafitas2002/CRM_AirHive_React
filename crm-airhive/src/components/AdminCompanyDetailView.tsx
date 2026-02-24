@@ -7,7 +7,7 @@ import type { Database } from '@/lib/supabase'
 import ClientDetailView from './ClientDetailView'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { FileText, MapPin, Globe, Users2, ClipboardList } from 'lucide-react'
-import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
 
@@ -145,6 +145,7 @@ export default function AdminCompanyDetailView({
                                                 {companyBadgeIndustries.map((industry) => {
                                                     const badgeVisual = getIndustryBadgeVisualFromMap(industry.id, companyBadgeVisualMap, industry.name)
                                                     const IndustryIcon = badgeVisual.icon
+                                                    const levelVisual = getIndustryBadgeLevelMedallionVisual(1, badgeVisual)
                                                     return (
                                                         <BadgeInfoTooltip
                                                             key={industry.id}
@@ -159,6 +160,9 @@ export default function AdminCompanyDetailView({
                                                                 icon={IndustryIcon}
                                                                 centerClassName={badgeVisual.containerClass}
                                                                 iconClassName={badgeVisual.iconClass}
+                                                                ringStyle={levelVisual.ringStyle}
+                                                                coreBorderColorClassName={levelVisual.coreBorderColorClassName}
+                                                                coreBorderStyle={levelVisual.coreBorderStyle}
                                                                 size='xs'
                                                                 iconSize={13}
                                                                 strokeWidth={2.3}
