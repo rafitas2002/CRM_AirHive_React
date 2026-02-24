@@ -192,6 +192,9 @@ function AdminDashboardView({ username }: { username: string }) {
     if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
     const teamGoal = Math.max(...stats.sellers.map(s => s.raceRealClosedValue)) * 1.5 || 1000000
+    const forecastCombinedGoal = Math.max(
+        ...stats.sellers.map((s) => s.raceRealClosedValue + s.raceForecastAdjustedValue)
+    ) * 1.5 || teamGoal
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
     const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.raceRealClosedValue)
@@ -323,15 +326,15 @@ function AdminDashboardView({ username }: { username: string }) {
                                 reliability: s.score
                             }))}
                             forecastRace={{
-                                maxGoal: teamGoal,
+                                maxGoal: forecastCombinedGoal,
                                 title: 'Carrera de Pronóstico Ajustado',
-                                subtitle: 'Pronóstico mensual ajustado con confiabilidad de probabilidad, valor y fecha',
+                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad, valor y fecha',
                                 sellers: stats.sellers.map((s) => ({
                                     name: s.name,
-                                    value: s.raceForecastAdjustedValue,
-                                    percentage: (s.raceForecastAdjustedValue / teamGoal) * 100,
+                                    value: s.raceRealClosedValue + s.raceForecastAdjustedValue,
+                                    percentage: ((s.raceRealClosedValue + s.raceForecastAdjustedValue) / forecastCombinedGoal) * 100,
                                     reliability: s.raceForecastAdjustedReliability,
-                                    rawValueBeforeAdjustment: s.raceForecastValue
+                                    rawValueBeforeAdjustment: s.raceRealClosedValue + s.raceForecastValue
                                 }))
                             }}
                             subtitle='Cierres reales ganados del mes (fecha real de cierre) vs meta de equipo'
