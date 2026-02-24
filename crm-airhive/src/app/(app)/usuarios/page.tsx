@@ -55,14 +55,14 @@ export default async function UsuariosPage() {
 
     const { data: industryBadges, error: industryBadgesError } = await dbClient
         .from('seller_industry_badges')
-        .select('seller_id, industria_id, closures_count, level, updated_at, industrias(name)')
+        .select('seller_id, industria_id, closures_count, level, updated_at, unlocked_at, industrias(name)')
         .gt('level', 0)
 
     if (industryBadgesError) console.error('Error fetching industry badges:', industryBadgesError)
 
     const { data: specialBadges, error: specialBadgesError } = await dbClient
         .from('seller_special_badges')
-        .select('seller_id, badge_type, badge_key, badge_label, progress_count, level, updated_at')
+        .select('seller_id, badge_type, badge_key, badge_label, progress_count, level, updated_at, unlocked_at')
         .gt('level', 0)
 
     if (specialBadgesError) console.error('Error fetching special badges:', specialBadgesError)
@@ -121,7 +121,8 @@ export default async function UsuariosPage() {
             label: String((row as any)?.industrias?.name || 'Industria'),
             level: Number((row as any)?.level || 0),
             progress: Number((row as any)?.closures_count || 0),
-            updated_at: String((row as any)?.updated_at || '')
+            updated_at: String((row as any)?.updated_at || ''),
+            unlocked_at: String((row as any)?.unlocked_at || '')
         })
         industryBySeller.set(sellerId, list)
     }
@@ -138,7 +139,8 @@ export default async function UsuariosPage() {
             label: String((row as any)?.badge_label || 'Badge especial'),
             level: Number((row as any)?.level || 0),
             progress: Number((row as any)?.progress_count || 0),
-            updated_at: String((row as any)?.updated_at || '')
+            updated_at: String((row as any)?.updated_at || ''),
+            unlocked_at: String((row as any)?.unlocked_at || '')
         })
         specialBySeller.set(sellerId, list)
     }
@@ -155,8 +157,9 @@ export default async function UsuariosPage() {
             .filter((badge) => String(badge?.type || '') === 'admin_granted')
             .sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), 'es', { sensitivity: 'base' }))
             .slice(0, 4)
-        const featuredBadges = [...industryList, ...specialList]
+        const allBadges = [...industryList, ...specialList]
             .filter((badge) => String(badge?.type || '') !== 'admin_granted')
+        const featuredBadges = [...allBadges]
             .sort((a, b) => {
                 const levelDiff = Number(b.level || 0) - Number(a.level || 0)
                 if (levelDiff !== 0) return levelDiff
@@ -192,6 +195,7 @@ export default async function UsuariosPage() {
             details: detail,
             badgeShowcase: {
                 adminDistinctions,
+                allBadges,
                 featuredBadges,
                 grantableAdminBadge
             }

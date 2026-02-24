@@ -2,9 +2,8 @@
 
 import { useTheme, Theme } from '@/lib/ThemeContext'
 import { useAuth } from '@/lib/auth'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Palette, Lightbulb, Check } from 'lucide-react'
-import { bootstrapLegacyQuotesIfEmpty, getActiveQuotes, getAllQuotesForAdmin } from '@/app/actions/quotes'
 import QuoteManagementPanel, { type QuoteRow } from '@/components/QuoteManagementPanel'
 
 const themes: Array<{ id: Theme; name: string; description: string; preview: { bg: string; text: string } }> = [
@@ -33,39 +32,6 @@ export default function PersonalizacionPage() {
     const { profile } = useAuth()
     const [quotes, setQuotes] = useState<QuoteRow[]>([])
     const [quotesLoadError, setQuotesLoadError] = useState<string>('')
-
-    useEffect(() => {
-        if (!profile?.id) return
-
-        let cancelled = false
-        const loadQuotes = async () => {
-            const isAdmin = profile.role === 'admin'
-            const result = isAdmin ? await getAllQuotesForAdmin() : await getActiveQuotes()
-            if (!cancelled && result.success) {
-                const rows = result.data || []
-                if (isAdmin && rows.length === 0) {
-                    const seedResult = await bootstrapLegacyQuotesIfEmpty()
-                    if (seedResult.success) {
-                        const refreshed = await getAllQuotesForAdmin()
-                        if (!cancelled && refreshed.success) {
-                            setQuotes(refreshed.data || [])
-                            setQuotesLoadError('')
-                            return
-                        }
-                    } else if (!cancelled) {
-                        setQuotesLoadError(seedResult.error || 'No se pudo cargar el repertorio base de frases')
-                    }
-                }
-                setQuotes(rows)
-                setQuotesLoadError('')
-            } else if (!cancelled) {
-                setQuotesLoadError(result.error || 'No se pudo cargar el catálogo de frases')
-            }
-        }
-
-        loadQuotes()
-        return () => { cancelled = true }
-    }, [profile?.id, profile?.role])
 
     return (
         <div className='p-8 max-w-5xl'>

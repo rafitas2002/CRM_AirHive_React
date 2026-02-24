@@ -78,6 +78,7 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
 
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([])
+    const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
     const router = useRouter()
@@ -229,7 +230,31 @@ export default function LeadsPage() {
         if (error) {
             console.error('Error fetching leads:', error)
         } else {
-            setLeads(data || [])
+            const rows = (data || []) as Lead[]
+            setLeads(rows)
+
+            const ownerIds = Array.from(new Set(
+                rows.map((row: any) => String(row?.owner_id || '')).filter(Boolean)
+            ))
+
+            if (ownerIds.length > 0) {
+                const { data: profileRows } = await (supabase.from('profiles') as any)
+                    .select('id, full_name, avatar_url')
+                    .in('id', ownerIds)
+
+                const nextMap: Record<string, { fullName?: string | null; avatarUrl?: string | null }> = {}
+                ;((profileRows || []) as any[]).forEach((row) => {
+                    const id = String(row?.id || '')
+                    if (!id) return
+                    nextMap[id] = {
+                        fullName: row?.full_name || null,
+                        avatarUrl: row?.avatar_url || null
+                    }
+                })
+                setSellerProfilesById(nextMap)
+            } else {
+                setSellerProfilesById({})
+            }
         }
         setLoading(false)
     }
@@ -939,6 +964,7 @@ export default function LeadsPage() {
                         ) : (
                             <ClientsTable
                                 clientes={sortedAndFilteredLeads}
+                                sellerProfilesById={sellerProfilesById}
                                 isEditingMode={isEditingMode}
                                 onEdit={openEditModal}
                                 onDelete={handleDeleteClick}

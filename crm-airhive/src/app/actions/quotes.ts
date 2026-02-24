@@ -649,6 +649,8 @@ export async function toggleQuoteReaction(quoteId: number, reactionType: QuoteRe
         }
 
         const reactionStats = await buildReactionStatsByQuote(dbClient, [quoteId], current.userId)
+        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings')
         return {
             success: true,
             data: reactionStats[quoteId] || { likes_count: 0, dislikes_count: 0, current_user_reaction: null }

@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { Mail, MessageCircle } from 'lucide-react'
+import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 
 export interface PreLead {
     id: number
@@ -12,11 +13,13 @@ export interface PreLead {
     ubicacion: string | null
     giro_empresa: string | null
     vendedor_name: string | null
+    vendedor_id?: string | null
     created_at: string
 }
 
 interface PreLeadsTableProps {
     preLeads: PreLead[]
+    sellerProfilesById?: Record<string, { fullName?: string | null; avatarUrl?: string | null }>
     isEditingMode: boolean
     onEdit: (preLead: PreLead) => void
     onDelete: (id: number) => void
@@ -25,8 +28,29 @@ interface PreLeadsTableProps {
     userEmail?: string
 }
 
+function formatSellerDisplayName(raw?: string | null) {
+    const value = String(raw || '').trim()
+    if (!value) return 'Sin asignar'
+    if (value.includes('.')) {
+        return value
+            .split('.')
+            .filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ')
+    }
+    if (value === value.toUpperCase()) {
+        return value
+            .split(/\s+/)
+            .filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ')
+    }
+    return value
+}
+
 export default function PreLeadsTable({
     preLeads,
+    sellerProfilesById = {},
     isEditingMode,
     onEdit,
     onDelete,
@@ -80,12 +104,23 @@ export default function PreLeadsTable({
                             )}
                             <td className='px-8 py-5'>
                                 <div className='flex items-center gap-3'>
-                                    <div className='w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-[10px] shadow-sm flex-shrink-0' style={{ background: 'var(--accent-primary, #2048FF)' }}>
-                                        {pl.vendedor_name?.charAt(0).toUpperCase() || '?'}
-                                    </div>
-                                    <span className='font-bold text-xs uppercase tracking-tighter whitespace-nowrap' style={{ color: 'var(--text-secondary)' }}>
-                                        {pl.vendedor_name || 'Sin asignar'}
-                                    </span>
+                                    {(() => {
+                                        const sellerId = String((pl as any).vendedor_id || '')
+                                        const profile = sellerId ? sellerProfilesById[sellerId] : undefined
+                                        const displayName = String(profile?.fullName || formatSellerDisplayName(pl.vendedor_name))
+                                        return (
+                                            <>
+                                                <TableEmployeeAvatar
+                                                    name={displayName}
+                                                    avatarUrl={profile?.avatarUrl}
+                                                    size='sm'
+                                                />
+                                                <span className='font-black text-sm whitespace-nowrap' style={{ color: 'var(--text-primary)' }}>
+                                                    {displayName}
+                                                </span>
+                                            </>
+                                        )
+                                    })()}
                                 </div>
                             </td>
                             <td className='px-8 py-5 max-w-[250px]'>

@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Briefcase, Filter, Users, User, Building2, Building, MessageSquareQuote, ThumbsUp, Gem, MapPin, Medal, Shield, Trophy, Calendar, Layers, Ruler, Flame, Target, type LucideIcon } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Search, Briefcase, Filter, Users, User, Building2, Building, MessageSquareQuote, ThumbsUp, Gem, MapPin, Medal, Shield, Trophy, Calendar, Layers, Ruler, Flame, Target, ArrowUp, ArrowDown, Sparkles, Pencil, X, type LucideIcon } from 'lucide-react'
 import DetailedUserModal from '@/components/DetailedUserModal'
 import RoleBadge from '@/components/RoleBadge'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import { getCatalogs } from '@/app/actions/catalogs'
 import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useTheme } from '@/lib/ThemeContext'
+import { useAuth } from '@/lib/auth'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
@@ -32,10 +34,66 @@ type ShowcaseBadge = {
     label: string
     level: number
     progress: number
+    updated_at?: string
+    unlocked_at?: string
     meta?: {
         isGrantableAdminBadge?: boolean
         grantsGivenCount?: number
     }
+}
+
+type BadgeGlobalStat = {
+    holderCount: number
+    maxLevel: number
+}
+
+function getShowcaseBadgeIdentity(badge: ShowcaseBadge): string {
+    if (badge.source === 'industry') return `industry:${String(badge.key || '')}`
+    return `special:${String(badge.type || '')}:${String(badge.key || '')}`
+}
+
+function isTenureBadge(badge?: ShowcaseBadge | null) {
+    const type = String(badge?.type || '')
+    return type === 'seniority_years' || type === 'tenure_years'
+}
+
+function isGrantableAdminBadgeShowcase(badge?: ShowcaseBadge | null) {
+    return Boolean(badge?.meta?.isGrantableAdminBadge)
+}
+
+function getBadgeMiniTagMeta(badge: ShowcaseBadge, stats?: BadgeGlobalStat | null) {
+    const holderCount = Number(stats?.holderCount || 0)
+    const maxLevel = Number(stats?.maxLevel || 0)
+    const badgeLevel = Number(badge.level || 0)
+    const isUnique = holderCount === 1
+    const isMax = maxLevel > 0 && badgeLevel === maxLevel
+
+    if (isUnique && isMax) {
+        return {
+            text: null,
+            className: 'border-[#f8e7a8] bg-gradient-to-r from-[#f59e0b] to-[#38bdf8]'
+        }
+    }
+    if (isUnique) {
+        return {
+            text: null,
+            className: 'border-[#f8e7a8] bg-[#f59e0b]'
+        }
+    }
+    if (isMax) {
+        return {
+            text: null,
+            className: 'border-[#a5f3fc] bg-[#0284c7]'
+        }
+    }
+    return { text: null, className: '' }
+}
+
+function getBadgeRarityLabel(holderCount: number) {
+    if (holderCount <= 1) return 'Único'
+    if (holderCount <= 3) return 'Muy raro'
+    if (holderCount <= 6) return 'Raro'
+    return 'Común'
 }
 
 function getSpecialBadgeShowcaseVisual(badge: ShowcaseBadge) {
@@ -362,6 +420,7 @@ function getSemanticAreaColor(name: string, index: number): AreaColorMeta {
 
 export default function UsersClient({ initialUsers }: UsersClientProps) {
     const { theme } = useTheme()
+    const auth = useAuth()
     const [users] = useState(initialUsers)
     const [search, setSearch] = useState('')
     const [selectedArea, setSelectedArea] = useState<string | null>(null)
@@ -370,6 +429,10 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
     const [selectedUser, setSelectedUser] = useState<any>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [catalogs, setCatalogs] = useState<Record<string, any[]>>({})
+    const [featuredBadgeOverrides, setFeaturedBadgeOverrides] = useState<Record<string, string[]>>({})
+    const [editingBadgeShowcaseUserId, setEditingBadgeShowcaseUserId] = useState<string | null>(null)
+    const [editingBadgeShowcaseBaselineIds, setEditingBadgeShowcaseBaselineIds] = useState<string[]>([])
+    const currentUserId = String(auth?.profile?.id || '')
 
     const industryVisualMap = useMemo(() => {
         const industryRows = (catalogs.industras || catalogs.industrias || []) as any[]
@@ -385,6 +448,136 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         ].filter((row) => row.id))
     }, [catalogs, users])
 
+    const badgeStatsByIdentity = useMemo(() => {
+        const map = new Map<string, BadgeGlobalStat>()
+        users.forEach((user: any) => {
+            const allBadges = (Array.isArray(user?.badgeShowcase?.allBadges) ? user.badgeShowcase.allBadges : []) as ShowcaseBadge[]
+            const seenForUser = new Set<string>()
+            allBadges.forEach((badge) => {
+                const id = getShowcaseBadgeIdentity(badge)
+                if (seenForUser.has(id)) {
+                    const current = map.get(id) || { holderCount: 0, maxLevel: 0 }
+                    map.set(id, {
+                        holderCount: current.holderCount,
+                        maxLevel: Math.max(current.maxLevel, Number(badge.level || 0))
+                    })
+                    return
+                }
+                seenForUser.add(id)
+                const current = map.get(id) || { holderCount: 0, maxLevel: 0 }
+                map.set(id, {
+                    holderCount: current.holderCount + 1,
+                    maxLevel: Math.max(current.maxLevel, Number(badge.level || 0))
+                })
+            })
+        })
+        return map
+    }, [users])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        try {
+            const raw = localStorage.getItem('airhive_users_featured_badge_overrides_v1')
+            if (!raw) return
+            const parsed = JSON.parse(raw)
+            if (parsed && typeof parsed === 'object') setFeaturedBadgeOverrides(parsed)
+        } catch {
+            // noop
+        }
+    }, [])
+
+    const persistFeaturedBadgeOverrides = (next: Record<string, string[]>) => {
+        setFeaturedBadgeOverrides(next)
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('airhive_users_featured_badge_overrides_v1', JSON.stringify(next))
+            } catch {
+                // noop
+            }
+        }
+    }
+
+    const sortSuggestedFeaturedBadges = (badges: ShowcaseBadge[]) => {
+        return [...badges].sort((a, b) => {
+            const aStats = badgeStatsByIdentity.get(getShowcaseBadgeIdentity(a))
+            const bStats = badgeStatsByIdentity.get(getShowcaseBadgeIdentity(b))
+            const levelDiff = Number(b.level || 0) - Number(a.level || 0)
+            if (levelDiff !== 0) return levelDiff
+            const rarityDiff = Number(aStats?.holderCount || 9999) - Number(bStats?.holderCount || 9999)
+            if (rarityDiff !== 0) return rarityDiff
+            const progressDiff = Number(b.progress || 0) - Number(a.progress || 0)
+            if (progressDiff !== 0) return progressDiff
+            const aUnlocked = new Date(String(a.unlocked_at || a.updated_at || '')).getTime()
+            const bUnlocked = new Date(String(b.unlocked_at || b.updated_at || '')).getTime()
+            if (Number.isFinite(aUnlocked) && Number.isFinite(bUnlocked) && aUnlocked !== bUnlocked) {
+                return aUnlocked - bUnlocked // más viejo primero
+            }
+            return String(a.label || '').localeCompare(String(b.label || ''), 'es', { sensitivity: 'base' })
+        })
+    }
+
+    const getSelectableFeaturedPool = (user: any) => {
+        const rawAllBadges = (Array.isArray(user?.badgeShowcase?.allBadges) ? user.badgeShowcase.allBadges : []) as ShowcaseBadge[]
+        return rawAllBadges.filter((badge) => !isTenureBadge(badge) && !isGrantableAdminBadgeShowcase(badge))
+    }
+
+    const getEffectiveFeaturedBadges = (user: any): ShowcaseBadge[] => {
+        const rawFeatured = (Array.isArray(user?.badgeShowcase?.featuredBadges) ? user.badgeShowcase.featuredBadges : []) as ShowcaseBadge[]
+        const rawFeaturedNoTenure = rawFeatured.filter((badge) => !isTenureBadge(badge))
+        const selectablePool = getSelectableFeaturedPool(user)
+        const overrideIds = featuredBadgeOverrides[String(user.id)] || []
+
+        if (!overrideIds.length) return rawFeaturedNoTenure.slice(0, 5)
+
+        const poolByIdentity = new Map<string, ShowcaseBadge>()
+        selectablePool.forEach((badge) => {
+            poolByIdentity.set(getShowcaseBadgeIdentity(badge), badge)
+        })
+
+        const selected: ShowcaseBadge[] = []
+        overrideIds.forEach((id) => {
+            const badge = poolByIdentity.get(id)
+            if (badge) selected.push(badge)
+        })
+
+        const seen = new Set(selected.map(getShowcaseBadgeIdentity))
+        rawFeaturedNoTenure.forEach((badge) => {
+            const id = getShowcaseBadgeIdentity(badge)
+            if (!seen.has(id) && selected.length < 5) {
+                selected.push(badge)
+                seen.add(id)
+            }
+        })
+        selectablePool.forEach((badge) => {
+            const id = getShowcaseBadgeIdentity(badge)
+            if (!seen.has(id) && selected.length < 5) {
+                selected.push(badge)
+                seen.add(id)
+            }
+        })
+
+        return selected.slice(0, 5)
+    }
+
+    const getCurrentFeaturedShowcaseIdsForUser = (user: any): string[] => {
+        const currentOverride = featuredBadgeOverrides[String(user?.id || '')]
+        if (Array.isArray(currentOverride) && currentOverride.length > 0) {
+            return Array.from(new Set(currentOverride.filter(Boolean))).slice(0, 5)
+        }
+        return getEffectiveFeaturedBadges(user).map(getShowcaseBadgeIdentity).slice(0, 5)
+    }
+
+    const updateUserFeaturedBadgeOverride = (userId: string, nextIds: string[]) => {
+        const sanitized = Array.from(new Set(nextIds.filter(Boolean))).slice(0, 5)
+        const next = { ...featuredBadgeOverrides }
+        if (sanitized.length === 0) {
+            delete next[userId]
+        } else {
+            next[userId] = sanitized
+        }
+        persistFeaturedBadgeOverrides(next)
+    }
+
     useEffect(() => {
         const fetchCats = async () => {
             const res = await getCatalogs()
@@ -392,6 +585,16 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         }
         fetchCats()
     }, [])
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return
+        if (!editingBadgeShowcaseUserId) return
+        const prev = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+            document.body.style.overflow = prev
+        }
+    }, [editingBadgeShowcaseUserId])
 
     const filteredUsers = users.filter(user => {
         const searchLower = search.toLowerCase()
@@ -430,6 +633,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         if (!badge) return null
         const align = options?.align || 'center'
         const placement = options?.placement || 'top'
+        const badgeStats = badgeStatsByIdentity.get(getShowcaseBadgeIdentity(badge))
+        const holderCount = Number(badgeStats?.holderCount || 0)
+        const badgeTag = getBadgeMiniTagMeta(badge, badgeStats)
 
         if (badge.source === 'industry') {
             const visual = getIndustryBadgeVisualFromMap(String(badge.key || ''), industryVisualMap, String(badge.label || 'Industria'))
@@ -440,7 +646,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     subtitle='Badge de industria'
                     rows={[
                         { label: 'Niv.', value: String(badge.level || 0) },
-                        { label: 'Cier.', value: String(badge.progress || 0) }
+                        { label: 'Cier.', value: String(badge.progress || 0) },
+                        { label: 'Lo tienen', value: holderCount > 0 ? `${holderCount} usuario${holderCount === 1 ? '' : 's'}` : '' },
+                        { label: 'Rareza', value: holderCount > 0 ? getBadgeRarityLabel(holderCount) : '' }
                     ]}
                     placement={placement}
                     align={align}
@@ -453,6 +661,10 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             centerClassName={visual.containerClass}
                             iconClassName={visual.iconClass || 'text-white'}
                             ringStyle='match'
+                            cornerTagText={badgeTag.text}
+                            cornerTagClassName={badgeTag.className}
+                            cornerTagVariant='dot'
+                            cornerTagPlacement='bottom'
                             size='sm'
                             iconSize={12}
                             strokeWidth={2.3}
@@ -463,9 +675,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         }
 
         const visual = getSpecialBadgeShowcaseVisual(badge)
-        const isSeniorityBadge = String(badge?.type || '') === 'seniority_years' || String(badge?.type || '') === 'tenure_years'
+        const isSeniorityBadge = isTenureBadge(badge)
         const tenureMetrics = isSeniorityBadge ? getTenureBadgeMetrics(options?.tenureStartDate || null) : null
-        const isGrantableAdminBadge = Boolean(badge?.meta?.isGrantableAdminBadge)
+        const isGrantableAdminBadge = isGrantableAdminBadgeShowcase(badge)
         const grantsGivenCount = Number(badge?.meta?.grantsGivenCount ?? badge?.progress ?? 0)
         return (
             <BadgeInfoTooltip
@@ -479,11 +691,15 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             { label: 'Años', value: String(tenureMetrics.years) },
                             { label: 'Tiempo', value: formatTenureExactLabel(tenureMetrics) },
                             { label: 'Prog.', value: `${tenureMetrics.progressPctToNextLevel.toFixed(2)}%` },
-                            { label: 'Sig.', value: `${tenureMetrics.nextLevelYears} años` }
+                            { label: 'Sig.', value: `${tenureMetrics.nextLevelYears} años` },
+                            { label: 'Lo tienen', value: holderCount > 0 ? `${holderCount} usuario${holderCount === 1 ? '' : 's'}` : '' },
+                            { label: 'Rareza', value: holderCount > 0 ? getBadgeRarityLabel(holderCount) : '' }
                         ]
                     : [
                         { label: 'Niv.', value: String(badge.level || 0) },
-                        { label: 'Prog.', value: String(badge.progress || 0) }
+                        { label: 'Prog.', value: String(badge.progress || 0) },
+                        { label: 'Lo tienen', value: holderCount > 0 ? `${holderCount} usuario${holderCount === 1 ? '' : 's'}` : '' },
+                        { label: 'Rareza', value: holderCount > 0 ? getBadgeRarityLabel(holderCount) : '' }
                     ]}
                 placement={placement}
                 align={align}
@@ -500,6 +716,10 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                         footerBubbleText={isSeniorityBadge ? String(tenureMetrics?.years ?? Math.max(0, Number(badge.level || badge.progress || 0))) : null}
                         coreBorderColorClassName={String((visual as any)?.coreBorderColorClassName || '')
                             || (shouldUseWhiteCoreBorderForShowcaseBadge(String(badge?.type || '')) ? 'border-white/90' : '')}
+                        cornerTagText={badgeTag.text}
+                        cornerTagClassName={badgeTag.className}
+                        cornerTagVariant='dot'
+                        cornerTagPlacement='bottom'
                         size='sm'
                         iconSize={12}
                         strokeWidth={2.3}
@@ -523,6 +743,183 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
             <div className='w-3 h-3 rounded-full' style={{ background: 'rgba(255,255,255,0.06)' }} />
         </div>
     )
+
+    const editingBadgeShowcaseUser = editingBadgeShowcaseUserId
+        ? users.find((u: any) => String(u?.id) === String(editingBadgeShowcaseUserId))
+        : null
+    const editingBadgeShowcaseCurrentIds = editingBadgeShowcaseUser ? getCurrentFeaturedShowcaseIdsForUser(editingBadgeShowcaseUser) : []
+    const isEditingBadgeShowcaseDirty = editingBadgeShowcaseCurrentIds.join('|') !== editingBadgeShowcaseBaselineIds.join('|')
+
+    const renderBadgeShowcaseEditorContent = (user: any) => {
+        const allShowcaseBadges = getSelectableFeaturedPool(user)
+        const featuredBadges = getEffectiveFeaturedBadges(user)
+        const featuredOverrideIds = getCurrentFeaturedShowcaseIdsForUser(user)
+        const canEdit = String(user?.id || '') === currentUserId
+
+        return (
+            <div className='space-y-4'>
+                {!canEdit ? (
+                    <div className='rounded-2xl border px-4 py-3 text-sm font-bold'
+                        style={{ borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.08)', color: 'var(--text-primary)' }}
+                    >
+                        Solo puedes editar tus propios badges destacados.
+                    </div>
+                ) : null}
+
+                <div className='grid grid-cols-5 gap-2 justify-items-center items-center rounded-2xl border px-3 py-3'
+                    style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
+                >
+                    {Array.from({ length: 5 }).map((_, idx) =>
+                        featuredBadges[idx]
+                            ? renderShowcaseBadge(featuredBadges[idx], `modal-featured-${user.id}-${idx}`, {
+                                align: idx === 0 ? 'start' : idx === 4 ? 'end' : 'center',
+                                placement: 'top',
+                                tenureStartDate: user?.details?.start_date || null
+                            })
+                            : renderEmptyBadgeSlot(`modal-featured-empty-${user.id}-${idx}`)
+                    )}
+                </div>
+
+                <div className='rounded-2xl border p-4 text-left space-y-4'
+                    style={{ borderColor: 'var(--card-border)', background: 'rgba(255,255,255,0.02)' }}
+                >
+                    <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2'>
+                        <div>
+                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-secondary)' }}>
+                                Badges destacados
+                            </p>
+                            <p className='text-sm font-bold mt-1' style={{ color: 'var(--text-primary)' }}>
+                                Ordena y elige qué badges mostrar en tu tarjeta del equipo
+                            </p>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                            <button
+                                type='button'
+                                disabled={!canEdit}
+                                onClick={() => {
+                                    const suggested = sortSuggestedFeaturedBadges(allShowcaseBadges).slice(0, 5)
+                                    updateUserFeaturedBadgeOverride(String(user.id), suggested.map(getShowcaseBadgeIdentity))
+                                }}
+                                className='h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.12em] inline-flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-default hover:border-[#22c55e]/50 hover:text-[#86efac]'
+                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}
+                            >
+                                <Sparkles size={12} />
+                                Sugerido
+                            </button>
+                            <button
+                                type='button'
+                                disabled={!canEdit}
+                                onClick={() => updateUserFeaturedBadgeOverride(String(user.id), [])}
+                                className='h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.12em] cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-default hover:border-white/30 hover:text-white'
+                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)' }}
+                            >
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
+                        <div>
+                            <p className='text-[10px] font-black uppercase tracking-[0.14em] mb-2 opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                Orden expuesto
+                            </p>
+                            <div className='space-y-1.5 max-h-80 overflow-y-auto custom-scrollbar pr-1'>
+                                {featuredOverrideIds.slice(0, 5).map((badgeId, idx) => {
+                                    const badge = allShowcaseBadges.find((b) => getShowcaseBadgeIdentity(b) === badgeId)
+                                    if (!badge) return null
+                                    const stats = badgeStatsByIdentity.get(badgeId)
+                                    return (
+                                        <div key={`modal-selected-${user.id}-${badgeId}`} className='flex items-center gap-2 rounded-xl border px-2 py-1.5'
+                                            style={{ borderColor: 'var(--card-border)', background: 'rgba(255,255,255,0.01)' }}
+                                        >
+                                            <span className='text-[9px] font-black w-4 text-center opacity-60' style={{ color: 'var(--text-secondary)' }}>{idx + 1}</span>
+                                            <div className='shrink-0'>
+                                                {renderShowcaseBadge(badge, `modal-edit-selected-${user.id}-${badgeId}`, { align: 'start', placement: 'bottom', tenureStartDate: user?.details?.start_date || null })}
+                                            </div>
+                                            <div className='min-w-0 flex-1'>
+                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>{badge.label}</p>
+                                                <p className='text-[9px] opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                                    {Number(stats?.holderCount || 0)} usuario{Number(stats?.holderCount || 0) === 1 ? '' : 's'}
+                                                </p>
+                                            </div>
+                                            <div className='flex items-center gap-1'>
+                                                <button type='button' disabled={!canEdit || idx === 0} onClick={() => {
+                                                    const next = [...featuredOverrideIds]
+                                                    ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+                                                    updateUserFeaturedBadgeOverride(String(user.id), next)
+                                                }} className='h-7 w-7 rounded-lg border inline-flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-default transition-colors hover:border-white/30'
+                                                    style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }} title='Subir'>
+                                                    <ArrowUp size={11} />
+                                                </button>
+                                                <button type='button' disabled={!canEdit || idx >= Math.min(featuredOverrideIds.length, 5) - 1} onClick={() => {
+                                                    const next = [...featuredOverrideIds]
+                                                    ;[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]]
+                                                    updateUserFeaturedBadgeOverride(String(user.id), next)
+                                                }} className='h-7 w-7 rounded-lg border inline-flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-default transition-colors hover:border-white/30'
+                                                    style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }} title='Bajar'>
+                                                    <ArrowDown size={11} />
+                                                </button>
+                                                <button type='button' disabled={!canEdit} onClick={() => updateUserFeaturedBadgeOverride(String(user.id), featuredOverrideIds.filter((id) => id !== badgeId))}
+                                                    className='h-7 w-7 rounded-lg border inline-flex items-center justify-center cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default hover:border-[#ef4444]/40 hover:text-[#fca5a5]'
+                                                    style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }} title='Quitar'>
+                                                    <X size={11} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                                {featuredOverrideIds.length === 0 ? (
+                                    <p className='text-[10px] font-medium opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                        Sin configuración manual. Usa “Sugerido” o agrega badges abajo.
+                                    </p>
+                                ) : null}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className='text-[10px] font-black uppercase tracking-[0.14em] mb-2 opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                Disponibles para destacar
+                            </p>
+                            <div className='max-h-80 overflow-y-auto custom-scrollbar space-y-1.5 pr-1'>
+                                {sortSuggestedFeaturedBadges(allShowcaseBadges).map((badge) => {
+                                    const badgeId = getShowcaseBadgeIdentity(badge)
+                                    const selected = featuredOverrideIds.includes(badgeId)
+                                    const stats = badgeStatsByIdentity.get(badgeId)
+                                    return (
+                                        <div key={`modal-pool-${user.id}-${badgeId}`} className='flex items-center gap-2 rounded-xl border px-2 py-1.5'
+                                            style={{
+                                                borderColor: selected ? 'rgba(34,197,94,0.35)' : 'var(--card-border)',
+                                                background: selected ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.01)'
+                                            }}
+                                        >
+                                            <div className='shrink-0'>
+                                                {renderShowcaseBadge(badge, `modal-edit-pool-${user.id}-${badgeId}`, { align: 'start', placement: 'bottom', tenureStartDate: user?.details?.start_date || null })}
+                                            </div>
+                                            <div className='min-w-0 flex-1'>
+                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>{badge.label}</p>
+                                                <p className='text-[9px] opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                                    {Number(stats?.holderCount || 0)} usuarios · niv. max {Number(stats?.maxLevel || 0)}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type='button'
+                                                disabled={!canEdit || selected || featuredOverrideIds.length >= 5}
+                                                onClick={() => updateUserFeaturedBadgeOverride(String(user.id), [...featuredOverrideIds, badgeId])}
+                                                className='h-8 px-2.5 rounded-lg border text-[9px] font-black uppercase tracking-[0.12em] cursor-pointer transition-colors disabled:opacity-35 disabled:cursor-default hover:border-[#22c55e]/50 hover:text-[#86efac]'
+                                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
+                                            >
+                                                {selected ? 'Agregado' : 'Agregar'}
+                                            </button>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -641,12 +1038,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     const grantableAdminBadge = (user?.badgeShowcase?.grantableAdminBadge || null) as ShowcaseBadge | null
                     const isGrantingAdmin = Boolean(grantableAdminBadge)
                     const rawFeaturedBadges = (Array.isArray(user?.badgeShowcase?.featuredBadges) ? user.badgeShowcase.featuredBadges : []) as ShowcaseBadge[]
-                    const seniorityBadge = rawFeaturedBadges.find(
-                        (badge) => badge.type === 'seniority_years' || badge.type === 'tenure_years'
-                    ) || null
-                    const featuredBadges = rawFeaturedBadges.filter(
-                        (badge) => badge.type !== 'seniority_years' && badge.type !== 'tenure_years'
-                    )
+                    const seniorityBadge = rawFeaturedBadges.find((badge) => isTenureBadge(badge)) || null
+                    const featuredBadges = getEffectiveFeaturedBadges(user)
+                    const canEditOwnShowcase = String(user?.id || '') === currentUserId
                     const jobPositionNames = getUserJobPositionIds(user).map(id => resolve('job_positions', id)).filter(Boolean)
                     const areaItems = areaIds
                         .map(areaId => {
@@ -735,9 +1129,26 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                             <p className='text-[9px] font-black uppercase tracking-[0.16em] opacity-70' style={{ color: 'var(--text-secondary)' }}>
                                                 Badges destacados
                                             </p>
-                                            <span className='text-[9px] font-black opacity-60' style={{ color: 'var(--text-secondary)' }}>
-                                                5 slots
-                                            </span>
+                                            <div className='flex items-center gap-1.5'>
+                                                <span className='text-[9px] font-black opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                                    5 slots
+                                                </span>
+                                                {canEditOwnShowcase ? (
+                                                    <button
+                                                        type='button'
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setEditingBadgeShowcaseBaselineIds(getCurrentFeaturedShowcaseIdsForUser(user))
+                                                            setEditingBadgeShowcaseUserId(String(user.id))
+                                                        }}
+                                                        className='group relative h-6 w-6 rounded-lg border border-[var(--card-border)] bg-white/[0.02] text-[var(--text-secondary)] inline-flex items-center justify-center cursor-pointer transition-colors hover:border-[#f59e0b]/75 hover:text-[#f8d08a] hover:bg-[#f59e0b]/12'
+                                                        title='Editar badges destacados'
+                                                        aria-label='Editar badges destacados'
+                                                    >
+                                                        <Pencil size={11} />
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         </div>
                                         <div className='grid grid-cols-5 gap-2 justify-items-center items-center'>
                                             {Array.from({ length: 5 }).map((_, idx) =>
@@ -805,6 +1216,59 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     user={selectedUser}
                     catalogs={catalogs}
                 />
+            )}
+
+            {editingBadgeShowcaseUser && typeof document !== 'undefined' && createPortal(
+                <div className='fixed inset-0 z-[10070] flex items-center justify-center p-4 md:p-6'>
+                    <button
+                        type='button'
+                        aria-label='Cerrar editor de badges destacados'
+                        className='absolute inset-0 bg-black/35 cursor-default'
+                        onClick={() => {
+                            setEditingBadgeShowcaseUserId(null)
+                            setEditingBadgeShowcaseBaselineIds([])
+                        }}
+                    />
+
+                    <div
+                        className='relative w-full max-w-5xl max-h-[calc(100vh-80px)] rounded-[28px] border shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom duration-300'
+                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}
+                    >
+                        <div className='px-6 md:px-8 py-4 border-b flex items-center justify-between gap-4'
+                            style={{ borderBottomColor: 'var(--card-border)', background: 'var(--background)' }}
+                        >
+                            <div className='min-w-0'>
+                                <p className='text-[10px] font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>
+                                    Badges destacados
+                                </p>
+                                <p className='text-sm md:text-base font-bold mt-1 truncate' style={{ color: 'var(--text-primary)' }}>
+                                    Editar badges expuestos de {editingBadgeShowcaseUser.full_name || 'usuario'}
+                                </p>
+                                <p className='text-xs mt-1 opacity-75' style={{ color: 'var(--text-secondary)' }}>
+                                    Solo puedes modificar tus badges destacados y su orden.
+                                </p>
+                            </div>
+                            <button
+                                type='button'
+                                onClick={() => {
+                                    setEditingBadgeShowcaseUserId(null)
+                                    setEditingBadgeShowcaseBaselineIds([])
+                                }}
+                                className='h-11 px-4 rounded-2xl border font-black transition-all uppercase text-[10px] tracking-widest hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95 inline-flex items-center gap-2 cursor-pointer shrink-0'
+                                style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                                title={isEditingBadgeShowcaseDirty ? 'Guardar cambios' : 'Cerrar'}
+                            >
+                                <X size={14} />
+                                {isEditingBadgeShowcaseDirty ? 'Guardar cambios' : 'Cerrar'}
+                            </button>
+                        </div>
+
+                        <div className='overflow-y-auto custom-scrollbar p-4 md:p-6 max-h-[calc(100vh-170px)]'>
+                            {renderBadgeShowcaseEditorContent(editingBadgeShowcaseUser)}
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     )

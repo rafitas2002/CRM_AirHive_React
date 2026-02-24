@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UserPlus, Search, ShieldCheck, ListFilter, RotateCw, User, Users, Link2Off, Link2 } from 'lucide-react'
+import { UserPlus, Search, ShieldCheck, ListFilter, RotateCw, Users, Link2Off, Link2 } from 'lucide-react'
 import EmployeeModal from '@/components/EmployeeModal'
 import RoleBadge from '@/components/RoleBadge'
+import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 import { createEmployee, updateEmployee, setRhMasterEnabled } from '@/app/actions/employees'
 import { useRouter } from 'next/navigation'
-import { getRoleSilhouetteColor } from '@/lib/roleUtils'
 
 interface EmployeesClientProps {
     initialEmployees: any[]
@@ -269,23 +269,12 @@ export default function EmployeesClient({ initialEmployees, currentUserRole, rhM
                                     <td className='px-8 py-5'>
                                         <div className='flex items-center gap-4'>
                                             {(() => {
-                                                const silhouetteColor = getRoleSilhouetteColor(emp.role)
-                                                const avatarBorderColor = `color-mix(in srgb, ${silhouetteColor} 70%, var(--card-border))`
                                                 return (
-                                            <div
-                                                className='w-12 h-12 rounded-2xl border-2 flex items-center justify-center shadow-sm'
-                                                style={{ borderColor: avatarBorderColor, background: 'var(--hover-bg)' }}
-                                            >
-                                                {emp.avatar_url ? (
-                                                    <img
-                                                        src={emp.avatar_url}
-                                                        alt={emp.full_name || 'Avatar'}
-                                                        className='w-full h-full object-cover rounded-[14px]'
+                                                    <TableEmployeeAvatar
+                                                        name={emp.full_name || emp.username || 'Usuario'}
+                                                        avatarUrl={emp.avatar_url}
+                                                        size='lg'
                                                     />
-                                                ) : (
-                                                    <User size={20} strokeWidth={1.9} style={{ color: silhouetteColor }} />
-                                                )}
-                                            </div>
                                                 )
                                             })()}
                                             <div>

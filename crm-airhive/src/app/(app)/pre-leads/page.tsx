@@ -16,6 +16,7 @@ export default function PreLeadsPage() {
     const auth = useAuth()
     const [supabase] = useState(() => createClient())
     const [preLeads, setPreLeads] = useState<any[]>([])
+    const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
     const [loading, setLoading] = useState(true)
 
     // Modals Pre-Lead
@@ -126,7 +127,31 @@ export default function PreLeadsPage() {
                 .order('created_at', { ascending: false })
 
             if (error) throw error
-            setPreLeads(data || [])
+            const rows = (data || []) as any[]
+            setPreLeads(rows)
+
+            const sellerIds = Array.from(new Set(
+                rows.map((row) => String(row?.vendedor_id || '')).filter(Boolean)
+            ))
+
+            if (sellerIds.length > 0) {
+                const { data: profileRows } = await (supabase.from('profiles') as any)
+                    .select('id, full_name, avatar_url')
+                    .in('id', sellerIds)
+
+                const nextMap: Record<string, { fullName?: string | null; avatarUrl?: string | null }> = {}
+                ;((profileRows || []) as any[]).forEach((row) => {
+                    const id = String(row?.id || '')
+                    if (!id) return
+                    nextMap[id] = {
+                        fullName: row?.full_name || null,
+                        avatarUrl: row?.avatar_url || null
+                    }
+                })
+                setSellerProfilesById(nextMap)
+            } else {
+                setSellerProfilesById({})
+            }
         } catch (error) {
             console.error('Error fetching pre-leads:', error)
         } finally {
@@ -681,6 +706,7 @@ export default function PreLeadsPage() {
                         ) : (
                             <PreLeadsTable
                                 preLeads={filteredPreLeads}
+                                sellerProfilesById={sellerProfilesById}
                                 isEditingMode={isEditingMode}
                                 onEdit={(pl) => { setModalMode('edit'); setCurrentPreLead(pl); setIsModalOpen(true); }}
                                 onDelete={(id) => { setDeleteId(id); setIsDeleteModalOpen(true); }}
