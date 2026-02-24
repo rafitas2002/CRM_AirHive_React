@@ -303,6 +303,247 @@ body {
   background: rgb(255 255 255 / 0.22);
 }
 
+.ah-badge-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+  z-index: 1;
+}
+
+.ah-badge-tooltip:hover,
+.ah-badge-tooltip:focus-within {
+  z-index: 520;
+}
+
+.ah-badge-tooltip-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translate(-50%, 6px);
+  width: min(300px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  background: color-mix(in srgb, var(--card-bg) 86%, #0f172a);
+  box-shadow: 0 18px 36px rgb(0 0 0 / 0.28);
+  padding: 10px 12px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+  z-index: 560;
+}
+
+.ah-badge-tooltip[data-placement='bottom'] .ah-badge-tooltip-bubble {
+  bottom: auto;
+  top: calc(100% + 10px);
+  transform: translate(-50%, -6px);
+}
+
+.ah-badge-tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  border-bottom: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  background: color-mix(in srgb, var(--card-bg) 86%, #0f172a);
+  rotate: 45deg;
+}
+
+.ah-badge-tooltip[data-placement='bottom'] .ah-badge-tooltip-bubble::after {
+  top: auto;
+  bottom: 100%;
+  border-right: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  border-bottom: none;
+  border-top: 1px solid color-mix(in srgb, var(--card-border) 65%, #1e40af);
+  transform: translateX(-50%);
+}
+
+.ah-badge-tooltip--start .ah-badge-tooltip-bubble {
+  left: 0;
+  transform: translateY(6px);
+}
+
+.ah-badge-tooltip--start .ah-badge-tooltip-bubble::after {
+  left: 22px;
+  transform: none;
+}
+
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--start .ah-badge-tooltip-bubble::after {
+  left: 22px;
+  transform: none;
+}
+
+.ah-badge-tooltip--end .ah-badge-tooltip-bubble {
+  left: auto;
+  right: 0;
+  transform: translateY(6px);
+}
+
+.ah-badge-tooltip--end .ah-badge-tooltip-bubble::after {
+  left: auto;
+  right: 22px;
+  transform: none;
+}
+
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--end .ah-badge-tooltip-bubble::after {
+  left: auto;
+  right: 22px;
+  transform: none;
+}
+
+.ah-badge-tooltip:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip:focus-within .ah-badge-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.ah-badge-tooltip[data-placement='bottom']:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip[data-placement='bottom']:focus-within .ah-badge-tooltip-bubble {
+  transform: translate(-50%, 0);
+}
+
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--start:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--start:focus-within .ah-badge-tooltip-bubble {
+  transform: translateY(0);
+}
+
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--end:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip[data-placement='bottom'].ah-badge-tooltip--end:focus-within .ah-badge-tooltip-bubble {
+  transform: translateY(0);
+}
+
+.ah-badge-tooltip--start:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip--start:focus-within .ah-badge-tooltip-bubble,
+.ah-badge-tooltip--end:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip--end:focus-within .ah-badge-tooltip-bubble {
+  transform: translateY(0);
+}
+
+.ah-badge-tooltip-title {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.ah-badge-tooltip-subtitle {
+  display: block;
+  margin-top: 2px;
+  color: var(--accent-secondary);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ah-badge-tooltip-rows {
+  margin-top: 8px;
+  display: grid;
+  gap: 3px;
+}
+
+.ah-badge-tooltip-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ah-badge-tooltip-label {
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ah-badge-tooltip-value {
+  color: var(--text-primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.ah-badge-tooltip--inline {
+  width: 100%;
+  display: block;
+  position: relative;
+}
+
+.ah-badge-tooltip--inline .ah-badge-tooltip-bubble {
+  position: static;
+  transform: none;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  opacity: 0;
+  visibility: hidden;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.16s ease, max-height 0.18s ease, margin-top 0.16s ease, visibility 0.16s ease;
+}
+
+.ah-badge-tooltip--inline .ah-badge-tooltip-bubble::after {
+  display: none;
+}
+
+.ah-badge-tooltip--inline:hover .ah-badge-tooltip-bubble,
+.ah-badge-tooltip--inline:focus-within .ah-badge-tooltip-bubble {
+  opacity: 1;
+  visibility: visible;
+  max-height: 140px;
+  margin-top: 10px;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-bubble {
+  width: min(176px, calc(100vw - 24px));
+  border-radius: 10px;
+  padding: 5px 7px;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-bubble::after {
+  width: 7px;
+  height: 7px;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-title {
+  font-size: 0.62rem;
+  line-height: 1.15;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-subtitle {
+  margin-top: 1px;
+  font-size: 0.46rem;
+  letter-spacing: 0.08em;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-rows {
+  margin-top: 4px;
+  gap: 1px;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-row {
+  gap: 6px;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-label {
+  font-size: 0.48rem;
+  letter-spacing: 0.05em;
+}
+
+.ah-badge-tooltip--compact .ah-badge-tooltip-value {
+  font-size: 0.54rem;
+}
+
 @media (max-width: 767px) {
   .ah-modal-overlay {
     padding: calc(70px + 12px) 12px 12px;

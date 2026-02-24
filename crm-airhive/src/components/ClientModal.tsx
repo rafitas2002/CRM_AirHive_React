@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { FriendlyDatePicker } from './FriendlyDatePickers'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 
@@ -15,16 +16,52 @@ export type ClientData = {
     etapa: string
     valor_estimado: number
     valor_real_cierre?: number | null
+    valor_implementacion_estimado?: number | null
+    valor_implementacion_real_cierre?: number | null
     oportunidad: string
     calificacion: number
     notas: string
     empresa_id?: string
     owner_id?: string
     probabilidad?: number
+    forecast_close_date?: string | null
+    closed_at_real?: string | null
     probability_locked?: boolean | null
     next_meeting_id?: string | null
     email?: string
     telefono?: string
+}
+
+function formatCurrencyInputNumber(value: number | null | undefined): string {
+    if (value === null || value === undefined || Number.isNaN(value)) return ''
+    const safeInt = Math.max(0, Math.round(Number(value) || 0))
+    return safeInt.toLocaleString('en-US')
+}
+
+function parseCurrencyInputValue(raw: string): number | null {
+    const digits = raw.replace(/[^\d]/g, '')
+    if (!digits) return null
+    const parsed = Number(digits)
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function isWonStageLocal(stage: unknown) {
+    const normalized = String(stage || '').trim().toLowerCase()
+    return normalized === 'cerrado ganado' || normalized === 'cerrada ganada'
+}
+
+function isLostStageLocal(stage: unknown) {
+    const normalized = String(stage || '').trim().toLowerCase()
+    return normalized === 'cerrado perdido' || normalized === 'cerrada perdida'
+}
+
+function isClosedStageLocal(stage: unknown) {
+    return isWonStageLocal(stage) || isLostStageLocal(stage)
+}
+
+function todayDateOnly() {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
 interface ClientModalProps {
@@ -50,14 +87,18 @@ export default function ClientModal({
     const [formData, setFormData] = useState<ClientData>({
         empresa: '',
         nombre: '',
-        etapa: 'Prospección',
+        etapa: 'Negociación',
         valor_estimado: 0,
         valor_real_cierre: null,
+        valor_implementacion_estimado: 0,
+        valor_implementacion_real_cierre: null,
         oportunidad: '',
         calificacion: 3,
         notas: '',
         empresa_id: undefined,
         probabilidad: 50,
+        forecast_close_date: null,
+        closed_at_real: null,
         email: '',
         telefono: ''
     })
@@ -71,6 +112,12 @@ export default function ClientModal({
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [supabase] = useState(() => createClient())
+    const [showCloseLeadPanel, setShowCloseLeadPanel] = useState(false)
+    const [pendingCloseOutcome, setPendingCloseOutcome] = useState<'won' | 'lost'>('won')
+    const [pendingCloseDate, setPendingCloseDate] = useState<string | null>(todayDateOnly())
+    const [pendingCloseRealValue, setPendingCloseRealValue] = useState<number | null>(null)
+    const [pendingCloseImplementationRealValue, setPendingCloseImplementationRealValue] = useState<number | null>(null)
+    const areRealCloseValueFieldsLockedInForm = true
 
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
@@ -78,6 +125,10 @@ export default function ClientModal({
                 setFormData({
                     ...initialData,
                     valor_real_cierre: initialData.valor_real_cierre ?? null,
+                    valor_implementacion_estimado: (initialData as any).valor_implementacion_estimado ?? 0,
+                    valor_implementacion_real_cierre: (initialData as any).valor_implementacion_real_cierre ?? null,
+                    forecast_close_date: initialData.forecast_close_date ?? null,
+                    closed_at_real: initialData.closed_at_real ?? null,
                     email: initialData.email || '',
                     telefono: initialData.telefono || ''
                 })
@@ -88,14 +139,18 @@ export default function ClientModal({
                 setFormData({
                     empresa: '',
                     nombre: '',
-                    etapa: 'Prospección',
+                    etapa: 'Negociación',
                     valor_estimado: 0,
                     valor_real_cierre: null,
+                    valor_implementacion_estimado: 0,
+                    valor_implementacion_real_cierre: null,
                     oportunidad: '',
                     calificacion: 3,
                     notas: '',
                     empresa_id: undefined,
                     probabilidad: 50,
+                    forecast_close_date: null,
+                    closed_at_real: null,
                     email: '',
                     telefono: ''
                 })
@@ -103,6 +158,11 @@ export default function ClientModal({
                 setIsProbEditable(true)
                 setEditabilityReason('')
             }
+            setShowCloseLeadPanel(false)
+            setPendingCloseOutcome('won')
+            setPendingCloseDate((initialData as any)?.closed_at_real || todayDateOnly())
+            setPendingCloseRealValue(initialData?.valor_real_cierre ?? initialData?.valor_estimado ?? null)
+            setPendingCloseImplementationRealValue((initialData as any)?.valor_implementacion_real_cierre ?? (initialData as any)?.valor_implementacion_estimado ?? null)
             fetchCurrentUser()
         }
         wasOpen.current = isOpen
@@ -113,6 +173,20 @@ export default function ClientModal({
             setFormData((prev) => ({ ...prev, valor_real_cierre: prev.valor_estimado || 0 }))
         }
     }, [formData.etapa, formData.valor_estimado, formData.valor_real_cierre])
+
+    useEffect(() => {
+        if (formData.etapa === 'Cerrado Ganado' && ((formData as any).valor_implementacion_real_cierre === null || (formData as any).valor_implementacion_real_cierre === undefined)) {
+            setFormData((prev) => ({ ...prev, valor_implementacion_real_cierre: (prev as any).valor_implementacion_estimado || 0 }))
+        }
+    }, [formData.etapa, (formData as any).valor_implementacion_estimado, (formData as any).valor_implementacion_real_cierre])
+
+    useEffect(() => {
+        if (showCloseLeadPanel) {
+            setPendingCloseDate(formData.closed_at_real || todayDateOnly())
+            setPendingCloseRealValue(formData.valor_real_cierre ?? formData.valor_estimado ?? null)
+            setPendingCloseImplementationRealValue((formData as any).valor_implementacion_real_cierre ?? (formData as any).valor_implementacion_estimado ?? null)
+        }
+    }, [showCloseLeadPanel, formData.closed_at_real, formData.valor_real_cierre, formData.valor_estimado, (formData as any).valor_implementacion_real_cierre, (formData as any).valor_implementacion_estimado])
 
     const fetchCurrentUser = async () => {
         const { data: { user } } = await supabase.auth.getUser()
@@ -181,6 +255,31 @@ export default function ClientModal({
         () => companies.find((company) => company.id === formData.empresa_id),
         [companies, formData.empresa_id]
     )
+    const hasLeadChanges = useMemo(() => {
+        if (mode !== 'edit' || !initialData) return true
+
+        const norm = (v: any) => (v ?? null)
+        const asNum = (v: any) => (v === null || v === undefined || v === '' ? null : Number(v))
+
+        return !(
+            norm(formData.empresa_id) === norm(initialData.empresa_id) &&
+            String(formData.empresa || '') === String(initialData.empresa || '') &&
+            String(formData.nombre || '') === String(initialData.nombre || '') &&
+            String(formData.email || '') === String(initialData.email || '') &&
+            String(formData.telefono || '') === String(initialData.telefono || '') &&
+            String(formData.etapa || '') === String(initialData.etapa || '') &&
+            asNum(formData.valor_estimado) === asNum(initialData.valor_estimado) &&
+            asNum(formData.valor_real_cierre) === asNum(initialData.valor_real_cierre) &&
+            asNum((formData as any).valor_implementacion_estimado) === asNum((initialData as any).valor_implementacion_estimado) &&
+            asNum((formData as any).valor_implementacion_real_cierre) === asNum((initialData as any).valor_implementacion_real_cierre) &&
+            String(formData.oportunidad || '') === String(initialData.oportunidad || '') &&
+            asNum(formData.calificacion) === asNum(initialData.calificacion) &&
+            String(formData.notas || '') === String(initialData.notas || '') &&
+            asNum(formData.probabilidad) === asNum(initialData.probabilidad) &&
+            norm(formData.forecast_close_date) === norm(initialData.forecast_close_date) &&
+            norm(formData.closed_at_real) === norm((initialData as any).closed_at_real)
+        )
+    }, [mode, initialData, formData])
 
     const handleCompanySelect = (companyId: string) => {
         const company = companies.find((c) => c.id === companyId)
@@ -217,6 +316,26 @@ export default function ClientModal({
             return
         }
 
+        if (mode === 'edit' && !hasLeadChanges) {
+            onClose()
+            return
+        }
+
+        if (isWonStageLocal(formData.etapa)) {
+            if (!formData.closed_at_real) {
+                alert('Debes registrar la fecha real de cierre del lead ganado.')
+                return
+            }
+            if ((formData.valor_real_cierre ?? 0) <= 0) {
+                alert('Debes registrar la mensualidad real para un lead ganado.')
+                return
+            }
+            if (((formData as any).valor_implementacion_real_cierre ?? 0) <= 0) {
+                alert('Debes registrar el valor real de implementación para un lead ganado.')
+                return
+            }
+        }
+
         setIsSubmitting(true)
         try {
             await onSave(formData)
@@ -229,6 +348,46 @@ export default function ClientModal({
     }
 
     if (!isOpen) return null
+
+    const currentStageLabel = isWonStageLocal(formData.etapa)
+        ? 'Cerrado Ganado'
+        : isLostStageLocal(formData.etapa)
+            ? 'Cerrado Perdido'
+            : 'Negociación'
+
+    const applyCloseLead = () => {
+        if (!pendingCloseDate) {
+            alert('Selecciona la fecha real del cierre.')
+            return
+        }
+        if (pendingCloseOutcome === 'won' && (pendingCloseRealValue ?? 0) <= 0) {
+            alert('Ingresa la mensualidad real para cerrar como ganado.')
+            return
+        }
+        if (pendingCloseOutcome === 'won' && (pendingCloseImplementationRealValue ?? 0) <= 0) {
+            alert('Ingresa el valor real de implementación para cerrar como ganado.')
+            return
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            etapa: pendingCloseOutcome === 'won' ? 'Cerrado Ganado' : 'Cerrado Perdido',
+            closed_at_real: pendingCloseDate,
+            valor_real_cierre: pendingCloseOutcome === 'won' ? (pendingCloseRealValue ?? prev.valor_estimado ?? 0) : null,
+            valor_implementacion_real_cierre: pendingCloseOutcome === 'won'
+                ? (pendingCloseImplementationRealValue ?? (prev as any).valor_implementacion_estimado ?? 0)
+                : null
+        }))
+        setShowCloseLeadPanel(false)
+    }
+
+    const reopenLead = () => {
+        setFormData(prev => ({
+            ...prev,
+            etapa: 'Negociación'
+        }))
+        setShowCloseLeadPanel(false)
+    }
 
     return (
         <div className='ah-modal-overlay transition-all animate-in fade-in duration-300'>
@@ -372,57 +531,252 @@ export default function ClientModal({
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='space-y-2'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Etapa Comercial</label>
-                            <select
-                                value={formData.etapa}
-                                onChange={(e) => setFormData({ ...formData, etapa: e.target.value })}
-                                className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all cursor-pointer appearance-none'
+                            <div
+                                className='w-full px-4 py-3 border rounded-xl font-bold text-xs flex items-center justify-between gap-3'
                                 style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                             >
-                                <option value='Prospección'>Prospección</option>
-                                <option value='Negociación'>Negociación</option>
-                                <option value='Cerrado Ganado'>Cerrado Ganado</option>
-                                <option value='Cerrado Perdido'>Cerrado Perdido</option>
-                            </select>
+                                <span>{currentStageLabel}</span>
+                                {isClosedStageLocal(formData.etapa) && (
+                                    <span className={`text-[9px] font-black uppercase tracking-wider ${isWonStageLocal(formData.etapa) ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        Registrado
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className='flex flex-wrap gap-2'>
+                                <span className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/60 self-center'>
+                                    {!isClosedStageLocal(formData.etapa)
+                                        ? 'El cierre se registra desde el botón inferior.'
+                                        : 'Puedes editar o reabrir el cierre desde el footer.'}
+                                </span>
+                            </div>
+
+                            {showCloseLeadPanel && (
+                                <div className='mt-3 p-4 rounded-2xl border space-y-4' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                    <div className='flex items-center justify-between gap-2'>
+                                        <p className='text-[10px] font-black uppercase tracking-widest text-[var(--text-primary)]'>Confirmar Cierre</p>
+                                        <button
+                                            type='button'
+                                            onClick={() => setShowCloseLeadPanel(false)}
+                                            className='text-[9px] font-black uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer'
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+
+                                    <div className='grid grid-cols-2 gap-2'>
+                                        <button
+                                            type='button'
+                                            onClick={() => setPendingCloseOutcome('won')}
+                                            className={`px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all ${pendingCloseOutcome === 'won' ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10' : ''}`}
+                                            style={pendingCloseOutcome === 'won'
+                                                ? undefined
+                                                : { background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            Cerrado Ganado
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={() => setPendingCloseOutcome('lost')}
+                                            className={`px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all ${pendingCloseOutcome === 'lost' ? 'border-rose-500 text-rose-400 bg-rose-500/10' : ''}`}
+                                            style={pendingCloseOutcome === 'lost'
+                                                ? undefined
+                                                : { background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            Cerrado Perdido
+                                        </button>
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                            Fecha Real del Cierre
+                                        </label>
+                                        <FriendlyDatePicker
+                                            value={pendingCloseDate}
+                                            onChange={setPendingCloseDate}
+                                            yearStart={new Date().getFullYear() - 5}
+                                            yearEnd={new Date().getFullYear() + 1}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all cursor-pointer text-left'
+                                        />
+                                        <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
+                                            Si el cierre se registró tarde en el CRM, aquí puedes corregir la fecha real.
+                                        </p>
+                                    </div>
+
+                                    {pendingCloseOutcome === 'won' && (
+                                        <div className='space-y-2'>
+                                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                                Mensualidad Real
+                                            </label>
+                                            <div className='relative'>
+                                                <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
+                                                <input
+                                                    type='text'
+                                                    inputMode='numeric'
+                                                    pattern='[0-9,]*'
+                                                    value={formatCurrencyInputNumber(pendingCloseRealValue)}
+                                                    onChange={(e) => setPendingCloseRealValue(parseCurrencyInputValue(e.target.value))}
+                                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 font-bold text-xs'
+                                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                    placeholder='0'
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {pendingCloseOutcome === 'won' && (
+                                        <div className='space-y-2'>
+                                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                                Valor Real de Implementación
+                                            </label>
+                                            <div className='relative'>
+                                                <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
+                                                <input
+                                                    type='text'
+                                                    inputMode='numeric'
+                                                    pattern='[0-9,]*'
+                                                    value={formatCurrencyInputNumber(pendingCloseImplementationRealValue)}
+                                                    onChange={(e) => setPendingCloseImplementationRealValue(parseCurrencyInputValue(e.target.value))}
+                                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 font-bold text-xs'
+                                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                    placeholder='0'
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className='flex justify-end gap-2 pt-1'>
+                                        <button
+                                            type='button'
+                                            onClick={() => setShowCloseLeadPanel(false)}
+                                            className='px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider cursor-pointer'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={applyCloseLead}
+                                            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer text-white ${pendingCloseOutcome === 'won' ? 'bg-emerald-600' : 'bg-rose-600'}`}
+                                        >
+                                            Confirmar Cierre
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className='space-y-2'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                Valor Estimado
+                                Mensualidad Estimada
                             </label>
                             <div className='relative'>
                                 <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                 <input
-                                    type='number'
-                                    min='0'
-                                    value={formData.valor_estimado}
-                                    onChange={(e) => setFormData({ ...formData, valor_estimado: Number(e.target.value) })}
+                                    type='text'
+                                    inputMode='numeric'
+                                    pattern='[0-9,]*'
+                                    value={formatCurrencyInputNumber(formData.valor_estimado)}
+                                    onChange={(e) => {
+                                        const next = parseCurrencyInputValue(e.target.value)
+                                        setFormData({ ...formData, valor_estimado: next ?? 0 })
+                                    }}
                                     className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
                                     style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='0'
                                 />
                             </div>
                             <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
-                                Pronóstico de valor para el lead.
+                                Pronóstico de mensualidad para el lead.
                             </p>
                         </div>
 
-                        {formData.etapa === 'Cerrado Ganado' && (
+                        <div className='space-y-2'>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                Valor de Implementación (Pronóstico)
+                            </label>
+                            <div className='relative'>
+                                <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
+                                <input
+                                    type='text'
+                                    inputMode='numeric'
+                                    pattern='[0-9,]*'
+                                    value={formatCurrencyInputNumber((formData as any).valor_implementacion_estimado ?? 0)}
+                                    onChange={(e) => {
+                                        const next = parseCurrencyInputValue(e.target.value)
+                                        setFormData({ ...formData, valor_implementacion_estimado: next ?? 0 })
+                                    }}
+                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='0'
+                                />
+                            </div>
+                            <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
+                                Pronóstico de cuota única de implementación.
+                            </p>
+                        </div>
+
+                        {isWonStageLocal(formData.etapa) && (
                             <div className='space-y-2'>
                                 <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                    Valor Real de Cierre
+                                    Mensualidad Real de Cierre
                                 </label>
                                 <div className='relative'>
                                     <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                     <input
-                                        type='number'
-                                        min='0'
-                                        value={formData.valor_real_cierre ?? 0}
-                                        onChange={(e) => setFormData({ ...formData, valor_real_cierre: Number(e.target.value) })}
-                                        className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                        type='text'
+                                        inputMode='numeric'
+                                        pattern='[0-9,]*'
+                                        value={formatCurrencyInputNumber(formData.valor_real_cierre ?? null)}
+                                        disabled={areRealCloseValueFieldsLockedInForm}
+                                        readOnly={areRealCloseValueFieldsLockedInForm}
+                                        onChange={(e) => {
+                                            if (areRealCloseValueFieldsLockedInForm) return
+                                            const next = parseCurrencyInputValue(e.target.value)
+                                            setFormData({ ...formData, valor_real_cierre: next })
+                                        }}
+                                        className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs disabled:opacity-70 disabled:cursor-not-allowed'
                                         style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='0'
+                                    />
+                                </div>
+                                {formData.closed_at_real && (
+                                    <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
+                                        Fecha real registrada: {new Date(`${formData.closed_at_real}T12:00:00`).toLocaleDateString('es-MX')}
+                                    </p>
+                                )}
+                                <p className='text-[9px] font-bold uppercase tracking-wider text-blue-500'>
+                                    Se registrará contra el pronóstico de mensualidad para scoring.
+                                </p>
+                            </div>
+                        )}
+
+                        {isWonStageLocal(formData.etapa) && (
+                            <div className='space-y-2'>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                    Valor Real de Implementación
+                                </label>
+                                <div className='relative'>
+                                    <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
+                                    <input
+                                        type='text'
+                                        inputMode='numeric'
+                                        pattern='[0-9,]*'
+                                        value={formatCurrencyInputNumber((formData as any).valor_implementacion_real_cierre ?? null)}
+                                        disabled={areRealCloseValueFieldsLockedInForm}
+                                        readOnly={areRealCloseValueFieldsLockedInForm}
+                                        onChange={(e) => {
+                                            if (areRealCloseValueFieldsLockedInForm) return
+                                            const next = parseCurrencyInputValue(e.target.value)
+                                            setFormData({ ...formData, valor_implementacion_real_cierre: next })
+                                        }}
+                                        className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs disabled:opacity-70 disabled:cursor-not-allowed'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='0'
                                     />
                                 </div>
                                 <p className='text-[9px] font-bold uppercase tracking-wider text-blue-500'>
-                                    Se registrará contra el pronóstico de valor previo para scoring.
+                                    Se registrará contra el pronóstico de implementación para scoring.
                                 </p>
                             </div>
                         )}
@@ -478,6 +832,25 @@ export default function ClientModal({
                                 className='w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-600'
                                 style={{ background: 'var(--card-border)' }}
                             />
+
+                            <div className='pt-3 border-t space-y-2' style={{ borderColor: 'var(--card-border)' }}>
+                                <div className='flex justify-between items-center'>
+                                    <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                        Fecha Pronosticada de Cierre
+                                    </label>
+                                    <span className='text-[9px] font-black uppercase tracking-[0.12em] text-blue-500'>Forecast</span>
+                                </div>
+                                <FriendlyDatePicker
+                                    value={formData.forecast_close_date || null}
+                                    onChange={(next) => setFormData({ ...formData, forecast_close_date: next })}
+                                    yearStart={new Date().getFullYear() - 2}
+                                    yearEnd={new Date().getFullYear() + 8}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all cursor-pointer text-left'
+                                />
+                                <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
+                                    Fecha que el vendedor estima para cerrar este lead.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -496,8 +869,44 @@ export default function ClientModal({
                 </form>
 
                 {/* Footer */}
-                <div className='p-8 border-t flex items-center justify-between shrink-0' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
-                    <p className='text-[9px] font-black uppercase' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>* Campos obligatorios</p>
+                <div className='p-8 border-t flex items-center justify-between gap-4 shrink-0' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='flex items-center gap-3'>
+                        {mode === 'edit' && (
+                            <>
+                                {!isClosedStageLocal(formData.etapa) ? (
+                                    <button
+                                        type='button'
+                                        onClick={() => { setPendingCloseOutcome('won'); setShowCloseLeadPanel(true) }}
+                                        className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-emerald-500'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    >
+                                        Cerrar Lead
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            type='button'
+                                            onClick={() => { setPendingCloseOutcome(isWonStageLocal(formData.etapa) ? 'won' : 'lost'); setShowCloseLeadPanel(true) }}
+                                            className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-blue-500'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            Editar Cierre
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={reopenLead}
+                                            className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-amber-500'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            Reabrir
+                                        </button>
+                                    </>
+                                )}
+                            </>
+                        )}
+                        <p className='text-[9px] font-black uppercase hidden md:block' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>* Campos obligatorios</p>
+                    </div>
+
                     <div className='flex gap-4'>
                         <button
                             type='button'
@@ -512,7 +921,13 @@ export default function ClientModal({
                             disabled={isSubmitting || !formData.empresa_id}
                             className={`px-8 py-2.5 text-white rounded-xl font-black shadow-xl transition-all transform active:scale-95 uppercase text-[10px] tracking-widest disabled:opacity-30 ${mode === 'convert' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20' : 'bg-[#2048FF] shadow-blue-500/20 hover:bg-[#1700AC]'}`}
                         >
-                            {isSubmitting ? 'Guardando...' : mode === 'convert' ? '🚀 Confirmar Ascenso' : mode === 'create' ? 'Crear Lead' : 'Actualizar Lead'}
+                            {isSubmitting
+                                ? 'Guardando...'
+                                : mode === 'convert'
+                                    ? '🚀 Confirmar Ascenso'
+                                    : mode === 'create'
+                                        ? 'Crear Lead'
+                                        : hasLeadChanges ? 'Guardar Cambios' : 'Cerrar'}
                         </button>
                     </div>
                 </div>

@@ -126,13 +126,11 @@ export async function syncRaceResults(options?: { period?: string, forceOverwrit
         const targetPeriod = options?.period || getCurrentMonthPeriod()
         const nextPeriod = getNextMonthPeriod(targetPeriod)
 
-        // 1. Fetch deals for period window
+        // 1. Fetch won deals and compute period membership using real close timestamp when available.
         const { data: deals, error: dealsError } = await supabaseAdmin
             .from('clientes')
-            .select('owner_id, valor_estimado, updated_at, etapa')
+            .select('owner_id, valor_estimado, valor_real_cierre, closed_at_real, created_at, etapa')
             .not('owner_id', 'is', null)
-            .gte('updated_at', `${targetPeriod}T00:00:00.000Z`)
-            .lt('updated_at', `${nextPeriod}T00:00:00.000Z`)
 
         if (dealsError) throw dealsError
 
@@ -151,8 +149,14 @@ export async function syncRaceResults(options?: { period?: string, forceOverwrit
 
         ;(deals || []).forEach((deal: any) => {
             if (!deal.owner_id || !isWonStage(deal.etapa)) return
+            const closeTs = deal.closed_at_real || deal.created_at
+            const closeDate = closeTs ? new Date(closeTs) : null
+            if (!closeDate || Number.isNaN(closeDate.getTime())) return
+            const periodStart = new Date(`${targetPeriod}T00:00:00.000Z`)
+            const periodEnd = new Date(`${nextPeriod}T00:00:00.000Z`)
+            if (closeDate < periodStart || closeDate >= periodEnd) return
             if (totalsByUser[deal.owner_id] === undefined) totalsByUser[deal.owner_id] = 0
-            totalsByUser[deal.owner_id] += Number(deal.valor_estimado || 0)
+            totalsByUser[deal.owner_id] += Number(deal.valor_real_cierre ?? deal.valor_estimado ?? 0)
         })
 
         // 3. Prepare ranking rows for the period
@@ -216,6 +220,67 @@ export async function recalculateRacePeriod(period: string) {
         if (!res.success) return res
 
         return { success: true, period: normalizedPeriod }
+    } catch (error: any) {
+        return { success: false, error: error.message }
+    }
+}
+
+export async function recalculateAllRacePeriods() {
+    try {
+        const auth = await requireAdminUser()
+        if (!auth.ok) return { success: false, error: auth.error }
+
+        const supabaseAdmin = createAdminClient()
+
+        const [{ data: deals, error: dealsError }, { data: existingPeriods, error: periodsError }] = await Promise.all([
+            supabaseAdmin
+                .from('clientes')
+                .select('etapa, closed_at_real, created_at')
+                .not('owner_id', 'is', null),
+            supabaseAdmin
+                .from('race_results')
+                .select('period')
+        ])
+
+        if (dealsError) throw dealsError
+        if (periodsError) throw periodsError
+
+        const periodSet = new Set<string>()
+
+        ;(existingPeriods || []).forEach((row: any) => {
+            if (row?.period) periodSet.add(String(row.period).slice(0, 10))
+        })
+
+        ;(deals || []).forEach((deal: any) => {
+            if (!isWonStage(deal?.etapa)) return
+            const closeTs = deal?.closed_at_real || deal?.created_at
+            if (!closeTs) return
+            const d = new Date(closeTs)
+            if (Number.isNaN(d.getTime())) return
+            const period = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10)
+            periodSet.add(period)
+        })
+
+        const periods = Array.from(periodSet).sort()
+        const failures: Array<{ period: string; error: string }> = []
+        let processed = 0
+
+        for (const period of periods) {
+            const res = await syncRaceResults({ period, forceOverwriteManual: true })
+            if (!res.success) {
+                failures.push({ period, error: String((res as any).error || 'Error desconocido') })
+                continue
+            }
+            processed++
+        }
+
+        revalidatePath('/')
+        return {
+            success: failures.length === 0,
+            processed,
+            totalPeriods: periods.length,
+            failures
+        }
     } catch (error: any) {
         return { success: false, error: error.message }
     }

@@ -129,6 +129,7 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
         error: ''
     })
     useBodyScrollLock(reactionModal.isOpen)
+    const hasServerSeededQuotes = initialQuotes.length > 0 || Boolean(initialLoadError)
 
     const activeCount = useMemo(() => quotes.filter(q => q.is_active).length, [quotes])
     const airHiveAuthorNames = useMemo(() => {
@@ -223,6 +224,7 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
     useEffect(() => {
         let cancelled = false
         const hydrateQuotes = async () => {
+            if (hasServerSeededQuotes) return
             if (quotes.length === 0 && !cancelled) {
                 setQuotes(FALLBACK_QUOTES)
             }
@@ -245,7 +247,7 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
         hydrateQuotes()
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAdmin])
+    }, [isAdmin, hasServerSeededQuotes])
 
     useEffect(() => {
         if (!isAdmin) {

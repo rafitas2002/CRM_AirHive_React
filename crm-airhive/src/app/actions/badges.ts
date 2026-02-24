@@ -37,6 +37,18 @@ export async function grantAdminBadgeToSeller(sellerId: string) {
             return { success: false, error: 'No puedes otorgarte este badge a ti mismo' }
         }
 
+        const { data: targetProfile } = await (supabaseAdmin
+            .from('profiles') as any)
+            .select('id, role, full_name')
+            .eq('id', sellerId)
+            .maybeSingle()
+
+        const targetName = String(targetProfile?.full_name || '').trim()
+        const targetIsGrantingAdmin = targetProfile?.role === 'admin' && BADGE_GRANT_ALLOWED_ADMINS.has(targetName)
+        if (targetIsGrantingAdmin) {
+            return { success: false, error: 'Los directivos que otorgan distinciones no pueden recibir distinciones directivas' }
+        }
+
         const adminKey = `admin_${adminName.toLowerCase().replace(/\s+/g, '_')}`
         const adminBadgeLabel = `Distinción de ${adminName}`
 
@@ -117,5 +129,62 @@ export async function grantAdminBadgeToSeller(sellerId: string) {
     } catch (error: any) {
         console.error('[grantAdminBadgeToSeller] Error:', error)
         return { success: false, error: error?.message || 'Error inesperado al otorgar badge' }
+    }
+}
+
+export async function getUserPublicBadgesSummary(targetUserId: string) {
+    try {
+        if (!targetUserId) return { success: false, error: 'Usuario objetivo inválido' }
+
+        const cookieStore = await cookies()
+        const supabase = createClient(cookieStore)
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'No autenticado' }
+
+        let dbClient: any = supabase
+        try {
+            dbClient = createAdminClient()
+        } catch {
+            // Fallback to session client if service role is unavailable.
+        }
+
+        const [{ data: industryBadges }, { data: specialBadges }] = await Promise.all([
+            (dbClient
+                .from('seller_industry_badges')
+                .select('industria_id, closures_count, level, industrias(name)')
+                .eq('seller_id', targetUserId)
+                .gt('level', 0) as any),
+            (dbClient
+                .from('seller_special_badges')
+                .select('badge_type, badge_key, badge_label, progress_count, level')
+                .eq('seller_id', targetUserId)
+                .gt('level', 0) as any)
+        ])
+
+        return {
+            success: true,
+            data: {
+                badges: {
+                    industry: (industryBadges || []).map((row: any) => ({
+                        type: 'industry',
+                        key: String(row?.industria_id || ''),
+                        label: String(row?.industrias?.name || 'Industria'),
+                        level: Number(row?.level || 0),
+                        progress: Number(row?.closures_count || 0)
+                    })),
+                    special: (specialBadges || []).map((row: any) => ({
+                        type: String(row?.badge_type || 'special'),
+                        key: String(row?.badge_key || ''),
+                        label: String(row?.badge_label || 'Badge especial'),
+                        level: Number(row?.level || 0),
+                        progress: Number(row?.progress_count || 0)
+                    }))
+                }
+            }
+        }
+    } catch (error: any) {
+        console.error('[getUserPublicBadgesSummary] Error:', error)
+        return { success: false, error: error?.message || 'Error al consultar badges del usuario' }
     }
 }

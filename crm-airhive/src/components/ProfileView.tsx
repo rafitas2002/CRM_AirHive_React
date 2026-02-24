@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, type ReactNode, type ComponentProps } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getCatalogs, getIndustriesForBadges } from '@/app/actions/catalogs'
-import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity, Award, Sparkles, TrendingUp, Lock, X, Building2, Flag, Layers, Ruler, Trophy, Medal, Shield, Flame, Gem, MessageSquareQuote, ThumbsUp } from 'lucide-react'
+import { Mail, Briefcase, MapPin, Calendar, BookOpen, User, Building, Globe, GraduationCap, Clock, Activity, Award, Sparkles, TrendingUp, Lock, X, Building2, Flag, Layers, Ruler, Trophy, Medal, Shield, Flame, Gem, MessageSquareQuote, ThumbsUp, Users, Target } from 'lucide-react'
 import RoleBadge from '@/components/RoleBadge'
 import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap, type BadgeVisual } from '@/lib/industryBadgeVisuals'
+import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import { useAuth } from '@/lib/auth'
 import { grantAdminBadgeToSeller } from '@/app/actions/badges'
+import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
+import BadgeMedallion from '@/components/BadgeMedallion'
+import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 
 const BADGE_GRANT_ALLOWED_ADMINS = [
     'Jesus Gracia',
@@ -24,6 +27,17 @@ interface ProfileViewProps {
 }
 
 const PROFILE_VIEW_CACHE_TTL_MS = 2 * 60 * 1000
+const PROFILE_CATALOG_TABLES = [
+    'job_positions',
+    'areas',
+    'seniority_levels',
+    'education_levels',
+    'careers',
+    'work_modalities',
+    'cities',
+    'countries',
+    'industrias'
+] as const
 
 type ProfileViewCachePayload = {
     savedAt: number
@@ -36,6 +50,9 @@ type ProfileViewCachePayload = {
         totalClosures: number
         reliabilityScore: number
         seniorityYears: number
+        totalPreLeads: number
+        totalLeads: number
+        completedMeetings: number
     }
     isBadgeLeader: boolean
     leaderBadgeCount: number
@@ -51,6 +68,30 @@ function normalizeComparableName(value: unknown) {
         .toLowerCase()
 }
 
+function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
+    return type === 'deal_value_tier'
+        || type === 'company_size'
+        || type === 'all_company_sizes'
+        || type === 'multi_industry'
+        || type === 'closure_milestone'
+        || type === 'seniority_years'
+        || type === 'prelead_registered'
+        || type === 'lead_registered'
+        || type === 'meeting_completed'
+        || type === 'reliability_score'
+        || type === 'quote_contribution'
+        || type === 'quote_likes_received'
+}
+
+function getDealValueTierRankByKey(key?: string | null) {
+    const value = String(key || '')
+    if (value === 'value_10k_100k' || value === 'value_10k_plus') return 4
+    if (value === 'value_5k_10k') return 3
+    if (value === 'value_2k_5k') return 2
+    if (value === 'value_1k_2k') return 1
+    return 0
+}
+
 export default function ProfileView({ userId }: ProfileViewProps) {
     const auth = useAuth()
     const [profile, setProfile] = useState<any>(null)
@@ -62,7 +103,10 @@ export default function ProfileView({ userId }: ProfileViewProps) {
     const [sellerStats, setSellerStats] = useState({
         totalClosures: 0,
         reliabilityScore: 0,
-        seniorityYears: 0
+        seniorityYears: 0,
+        totalPreLeads: 0,
+        totalLeads: 0,
+        completedMeetings: 0
     })
     const [isBadgeLeader, setIsBadgeLeader] = useState(false)
     const [leaderBadgeCount, setLeaderBadgeCount] = useState(0)
@@ -112,18 +156,37 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             setSellerStats(cached.sellerStats || {
                 totalClosures: 0,
                 reliabilityScore: 0,
-                seniorityYears: 0
+                seniorityYears: 0,
+                totalPreLeads: 0,
+                totalLeads: 0,
+                completedMeetings: 0
             })
             setIsBadgeLeader(Boolean(cached.isBadgeLeader))
             setLeaderBadgeCount(Number(cached.leaderBadgeCount || 0))
             setAllIndustries(Array.isArray(cached.allIndustries) ? cached.allIndustries : [])
             setCatalogs(cached.catalogs || {})
             setLoading(false)
+            return () => {
+                cancelled = true
+            }
         }
 
         const loadData = async () => {
             try {
                 const supabase = createClient()
+                const loadCatalogsDirect = async () => {
+                    const entries = await Promise.all(
+                        PROFILE_CATALOG_TABLES.map(async (table) => {
+                            const { data } = await (supabase
+                                .from(table)
+                                .select('id, name')
+                                .eq('is_active', true)
+                                .order('name') as any)
+                            return [table, Array.isArray(data) ? data : []] as const
+                        })
+                    )
+                    return Object.fromEntries(entries) as Record<string, any[]>
+                }
 
                 const [
                     { data: p },
@@ -132,9 +195,12 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     { data: levels },
                     { data: userSpecialBadges },
                     { count: closuresCount },
+                    { count: totalPreLeadsCount },
+                    { count: totalLeadsCount },
+                    { count: completedMeetingsCount },
                     { data: reliabilityRows },
-                    industriesResponse,
-                    catsResponse
+                    { data: industriesRaw },
+                    directCatalogs
                 ] = await Promise.all([
                     supabase.from('profiles').select('*').eq('id', userId).single(),
                     (supabase.from('employee_profiles') as any).select('*').eq('user_id', userId).single(),
@@ -160,18 +226,34 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         .select('lead_id', { count: 'exact', head: true })
                         .eq('seller_id', userId),
                     (supabase
+                        .from('pre_leads') as any)
+                        .select('id', { count: 'exact', head: true })
+                        .eq('vendedor_id', userId),
+                    (supabase
+                        .from('clientes') as any)
+                        .select('id', { count: 'exact', head: true })
+                        .eq('owner_id', userId),
+                    (supabase
+                        .from('meetings') as any)
+                        .select('id', { count: 'exact', head: true })
+                        .eq('seller_id', userId)
+                        .or('status.eq.completed,meeting_status.eq.held'),
+                    (supabase
                         .from('clientes') as any)
                         .select('forecast_logloss')
                         .eq('owner_id', userId)
                         .not('forecast_logloss', 'is', null),
-                    getIndustriesForBadges(),
-                    getCatalogs()
+                    (supabase
+                        .from('industrias') as any)
+                        .select('id, name, is_active')
+                        .order('name', { ascending: true }),
+                    loadCatalogsDirect()
                 ])
 
                 if (cancelled) return
 
-                const cats = catsResponse.success && catsResponse.data ? catsResponse.data : {}
-                const industries = industriesResponse.success && industriesResponse.data ? industriesResponse.data : []
+                const cats = directCatalogs || {}
+                const industries = (industriesRaw || []) as any[]
                 const profileRow = (p || {}) as any
 
                 setProfile(profileRow)
@@ -255,6 +337,24 @@ export default function ProfileView({ userId }: ProfileViewProps) {
 
             const contributionLevelMeta = getContributionLevel(quoteContributionProgress)
             const quoteLikesLevelMeta = getQuoteLikesLevel(quoteLikesProgress)
+            const getThresholdLevelMeta = (progress: number, thresholds: number[]) => {
+                const clean = thresholds.filter((t) => Number.isFinite(t) && t > 0).sort((a, b) => a - b)
+                let level = 0
+                let next: number | null = clean[0] ?? null
+                clean.forEach((threshold, index) => {
+                    if (progress >= threshold) {
+                        level = index + 1
+                        next = clean[index + 1] ?? null
+                    }
+                })
+                return { level, next }
+            }
+            const totalPreLeads = Math.max(0, Number(totalPreLeadsCount || 0))
+            const totalLeads = Math.max(0, Number(totalLeadsCount || 0))
+            const completedMeetings = Math.max(0, Number(completedMeetingsCount || 0))
+            const preLeadLevelMeta = getThresholdLevelMeta(totalPreLeads, [1, 25, 100, 300])
+            const leadLevelMeta = getThresholdLevelMeta(totalLeads, [1, 5, 15, 50])
+            const meetingLevelMeta = getThresholdLevelMeta(completedMeetings, [1, 10, 25, 50])
             const derivedSpecial: any[] = []
             if (contributionLevelMeta.level > 0) {
                 derivedSpecial.push({
@@ -276,6 +376,39 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     progress_count: quoteLikesProgress,
                     level: quoteLikesLevelMeta.level,
                     next_level_threshold: quoteLikesLevelMeta.next
+                })
+            }
+            if (preLeadLevelMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-prelead-registered',
+                    badge_type: 'prelead_registered',
+                    badge_key: 'prelead_registered',
+                    badge_label: 'Pre-Leads Registrados',
+                    progress_count: totalPreLeads,
+                    level: preLeadLevelMeta.level,
+                    next_level_threshold: preLeadLevelMeta.next
+                })
+            }
+            if (leadLevelMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-lead-registered',
+                    badge_type: 'lead_registered',
+                    badge_key: 'lead_registered',
+                    badge_label: 'Leads Registrados',
+                    progress_count: totalLeads,
+                    level: leadLevelMeta.level,
+                    next_level_threshold: leadLevelMeta.next
+                })
+            }
+            if (meetingLevelMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-meeting-completed',
+                    badge_type: 'meeting_completed',
+                    badge_key: 'meeting_completed',
+                    badge_label: 'Juntas Completadas',
+                    progress_count: completedMeetings,
+                    level: meetingLevelMeta.level,
+                    next_level_threshold: meetingLevelMeta.next
                 })
             }
 
@@ -315,10 +448,13 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             const avgLogloss = relN > 0 ? (relRows.reduce((a: number, b: number) => a + b, 0) / relN) : 1
             const rawAcc = Math.max(0, 1 - avgLogloss)
             const relScore = relN > 0 ? Math.max(0, Math.min(100, (rawAcc * (relN / (relN + 4))) * 100)) : 0
-                setSellerStats({
+            setSellerStats({
                     totalClosures: Math.max(0, Number(closuresCount || 0)),
                     reliabilityScore: Math.round(relScore),
-                    seniorityYears: years
+                    seniorityYears: years,
+                    totalPreLeads,
+                    totalLeads,
+                    completedMeetings
                 })
                 // Lightweight leader badge state from precomputed badge (no global table scans).
                 const badgeLeader = (userSpecialBadges || []).find((badge: any) => badge?.badge_type === 'badge_leader')
@@ -334,7 +470,10 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     sellerStats: {
                         totalClosures: Math.max(0, Number(closuresCount || 0)),
                         reliabilityScore: Math.round(relScore),
-                        seniorityYears: years
+                        seniorityYears: years,
+                        totalPreLeads,
+                        totalLeads,
+                        completedMeetings
                     },
                     isBadgeLeader: Boolean(badgeLeader && Number(badgeLeader?.level || 0) > 0),
                     leaderBadgeCount: Number(badgeLeader?.progress_count || 0),
@@ -408,6 +547,10 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             }))
         return buildIndustryBadgeVisualMap([...allIndustries, ...extrasFromBadges])
     }, [allIndustries, badges])
+    const tenureBadgeMetrics = useMemo(
+        () => getTenureBadgeMetrics(details?.start_date || null),
+        [details?.start_date]
+    )
 
     if (loading) return <div className='p-8 text-center animate-pulse text-[var(--text-secondary)]'>Cargando perfil...</div>
     if (!profile) return <div className='p-8 text-center text-red-500'>Usuario no encontrado</div>
@@ -418,23 +561,43 @@ export default function ProfileView({ userId }: ProfileViewProps) {
     const badgeByIndustry = new Map<string, any>(badges.map((b) => [b.industria_id, b]))
     const summarySpecialBadges = (() => {
         const list = Array.isArray(specialBadges) ? specialBadges : []
-        const rankDealTier = (badge: any) => {
-            const key = String(badge?.badge_key || '')
-            if (key === 'value_1m') return 3
-            if (key === 'value_500k') return 2
-            if (key === 'value_100k') return 1
-            return 0
-        }
-
         const bestDealTier = list
             .filter((badge: any) => badge?.badge_type === 'deal_value_tier')
-            .sort((a: any, b: any) => rankDealTier(b) - rankDealTier(a))[0] || null
+            .sort((a: any, b: any) => getDealValueTierRankByKey(b?.badge_key) - getDealValueTierRankByKey(a?.badge_key))[0] || null
 
         const withoutDealTier = list.filter((badge: any) => badge?.badge_type !== 'deal_value_tier')
         return bestDealTier ? [...withoutDealTier, bestDealTier] : withoutDealTier
     })()
+    const viewedUserIsGrantingAdmin = profile.role === 'admin'
+        && BADGE_GRANT_ALLOWED_ADMINS.includes(String(profile.full_name || '').trim())
+    const buildSpecialBadgeTooltipRows = (badge: any, unlockedOverride?: boolean, achievedMaxOverride?: boolean, nextThresholdOverride?: number | null) => {
+        const type = String(badge?.badge_type || '')
+        const progressCount = Number(badge?.progress_count || 0)
+        const level = Number(badge?.level || 0)
+        const unlocked = typeof unlockedOverride === 'boolean' ? unlockedOverride : level > 0
+        const nextThreshold = typeof nextThresholdOverride !== 'undefined'
+            ? nextThresholdOverride
+            : (badge?.next_level_threshold ?? getSpecialDefaultThreshold(type))
+        const achievedMax = typeof achievedMaxOverride === 'boolean' ? achievedMaxOverride : !nextThreshold
+
+        if (type === 'seniority_years' && tenureBadgeMetrics) {
+            return [
+                { label: 'Años', value: String(tenureBadgeMetrics.years) },
+                { label: 'Antigüedad', value: formatTenureExactLabel(tenureBadgeMetrics) },
+                { label: 'Progreso', value: `${tenureBadgeMetrics.progressPctToNextLevel.toFixed(2)}%` },
+                { label: 'Siguiente', value: `${tenureBadgeMetrics.nextLevelYears} años` }
+            ]
+        }
+
+        return [
+            { label: 'Nivel', value: unlocked ? String(level) : 'Bloqueado' },
+            { label: 'Progreso', value: String(progressCount) },
+            { label: 'Siguiente', value: achievedMax ? 'Nivel máximo' : String(nextThreshold || 0) }
+        ]
+    }
     const canGrantAdminBadge = auth.profile?.role === 'admin'
         && auth.user?.id !== userId
+        && !viewedUserIsGrantingAdmin
         && BADGE_GRANT_ALLOWED_ADMINS.includes(String(auth.profile?.full_name || '').trim())
 
     const handleGrantAdminBadge = async () => {
@@ -536,20 +699,47 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         Aún no hay badges desbloqueados. Cierra una empresa para ganar el primero.
                     </div>
                 ) : (
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3'>
                         {badges.map((badge) => {
                             const industryName = badge?.industrias?.name || 'Industria'
                             const badgeVisual = getIndustryBadgeVisualFromMap(badge.industria_id, industryVisualMap, industryName)
                             const IndustryIcon = badgeVisual.icon
+                            const closures = Number(badge?.closures_count || 0)
+                            const level = Number(badge?.level || 0)
+                            const nextLevel = badge?.next_level_threshold
+                            const nextText = nextLevel
+                                ? `${Math.max(0, Number(nextLevel) - closures)} cierre${Math.max(0, Number(nextLevel) - closures) === 1 ? '' : 's'}`
+                                : 'Nivel máximo'
 
                             return (
-                                <div
-                                    key={`${badge.industria_id}-${badge.level}`}
-                                    title={industryName}
-                                    className={`relative overflow-hidden w-14 h-14 rounded-xl border flex items-center justify-center ${badgeVisual.containerClass}`}
-                                >
-                                    <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                    <IndustryIcon size={21} strokeWidth={2.7} className={badgeVisual.iconClass} />
+                                <div key={`${badge.industria_id}-${badge.level}`} className='rounded-2xl border p-3 bg-[var(--hover-bg)] border-[var(--card-border)] hover:border-blue-400/45 transition-colors'>
+                                    <BadgeInfoTooltip
+                                        title={industryName}
+                                        subtitle='Badge de industria'
+                                        rows={[
+                                            { label: 'Nivel', value: String(level) },
+                                            { label: 'Cierres', value: String(closures) },
+                                            { label: 'Siguiente', value: nextText }
+                                        ]}
+                                        className='w-full'
+                                    >
+                                        <div className='w-full flex items-center gap-3'>
+                                            <BadgeMedallion
+                                                icon={IndustryIcon}
+                                                centerClassName={badgeVisual.containerClass}
+                                                iconClassName={badgeVisual.iconClass}
+                                                size='md'
+                                                iconSize={18}
+                                                strokeWidth={2.7}
+                                            />
+                                            <div className='min-w-0'>
+                                                <p className='text-sm font-black truncate text-[var(--text-primary)]'>{industryName}</p>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--accent-secondary)]'>
+                                                    Nivel {level} · {closures} cierre{closures === 1 ? '' : 's'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </BadgeInfoTooltip>
                                 </div>
                             )
                         })}
@@ -561,26 +751,46 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         <p className='text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)] mb-3'>
                             Badges especiales acumuladas
                         </p>
-                        <div className='flex flex-wrap gap-2'>
+                        <div className='grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5'>
                             {summarySpecialBadges.map((badge: any, index: number) => (
                                 (() => {
                                     const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
                                     const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
                                     const Icon = typeMeta.icon
                                     const badgeOverlayNumber = getSpecialBadgeOverlayNumber(badge)
+                                    const isSeniorityBadge = String(badge?.badge_type || '') === 'seniority_years'
+                                    const progressCount = Number(badge?.progress_count || 0)
+                                    const level = Number(badge?.level || 0)
+                                    const nextThreshold = badge?.next_level_threshold
                                     return (
                                         <div
-                                    key={`special-summary-${badge?.badge_type || 'badge'}-${badge?.badge_key || index}`}
-                                            title={safeLabel}
-                                            className={`relative overflow-hidden w-10 h-10 rounded-xl border flex items-center justify-center ${typeMeta.containerClass}`}
+                                            key={`special-summary-${badge?.badge_type || 'badge'}-${badge?.badge_key || index}`}
+                                            className='rounded-xl border p-2 bg-[var(--card-bg)] border-[var(--card-border)] hover:border-blue-400/45 transition-colors'
                                         >
-                                            <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                            <Icon size={17} strokeWidth={2.7} className={typeMeta.iconClass} />
-                                            {badgeOverlayNumber && (
-                                                <span className='absolute bottom-[2px] left-1/2 -translate-x-1/2 text-[8px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
-                                                    {badgeOverlayNumber}
-                                                </span>
-                                            )}
+                                            <BadgeInfoTooltip
+                                                title={safeLabel}
+                                                subtitle={typeMeta.title}
+                                                rows={buildSpecialBadgeTooltipRows(badge)}
+                                                className='w-full'
+                                            >
+                                                <div className='flex items-center gap-2 w-full'>
+                                                    <BadgeMedallion
+                                                        icon={Icon}
+                                                        centerClassName={typeMeta.containerClass}
+                                                        iconClassName={typeMeta.iconClass}
+                                                        overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
+                                                        footerBubbleText={isSeniorityBadge ? String(tenureBadgeMetrics?.years ?? badgeOverlayNumber ?? '') : null}
+                                                        ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
+                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+                                                        size='sm'
+                                                        iconSize={15}
+                                                        strokeWidth={2.7}
+                                                    />
+                                                    <p className='text-[10px] font-black text-[var(--text-primary)] truncate'>
+                                                        {safeLabel}
+                                                    </p>
+                                                </div>
+                                            </BadgeInfoTooltip>
                                         </div>
                                     )
                                 })()
@@ -688,6 +898,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 isBadgeLeader={isBadgeLeader}
                 leaderBadgeCount={leaderBadgeCount}
                 sellerStats={sellerStats}
+                employeeStartDate={details?.start_date ?? null}
             />
         </div>
     )
@@ -704,7 +915,8 @@ function AllBadgesModal({
     specialBadges,
     isBadgeLeader,
     leaderBadgeCount,
-    sellerStats
+    sellerStats,
+    employeeStartDate
 }: {
     isOpen: boolean
     onClose: () => void
@@ -720,12 +932,23 @@ function AllBadgesModal({
         totalClosures: number
         reliabilityScore: number
         seniorityYears: number
+        totalPreLeads: number
+        totalLeads: number
+        completedMeetings: number
     }
+    employeeStartDate?: string | null
 }) {
     useBodyScrollLock(isOpen)
+    const [modalTab, setModalTab] = useState<'catalog' | 'evolution'>('catalog')
+    const [catalogBadgeFilter, setCatalogBadgeFilter] = useState<'all' | 'achieved'>('all')
     const specialBadgeCatalog = useMemo(
-        () => buildSpecialBadgeCatalog(specialBadges, { isBadgeLeader, leaderBadgeCount, sellerStats }),
-        [specialBadges, isBadgeLeader, leaderBadgeCount, sellerStats]
+        () => buildSpecialBadgeCatalog(specialBadges, {
+            isBadgeLeader,
+            leaderBadgeCount,
+            sellerStats,
+            industryBadgeCount: Array.from(badgeByIndustry.values()).filter((b: any) => Number(b?.level || 0) > 0).length
+        }),
+        [specialBadges, isBadgeLeader, leaderBadgeCount, sellerStats, badgeByIndustry]
     )
     const groupedSpecialBadges = useMemo(() => {
         const grouped = new Map<string, { key: string, title: string, order: number, items: any[] }>()
@@ -750,10 +973,66 @@ function AllBadgesModal({
                 })
             }))
     }, [specialBadgeCatalog])
+    const sortedIndustries = useMemo(
+        () => [...industries].sort((a, b) => a.name.localeCompare(b.name, 'es')),
+        [industries]
+    )
+    const filteredIndustries = useMemo(
+        () => (catalogBadgeFilter === 'achieved'
+            ? sortedIndustries.filter((industry) => Number(badgeByIndustry.get(industry.id)?.level || 0) > 0)
+            : sortedIndustries),
+        [catalogBadgeFilter, sortedIndustries, badgeByIndustry]
+    )
+    const filteredGroupedSpecialBadges = useMemo(
+        () => groupedSpecialBadges
+            .map((group) => ({
+                ...group,
+                items: catalogBadgeFilter === 'achieved'
+                    ? group.items.filter((badge) => Number(badge?.level || 0) > 0)
+                    : group.items
+            }))
+            .filter((group) => group.items.length > 0),
+        [catalogBadgeFilter, groupedSpecialBadges]
+    )
+    const specialMultiLevelEvolutionBadges = useMemo(
+        () => specialBadgeCatalog.filter((badge) => getSpecialBadgeEvolutionMilestones(badge).length > 1),
+        [specialBadgeCatalog]
+    )
+    const allBadgesTenureMetrics = useMemo(
+        () => getTenureBadgeMetrics(employeeStartDate ?? null),
+        [employeeStartDate]
+    )
+    const buildCatalogSpecialBadgeTooltipRows = (
+        badge: any,
+        unlockedOverride?: boolean,
+        achievedMaxOverride?: boolean,
+        nextThresholdOverride?: number | null
+    ) => {
+        const type = String(badge?.badge_type || '')
+        const progressCount = Number(badge?.progress_count || 0)
+        const level = Number(badge?.level || 0)
+        const unlocked = typeof unlockedOverride === 'boolean' ? unlockedOverride : level > 0
+        const nextThreshold = typeof nextThresholdOverride === 'number'
+            ? nextThresholdOverride
+            : (badge?.next_level_threshold ?? getSpecialDefaultThreshold(type) ?? null)
+        const achievedMax = typeof achievedMaxOverride === 'boolean' ? achievedMaxOverride : !nextThreshold
+        const baseRows = [
+            { label: 'Estado', value: unlocked ? `Nivel ${level}` : 'Bloqueado' },
+            { label: 'Progreso', value: String(progressCount) },
+            { label: 'Siguiente', value: achievedMax ? 'Nivel máximo' : String(nextThreshold ?? '-') }
+        ]
+        if (type === 'seniority_years' && allBadgesTenureMetrics) {
+            return [
+                { label: 'Años', value: String(allBadgesTenureMetrics.years) },
+                { label: 'Antigüedad', value: formatTenureExactLabel(allBadgesTenureMetrics) },
+                { label: 'Progreso', value: `${allBadgesTenureMetrics.progressPctToNextLevel.toFixed(2)}%` },
+                { label: 'Siguiente', value: `${allBadgesTenureMetrics.nextLevelYears} años` }
+            ]
+        }
+        return baseRows
+    }
 
     if (!isOpen) return null
-
-    const sortedIndustries = [...industries].sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
     return (
         <div className='ah-modal-overlay'>
@@ -769,16 +1048,55 @@ function AllBadgesModal({
                 </div>
 
                 <div className='p-6 overflow-y-auto custom-scrollbar space-y-4 bg-[var(--card-bg)]'>
-                    <div className='flex flex-wrap gap-2 text-[11px]'>
-                        {badgeLevels.map((lvl) => (
-                            <span key={lvl.level} className='px-2.5 py-1 rounded-full border font-bold bg-[var(--hover-bg)] border-[var(--card-border)] text-[var(--text-secondary)]'>
-                                Nivel {lvl.level}: {lvl.min_closures}
-                            </span>
-                        ))}
+                    <div className='flex flex-wrap items-center justify-between gap-3'>
+                        <div className='flex flex-wrap gap-2 text-[11px]'>
+                            {badgeLevels.map((lvl) => (
+                                <span key={lvl.level} className='px-2.5 py-1 rounded-full border font-bold bg-[var(--hover-bg)] border-[var(--card-border)] text-[var(--text-secondary)]'>
+                                    Nivel {lvl.level}: {lvl.min_closures}
+                                </span>
+                            ))}
+                        </div>
+                        <div className='inline-flex p-1 rounded-xl border bg-[var(--hover-bg)] border-[var(--card-border)] gap-1'>
+                            <button
+                                type='button'
+                                onClick={() => setModalTab('catalog')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer transition-colors ${modalTab === 'catalog' ? 'bg-blue-500/20 text-blue-200 border border-blue-400/35' : 'text-[var(--text-secondary)] border border-transparent hover:text-[var(--text-primary)]'}`}
+                            >
+                                Catálogo
+                            </button>
+                            <button
+                                type='button'
+                                onClick={() => setModalTab('evolution')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer transition-colors ${modalTab === 'evolution' ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/35' : 'text-[var(--text-secondary)] border border-transparent hover:text-[var(--text-primary)]'}`}
+                            >
+                                Evolución
+                            </button>
+                        </div>
                     </div>
 
+                    {modalTab === 'catalog' && (
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <span className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                Filtros
+                            </span>
+                            <button
+                                type='button'
+                                onClick={() => setCatalogBadgeFilter((prev) => prev === 'achieved' ? 'all' : 'achieved')}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.14em] border cursor-pointer transition-colors ${
+                                    catalogBadgeFilter === 'achieved'
+                                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35'
+                                        : 'bg-[var(--hover-bg)] text-[var(--text-secondary)] border-[var(--card-border)] hover:text-[var(--text-primary)]'
+                                }`}
+                            >
+                                Badges conseguidos
+                            </button>
+                        </div>
+                    )}
+
+                    {modalTab === 'catalog' && (
+                    <>
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-                        {sortedIndustries.map((industry) => {
+                        {filteredIndustries.map((industry) => {
                             const badge = badgeByIndustry.get(industry.id)
                             const badgeVisual = getIndustryBadgeVisualFromMap(industry.id, industryVisualMap, industry.name)
                             const IndustryIcon = badgeVisual.icon
@@ -793,17 +1111,30 @@ function AllBadgesModal({
                             const achievedMax = level >= maxConfiguredLevel
 
                             return (
-                                <div key={industry.id} className={`p-4 rounded-xl border transition-colors ${unlocked ? 'bg-[var(--hover-bg)] border-blue-500/30' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
+                                <div key={industry.id} className={`group p-4 rounded-xl border transition-colors ${unlocked ? 'bg-[var(--hover-bg)] border-blue-500/30' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
                                     <div className='flex items-start justify-between gap-2'>
                                         <div className='min-w-0 flex items-center gap-3'>
-                                            <div className={`relative overflow-hidden w-10 h-10 rounded-xl border flex items-center justify-center ${badgeVisual.containerClass}`}>
-                                                <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                                <IndustryIcon
-                                                    size={18}
+                                            <BadgeInfoTooltip
+                                                title={industry.name}
+                                                subtitle='Badge de industria'
+                                                rows={[
+                                                    { label: 'Nivel', value: unlocked ? String(level) : 'Bloqueado' },
+                                                    { label: 'Cierres', value: String(closures) },
+                                                    { label: 'Siguiente', value: achievedMax ? 'Nivel máximo' : String(nextThreshold) }
+                                                ]}
+                                                align='start'
+                                                placement='bottom'
+                                            >
+                                                <HoverRevealBadgeMedallion
+                                                    locked={!unlocked}
+                                                    icon={IndustryIcon}
+                                                    centerClassName={badgeVisual.containerClass}
+                                                    iconClassName={`${badgeVisual.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
+                                                    size='sm'
+                                                    iconSize={17}
                                                     strokeWidth={2.7}
-                                                    className={`${badgeVisual.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
                                                 />
-                                            </div>
+                                            </BadgeInfoTooltip>
                                             <div className='min-w-0'>
                                                 <p className='text-sm font-black truncate text-[var(--text-primary)]'>
                                                     {industry.name}
@@ -847,13 +1178,15 @@ function AllBadgesModal({
                             </h4>
                         </div>
 
-                        {specialBadgeCatalog.length === 0 ? (
+                        {filteredGroupedSpecialBadges.length === 0 ? (
                             <div className='p-4 rounded-xl border border-dashed text-sm bg-[var(--hover-bg)] border-[var(--card-border)] text-[var(--text-secondary)]'>
-                                Aún no hay badges especiales desbloqueados.
+                                {catalogBadgeFilter === 'achieved'
+                                    ? 'Aún no hay badges especiales conseguidos.'
+                                    : 'Aún no hay badges especiales disponibles.'}
                             </div>
                         ) : (
                             <div className='space-y-4'>
-                            {groupedSpecialBadges.map((group) => (
+                            {filteredGroupedSpecialBadges.map((group) => (
                                 <div key={group.key} className='space-y-2'>
                                     <div className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
                                         {group.title}
@@ -883,22 +1216,30 @@ function AllBadgesModal({
                                 const safeKey = badge.id || `${badge.badge_type || 'special'}-${badge.badge_key || 'key'}-${index}`
 
                                 return (
-                                    <div key={safeKey} className={`p-4 rounded-xl border transition-colors ${unlocked ? 'bg-[var(--hover-bg)] border-blue-500/30' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
+                                    <div key={safeKey} className={`group p-4 rounded-xl border transition-colors ${unlocked ? 'bg-[var(--hover-bg)] border-blue-500/30' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
                                         <div className='flex items-start justify-between gap-2'>
                                             <div className='min-w-0 flex items-center gap-3'>
-                                                <div className={`relative overflow-hidden w-10 h-10 rounded-xl border flex items-center justify-center ${typeMeta.containerClass} ${isAdminGranted ? '!border-4 !border-[#FFD700] ring-2 ring-[#FFD700]/70 shadow-[0_0_0_1px_rgba(255,215,0,0.75)]' : ''}`}>
-                                                    <span className='absolute top-[2px] left-[12%] w-[76%] h-[1px] bg-white/80 rounded-full pointer-events-none' />
-                                                    <Icon
-                                                        size={17}
+                                                <BadgeInfoTooltip
+                                                    title={safeLabel}
+                                                    subtitle={typeMeta.title}
+                                                    rows={buildCatalogSpecialBadgeTooltipRows(badge, unlocked, achievedMax, nextThreshold)}
+                                                    align='start'
+                                                    placement='bottom'
+                                                >
+                                                    <HoverRevealBadgeMedallion
+                                                        locked={!unlocked}
+                                                        icon={Icon}
+                                                        centerClassName={typeMeta.containerClass}
+                                                        iconClassName={`${typeMeta.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
+                                                        overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
+                                                        footerBubbleText={isSeniorityBadge ? String(allBadgesTenureMetrics?.years ?? badgeOverlayNumber ?? '') : null}
+                                                        ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
+                                                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(badge.badge_type) ? 'border-white/90' : '')}
+                                                        size='sm'
+                                                        iconSize={16}
                                                         strokeWidth={2.7}
-                                                        className={`${typeMeta.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
                                                     />
-                                                    {badgeOverlayNumber && (
-                                                        <span className='absolute bottom-[2px] left-1/2 -translate-x-1/2 text-[8px] leading-none font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]'>
-                                                            {badgeOverlayNumber}
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                </BadgeInfoTooltip>
                                                 <div className='min-w-0'>
                                                     <div className='flex items-center gap-2'>
                                                         <p className='text-sm font-black truncate text-[var(--text-primary)]'>
@@ -975,7 +1316,7 @@ function AllBadgesModal({
                                                                     : isStreakBadge
                                                                         ? `Desbloquea con ${nextThreshold} meses consecutivos con cierres.`
                                                                         : isDealValueBadge
-                                                                            ? `Desbloquea al cerrar un lead de ${safeLabel.replace('Valor ', '$')}.`
+                                                                            ? `Desbloquea al cerrar un lead ganado con mensualidad real en el rango ${safeLabel.replace('Mensualidad ', '')}.`
                                                                             : isRacePointsLeaderBadge
                                                                                 ? 'Desbloquea al liderar el ranking de puntos del podio.'
                                                                                 : isQuoteContributionBadge
@@ -994,10 +1335,578 @@ function AllBadgesModal({
                             </div>
                         )}
                     </div>
+                    </>
+                    )}
+
+                    {modalTab === 'evolution' && (
+                    <div className='pt-1'>
+                        <div className='flex items-center gap-2 mb-2'>
+                            <Sparkles size={14} className='text-cyan-400' />
+                            <h4 className='text-xs font-black uppercase tracking-[0.16em] text-[var(--text-secondary)]'>
+                                Evolución de Niveles
+                            </h4>
+                        </div>
+                        <p className='text-xs mb-4 text-[var(--text-secondary)]'>
+                            Vista de progreso y siguientes etapas para badges con evolución (industria y badges especiales seleccionadas).
+                        </p>
+
+                        <div className='space-y-4'>
+                            <div className='rounded-xl border p-4 bg-[var(--hover-bg)] border-[var(--card-border)]'>
+                                <div className='flex items-center gap-2 mb-3'>
+                                    <Award size={13} className='text-amber-400' />
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                        Evolución · Badges por Industria
+                                    </p>
+                                </div>
+                                <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                                    {sortedIndustries.map((industry) => {
+                                        const badge = badgeByIndustry.get(industry.id)
+                                        const badgeVisual = getIndustryBadgeVisualFromMap(industry.id, industryVisualMap, industry.name)
+                                        return (
+                                            <IndustryBadgeEvolutionCard
+                                                key={`evo-industry-${industry.id}`}
+                                                industry={industry}
+                                                badge={badge}
+                                                badgeLevels={badgeLevels}
+                                                badgeVisual={badgeVisual}
+                                            />
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            {specialMultiLevelEvolutionBadges.length > 0 && (
+                                <div className='rounded-xl border p-4 bg-[var(--hover-bg)] border-[var(--card-border)]'>
+                                    <div className='flex items-center gap-2 mb-3'>
+                                        <Layers size={13} className='text-fuchsia-400' />
+                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                            Evolución · Badges Especiales
+                                        </p>
+                                    </div>
+                                    <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                                        {specialMultiLevelEvolutionBadges.map((badge, index) => (
+                                            <SpecialBadgeEvolutionCard
+                                                key={`evo-special-${badge?.badge_type || 'badge'}-${badge?.badge_key || index}`}
+                                                badge={badge}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    )}
                 </div>
             </div>
         </div>
     )
+}
+
+function HoverRevealBadgeMedallion({
+    locked,
+    evo = false,
+    ...props
+}: {
+    locked: boolean
+    evo?: boolean
+} & ComponentProps<typeof BadgeMedallion>) {
+    if (!locked) {
+        return <BadgeMedallion {...props} />
+    }
+
+    const grayHideClass = evo ? 'group-hover/evo:opacity-0' : 'group-hover:opacity-0'
+    const colorShowClass = evo ? 'group-hover/evo:opacity-100' : 'group-hover:opacity-100'
+
+    return (
+        <span className='inline-grid shrink-0 place-items-center'>
+            <BadgeMedallion
+                {...props}
+                className={`${props.className || ''} [grid-area:1/1] grayscale opacity-90 ${grayHideClass}`.trim()}
+            />
+            <BadgeMedallion
+                {...props}
+                className={`${props.className || ''} [grid-area:1/1] opacity-0 pointer-events-none ${colorShowClass}`.trim()}
+            />
+        </span>
+    )
+}
+
+function IndustryBadgeEvolutionCard({
+    industry,
+    badge,
+    badgeLevels,
+    badgeVisual
+}: {
+    industry: { id: string, name: string, is_active?: boolean }
+    badge: any
+    badgeLevels: { level: number, min_closures: number }[]
+    badgeVisual: BadgeVisual
+}) {
+    const IndustryIcon = badgeVisual.icon
+    const currentLevel = Number(badge?.level || 0)
+    const closures = Number(badge?.closures_count || 0)
+    const unlocked = currentLevel > 0
+    const milestones = badgeLevels.length > 0 ? badgeLevels : [
+        { level: 1, min_closures: 1 },
+        { level: 2, min_closures: 3 },
+        { level: 3, min_closures: 5 },
+        { level: 4, min_closures: 10 }
+    ]
+
+    return (
+        <div className='group rounded-xl border p-4 bg-[var(--card-bg)] border-[var(--card-border)] hover:border-blue-400/35 transition-colors'>
+            <div className='flex items-center justify-between gap-3'>
+                <div className='min-w-0 flex items-center gap-3'>
+                    <HoverRevealBadgeMedallion
+                        locked={!unlocked}
+                        icon={IndustryIcon}
+                        centerClassName={badgeVisual.containerClass}
+                        iconClassName={badgeVisual.iconClass}
+                        size='md'
+                        iconSize={18}
+                        strokeWidth={2.6}
+                    />
+                    <div className='min-w-0'>
+                        <p className='text-sm font-black truncate text-[var(--text-primary)]'>
+                            {industry.name}
+                        </p>
+                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                            {currentLevel > 0 ? `Nivel ${currentLevel}` : 'Bloqueado'} · {closures} cierres
+                        </p>
+                    </div>
+                </div>
+                <span className='px-2 py-1 rounded-lg border text-[10px] font-black bg-blue-500/10 border-blue-400/25 text-blue-300'>
+                    Evolución
+                </span>
+            </div>
+
+            <BadgeLevelEvolutionTrack
+                nodes={milestones.map((m) => ({
+                    level: m.level,
+                    threshold: m.min_closures,
+                    caption: `${m.min_closures} cierre${m.min_closures === 1 ? '' : 's'}`
+                }))}
+                currentLevel={currentLevel}
+                currentProgress={closures}
+                icon={IndustryIcon}
+                centerClassName={badgeVisual.containerClass}
+                iconClassName={badgeVisual.iconClass}
+            />
+        </div>
+    )
+}
+
+function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
+    const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
+    const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
+    const milestones = getSpecialBadgeEvolutionMilestones(badge)
+    if (milestones.length <= 1) return null
+    const unlocked = Number(badge?.level || 0) > 0
+    const isSeniorityBadge = String(badge?.badge_type || '') === 'seniority_years'
+
+    return (
+        <div className='group rounded-xl border p-4 bg-[var(--card-bg)] border-[var(--card-border)] hover:border-fuchsia-400/30 transition-colors'>
+            <div className='flex items-center justify-between gap-3'>
+                <div className='min-w-0 flex items-center gap-3'>
+                    <HoverRevealBadgeMedallion
+                        locked={!unlocked}
+                        icon={typeMeta.icon}
+                        centerClassName={typeMeta.containerClass}
+                        iconClassName={typeMeta.iconClass}
+                        overlayText={isSeniorityBadge ? null : getSpecialBadgeOverlayNumber(badge)}
+                        footerBubbleText={isSeniorityBadge ? String(getSpecialBadgeOverlayNumber(badge) ?? '') : null}
+                        ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
+                        coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+                        size='md'
+                        iconSize={17}
+                        strokeWidth={2.6}
+                    />
+                    <div className='min-w-0'>
+                        <p className='text-sm font-black truncate text-[var(--text-primary)]'>{safeLabel}</p>
+                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                            {typeMeta.title} · Nivel {Number(badge?.level || 0)}
+                        </p>
+                    </div>
+                </div>
+                <span className='px-2 py-1 rounded-lg border text-[10px] font-black bg-fuchsia-500/10 border-fuchsia-400/25 text-fuchsia-300'>
+                    Multi-nivel
+                </span>
+            </div>
+
+            <BadgeLevelEvolutionTrack
+                nodes={milestones}
+                currentLevel={Number(badge?.level || 0)}
+                currentProgress={Number(badge?.progress_count || 0)}
+                icon={typeMeta.icon}
+                centerClassName={typeMeta.containerClass}
+                iconClassName={typeMeta.iconClass}
+                ringStyle='match'
+                coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? 'border-white/90' : '')}
+            />
+        </div>
+    )
+}
+
+function BadgeLevelEvolutionTrack({
+    nodes,
+    currentLevel,
+    currentProgress,
+    icon,
+    centerClassName,
+    iconClassName,
+    ringStyle = 'match',
+    coreBorderColorClassName
+}: {
+    nodes: Array<{ level: number, threshold: number, caption: string }>
+    currentLevel: number
+    currentProgress: number
+    icon: any
+    centerClassName: string
+    iconClassName: string
+    ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
+    coreBorderColorClassName?: string
+}) {
+    return (
+        <div className='mt-4 rounded-xl border p-3 bg-[var(--hover-bg)] border-[var(--card-border)]'>
+            <div className='relative'>
+                <div className='absolute left-4 right-4 top-5 h-[2px] bg-gradient-to-r from-white/10 via-white/30 to-white/10 pointer-events-none' />
+                <div className='grid gap-2' style={{ gridTemplateColumns: `repeat(${nodes.length}, minmax(0, 1fr))` }}>
+                    {nodes.map((node, index) => {
+                        const achieved = currentLevel >= node.level
+                        const current = !achieved && index > 0
+                            ? currentLevel >= nodes[index - 1].level
+                            : currentLevel === node.level && currentLevel > 0
+                        const next = !achieved && (index === 0 || currentLevel >= nodes[index - 1].level)
+                        const thresholdText = node.caption
+                        const evoStyle = getEvolutionVisualTier(index, achieved, next, current)
+                        const isLocked = !achieved
+                        const medallionStateClass = achieved
+                            ? 'brightness-110 saturate-110'
+                            : 'opacity-80 group-hover/evo:opacity-100'
+                        const medallionWrapStateClass = achieved
+                            ? ''
+                            : 'grayscale opacity-85 group-hover/evo:grayscale-0 group-hover/evo:opacity-100'
+                        const decorationStateClass = achieved
+                            ? ''
+                            : 'grayscale group-hover/evo:grayscale-0'
+                        const statusLabel = achieved ? 'Desbloqueado' : next ? 'Siguiente' : 'Bloqueado'
+
+                        return (
+                            <div key={`${node.level}-${node.threshold}`} className='relative flex flex-col items-center text-center gap-2 group/evo'>
+                                <div className={`relative rounded-xl p-2 ${evoStyle.nodeFrameClass}`}>
+                                    <span className={`absolute left-2 right-2 top-2 h-px rounded-full ${evoStyle.accentLineClass}`} />
+                                    <span className={`absolute left-2 right-2 bottom-2 h-5 rounded-md border ${evoStyle.plaqueClass}`} />
+                                    <span className={`absolute left-2 top-2 w-2 h-2 rounded-tl-md border-l border-t ${evoStyle.cornerClass}`} />
+                                    <span className={`absolute right-2 top-2 w-2 h-2 rounded-tr-md border-r border-t ${evoStyle.cornerClass}`} />
+                                    <span className={`absolute left-2 bottom-2 w-2 h-2 rounded-bl-md border-l border-b ${evoStyle.cornerClass}`} />
+                                    <span className={`absolute right-2 bottom-2 w-2 h-2 rounded-br-md border-r border-b ${evoStyle.cornerClass}`} />
+                                    <span className={`absolute top-1.5 left-1/2 -translate-x-1/2 px-1.5 py-[2px] rounded-full border text-[7px] font-black uppercase tracking-[0.14em] ${evoStyle.tierChipClass}`}>
+                                        {evoStyle.tierLabel}
+                                    </span>
+                                    <div className={`relative isolate inline-flex items-center justify-center ${evoStyle.mountClass}`}>
+                                        {evoStyle.showWings && (
+                                            <>
+                                                <span className={`absolute z-[1] left-1/2 top-1/2 -translate-y-1/2 -translate-x-[104%] ${evoStyle.wingShapeLeftClass} ${centerClassName} ${decorationStateClass}`} />
+                                                <span className={`absolute z-[1] left-1/2 top-1/2 -translate-y-1/2 translate-x-[4%] ${evoStyle.wingShapeRightClass} ${centerClassName} ${decorationStateClass}`} />
+                                                {evoStyle.showWingBridges && (
+                                                    <>
+                                                        <span className={`absolute z-[2] left-1/2 top-1/2 -translate-y-1/2 -translate-x-[68%] ${evoStyle.wingBridgeLeftClass} ${centerClassName} ${decorationStateClass}`} />
+                                                        <span className={`absolute z-[2] left-1/2 top-1/2 -translate-y-1/2 translate-x-[18%] ${evoStyle.wingBridgeRightClass} ${centerClassName} ${decorationStateClass}`} />
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                        {evoStyle.showWingLayer2 && (
+                                            <>
+                                                <span className={`absolute z-0 left-1/2 top-1/2 -translate-y-[26%] -translate-x-[114%] ${evoStyle.wingLayer2LeftClass} ${centerClassName} ${decorationStateClass}`} />
+                                                <span className={`absolute z-0 left-1/2 top-1/2 -translate-y-[26%] translate-x-[14%] ${evoStyle.wingLayer2RightClass} ${centerClassName} ${decorationStateClass}`} />
+                                            </>
+                                        )}
+                                        {evoStyle.showTail && (
+                                            <>
+                                                <span className={`absolute left-1/2 top-1/2 translate-y-[85%] -translate-x-[75%] ${evoStyle.tailShapeClass} rotate-[12deg] ${centerClassName} ${decorationStateClass}`} />
+                                                <span className={`absolute left-1/2 top-1/2 translate-y-[85%] -translate-x-[15%] ${evoStyle.tailShapeClass} rotate-[-12deg] ${centerClassName} ${decorationStateClass}`} />
+                                                {evoStyle.showTailCenter && (
+                                                    <span className={`absolute left-1/2 top-1/2 translate-y-[92%] -translate-x-1/2 ${evoStyle.tailCenterClass} ${centerClassName} ${decorationStateClass}`} />
+                                                )}
+                                            </>
+                                        )}
+                                        {evoStyle.showCrest && (
+                                            <>
+                                                {evoStyle.showCrestBridge && (
+                                                    <span className={`absolute z-[3] left-1/2 top-1/2 -translate-x-1/2 -translate-y-[74%] ${evoStyle.crestBridgeClass} ${centerClassName} ${decorationStateClass}`} />
+                                                )}
+                                                <span className={`absolute z-[4] left-1/2 top-1/2 -translate-x-1/2 -translate-y-[88%] ${evoStyle.crestShapeClass} ${centerClassName} ${decorationStateClass}`} />
+                                                {evoStyle.showCrestProngs && (
+                                                    <>
+                                                        <span className={`absolute z-[5] left-1/2 top-1/2 -translate-y-[112%] -translate-x-[72%] ${evoStyle.crestProngClass} ${centerClassName} ${decorationStateClass}`} />
+                                                        <span className={`absolute z-[5] left-1/2 top-1/2 -translate-y-[120%] -translate-x-1/2 ${evoStyle.crestProngClass} ${centerClassName} ${decorationStateClass}`} />
+                                                        <span className={`absolute z-[5] left-1/2 top-1/2 -translate-y-[112%] translate-x-[0%] ${evoStyle.crestProngClass} ${centerClassName} ${decorationStateClass}`} />
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                        {evoStyle.showSideBadges && (
+                                            <>
+                                                <span className={`absolute left-1/2 top-1/2 -translate-y-[14%] -translate-x-[185%] ${evoStyle.sideBadgeClass} ${centerClassName} ${decorationStateClass}`} />
+                                                <span className={`absolute left-1/2 top-1/2 -translate-y-[14%] translate-x-[85%] ${evoStyle.sideBadgeClass} ${centerClassName} ${decorationStateClass}`} />
+                                            </>
+                                        )}
+                                        {evoStyle.showMountRing && (
+                                            <span className={`absolute inset-[8px] rounded-full border ${evoStyle.mountRingClass}`} />
+                                        )}
+                                        <div className={`relative z-[6] ${evoStyle.haloClass}`}>
+                                            <HoverRevealBadgeMedallion
+                                                locked={!achieved}
+                                                evo
+                                                icon={icon}
+                                                centerClassName={`${centerClassName} ${achieved ? medallionStateClass : ''}`}
+                                                iconClassName={iconClassName}
+                                                overlayText={String(node.level)}
+                                                ringStyle={evoStyle.ringStyle || ringStyle}
+                                                coreBorderColorClassName={coreBorderColorClassName}
+                                                className={achieved ? medallionWrapStateClass : ''}
+                                                size='sm'
+                                                strokeWidth={2.4}
+                                            />
+                                        </div>
+                                    </div>
+                                    {isLocked && (
+                                        <div className='absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(2,6,23,0.03),rgba(2,6,23,0.14))] pointer-events-none' />
+                                    )}
+                                    <div className={`absolute inset-x-1 bottom-1 px-1 py-0.5 rounded-md border text-[8px] font-black uppercase tracking-[0.12em] backdrop-blur-sm transition-colors ${evoStyle.statusPillClass}`}>
+                                        {statusLabel}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className={`text-[10px] font-black uppercase tracking-[0.12em] ${achieved ? 'text-emerald-300' : next ? 'text-blue-300' : 'text-[var(--text-secondary)]'}`}>
+                                        Nivel {node.level}
+                                    </p>
+                                    <p className='text-[10px] font-semibold text-[var(--text-secondary)]'>
+                                        {thresholdText}
+                                    </p>
+                                    {next && (
+                                        <p className='text-[10px] font-black text-blue-300 mt-1'>
+                                            Faltan {Math.max(0, node.threshold - currentProgress)}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function getEvolutionVisualTier(index: number, achieved: boolean, next: boolean, current: boolean) {
+    const locked = !achieved && !next
+    const frameClass = locked
+        ? 'bg-black/10 border border-white/10'
+        : current
+            ? 'bg-blue-500/12 border border-blue-400/35'
+            : achieved
+                ? 'bg-emerald-500/10 border border-emerald-400/25'
+                : 'bg-blue-500/10 border border-blue-400/25'
+    const tierPalettes = [
+        {
+            tierLabel: 'I',
+            accentLineClass: 'bg-gradient-to-r from-blue-300/0 via-blue-300/40 to-blue-300/0',
+            plaqueClass: 'border-blue-300/15 bg-blue-500/5',
+            cornerClass: 'border-blue-300/25',
+            tierChipClass: 'border-blue-300/25 bg-blue-500/10 text-blue-200/90',
+            haloClass: '',
+            ringStyle: 'match' as const,
+            showWings: false,
+            showTail: false,
+            showCrest: false,
+            showWingLayer2: false,
+            showTailCenter: false,
+            showCrestProngs: false,
+            showSideBadges: false,
+            showMountRing: false,
+            showWingBridges: false,
+            showBackplate: false,
+            showChassisRing: false,
+            showCrestBridge: false
+        },
+        {
+            tierLabel: 'II',
+            accentLineClass: 'bg-gradient-to-r from-cyan-300/0 via-cyan-300/45 to-cyan-300/0',
+            plaqueClass: 'border-cyan-300/18 bg-cyan-500/5',
+            cornerClass: 'border-cyan-300/30',
+            tierChipClass: 'border-cyan-300/25 bg-cyan-500/10 text-cyan-200/90',
+            haloClass: '',
+            ringStyle: 'bronze' as const,
+            showWings: false,
+            showTail: false,
+            showCrest: false,
+            showWingLayer2: false,
+            showTailCenter: false,
+            showCrestProngs: false,
+            showSideBadges: false,
+            showMountRing: false,
+            showWingBridges: false,
+            showBackplate: false,
+            showChassisRing: false,
+            showCrestBridge: false
+        },
+        {
+            tierLabel: 'III',
+            accentLineClass: 'bg-gradient-to-r from-violet-300/0 via-violet-300/45 to-violet-300/0',
+            plaqueClass: 'border-violet-300/18 bg-violet-500/5',
+            cornerClass: 'border-violet-300/30',
+            tierChipClass: 'border-violet-300/25 bg-violet-500/10 text-violet-200/90',
+            haloClass: '',
+            ringStyle: 'silver' as const,
+            showWings: false,
+            showTail: false,
+            showCrest: false,
+            showWingLayer2: false,
+            showTailCenter: false,
+            showCrestProngs: false,
+            showSideBadges: false,
+            showMountRing: false,
+            showWingBridges: false,
+            showBackplate: false,
+            showChassisRing: false,
+            showCrestBridge: false
+        },
+        {
+            tierLabel: 'IV',
+            accentLineClass: 'bg-gradient-to-r from-rose-300/0 via-rose-300/45 to-rose-300/0',
+            plaqueClass: 'border-rose-300/18 bg-rose-500/5',
+            cornerClass: 'border-rose-300/30',
+            tierChipClass: 'border-rose-300/25 bg-rose-500/10 text-rose-200/90',
+            haloClass: '',
+            ringStyle: 'gold' as const,
+            showWings: false,
+            showTail: false,
+            showCrest: false,
+            showWingLayer2: false,
+            showTailCenter: false,
+            showCrestProngs: false,
+            showSideBadges: false,
+            showMountRing: false,
+            showWingBridges: false,
+            showBackplate: false,
+            showChassisRing: false,
+            showCrestBridge: false
+        }
+    ] as const
+
+    const palette = tierPalettes[Math.min(index, tierPalettes.length - 1)]
+
+    return {
+        ...palette,
+        nodeFrameClass: frameClass,
+        mountClass: 'min-h-[52px] min-w-[60px]',
+        chassisRingClass: 'w-[54px] h-[54px] rounded-full border-2 border-white/60 shadow-none',
+        backplateClass: index === 2
+            ? 'w-[56px] h-[34px] border-2 border-white/60 shadow-none [clip-path:polygon(0_62%,10%_38%,18%_30%,28%_30%,38%_22%,50%_20%,62%_22%,72%_30%,82%_30%,90%_38%,100%_62%,86%_64%,78%_56%,68%_52%,32%_52%,22%_56%,14%_64%)]'
+            : 'w-[58px] h-[38px] border-2 border-white/60 shadow-none [clip-path:polygon(0_66%,10%_42%,18%_34%,28%_34%,38%_25%,42%_10%,48%_22%,50%_8%,52%_22%,58%_10%,62%_25%,72%_34%,82%_34%,90%_42%,100%_66%,86%_66%,78%_56%,68%_52%,32%_52%,22%_56%,14%_66%)]',
+        mountRingClass: locked
+            ? 'border-white/8'
+            : next
+                ? 'border-blue-300/18'
+                : achieved
+                    ? 'border-emerald-300/14'
+                    : 'border-white/10',
+        wingShapeLeftClass: index <= 1
+            ? 'w-[12px] h-[9px] rounded-l-[7px] rounded-r-[4px] border-2 border-white/60 shadow-none origin-right -rotate-[4deg]'
+            : 'w-[15px] h-[10px] rounded-l-[8px] rounded-r-[4px] border-2 border-white/60 shadow-none origin-right -rotate-[6deg]',
+        wingShapeRightClass: index <= 1
+            ? 'w-[12px] h-[9px] rounded-r-[7px] rounded-l-[4px] border-2 border-white/60 shadow-none origin-left rotate-[4deg]'
+            : 'w-[15px] h-[10px] rounded-r-[8px] rounded-l-[4px] border-2 border-white/60 shadow-none origin-left rotate-[6deg]',
+        wingGlossLeftClass: '',
+        wingGlossRightClass: '',
+        wingBridgeLeftClass: index <= 1
+            ? 'w-[6px] h-[8px] rounded-l-[5px] rounded-r-[2px] border-2 border-white/60 shadow-none'
+            : 'w-[8px] h-[9px] rounded-l-[6px] rounded-r-[2px] border-2 border-white/60 shadow-none',
+        wingBridgeRightClass: index <= 1
+            ? 'w-[6px] h-[8px] rounded-r-[5px] rounded-l-[2px] border-2 border-white/60 shadow-none'
+            : 'w-[8px] h-[9px] rounded-r-[6px] rounded-l-[2px] border-2 border-white/60 shadow-none',
+        wingLayer2LeftClass: 'w-[14px] h-[11px] rounded-l-[9px] rounded-r-[6px] border-2 border-white/55 shadow-none origin-right -rotate-[34deg]',
+        wingLayer2RightClass: 'w-[14px] h-[11px] rounded-r-[9px] rounded-l-[6px] border-2 border-white/55 shadow-none origin-left rotate-[34deg]',
+        wingLayer2GlossLeftClass: '',
+        wingLayer2GlossRightClass: '',
+        tailShapeClass: 'w-3 h-4 rounded-b-[10px] rounded-t-sm border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] [clip-path:polygon(50%_100%,0_0,100%_0)]',
+        tailCenterClass: 'w-[10px] h-[5px] rounded-b-[8px] rounded-t-sm border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] [clip-path:polygon(50%_100%,0_0,100%_0)]',
+        crestBridgeClass: 'w-[10px] h-[4px] rounded-t-[4px] rounded-b-[1px] border-2 border-white/60 shadow-none',
+        crestShapeClass: 'relative w-[16px] h-[7px] rounded-t-[4px] rounded-b-[2px] border-2 border-white/65 shadow-none [clip-path:polygon(0_100%,0_55%,18%_62%,32%_12%,50%_62%,68%_12%,82%_62%,100%_55%,100%_100%)]',
+        crestProngClass: 'w-[4px] h-[4px] rounded-t-[3px] rounded-b-[1px] border-2 border-white/55 shadow-none [clip-path:polygon(50%_0,100%_100%,0_100%)]',
+        sideBadgeClass: 'w-2.5 h-2.5 rounded-[6px] border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_2px_6px_rgba(0,0,0,0.16)] rotate-45',
+        statusPillClass: achieved
+            ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-200/90'
+            : next
+                ? 'border-blue-300/20 bg-blue-500/10 text-blue-200/90'
+                : 'border-white/10 bg-black/25 text-white/65'
+    }
+}
+
+function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, threshold: number, caption: string }> {
+    const type = String(badge?.badge_type || '')
+    const currentLevel = Number(badge?.level || 0)
+
+    if (type === 'quote_contribution') {
+        return [
+            { level: 1, threshold: 1, caption: '1 frase' },
+            { level: 2, threshold: 5, caption: '5 frases' },
+            { level: 3, threshold: 10, caption: '10 frases' },
+            { level: 4, threshold: 25, caption: '25 frases' }
+        ]
+    }
+    if (type === 'quote_likes_received') {
+        return [
+            { level: 1, threshold: 10, caption: '10 likes' },
+            { level: 2, threshold: 25, caption: '25 likes' },
+            { level: 3, threshold: 50, caption: '50 likes' }
+        ]
+    }
+    if (type === 'closure_milestone') {
+        return [
+            { level: 1, threshold: 10, caption: '10 cierres' },
+            { level: 2, threshold: 20, caption: '20 cierres' },
+            { level: 3, threshold: 50, caption: '50 cierres' }
+        ]
+    }
+    if (type === 'prelead_registered') {
+        return [
+            { level: 1, threshold: 1, caption: '1 pre-lead' },
+            { level: 2, threshold: 25, caption: '25 pre-leads' },
+            { level: 3, threshold: 100, caption: '100 pre-leads' },
+            { level: 4, threshold: 300, caption: '300 pre-leads' }
+        ]
+    }
+    if (type === 'lead_registered') {
+        return [
+            { level: 1, threshold: 1, caption: '1 lead' },
+            { level: 2, threshold: 5, caption: '5 leads' },
+            { level: 3, threshold: 15, caption: '15 leads' },
+            { level: 4, threshold: 50, caption: '50 leads' }
+        ]
+    }
+    if (type === 'meeting_completed') {
+        return [
+            { level: 1, threshold: 1, caption: '1 junta' },
+            { level: 2, threshold: 10, caption: '10 juntas' },
+            { level: 3, threshold: 25, caption: '25 juntas' },
+            { level: 4, threshold: 50, caption: '50 juntas' }
+        ]
+    }
+    if (type === 'seniority_years') {
+        const anchor = Math.max(1, currentLevel || 1)
+        return [0, 1, 2, 3].map((offset) => {
+            const year = anchor + offset
+            return {
+                level: year,
+                threshold: year,
+                caption: `${year} año${year === 1 ? '' : 's'}`
+            }
+        })
+    }
+    return []
 }
 
 function InfoRow({ label, value, highlight, icon }: { label: string, value: string, highlight?: boolean, icon?: ReactNode }) {
@@ -1021,6 +1930,16 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
         .some((city) => labelLower.includes(city))
     const metallicContainer = 'border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15),0_6px_14px_rgba(15,23,42,0.22)]'
     const solidIconClass = 'text-white'
+    const shared = getSpecialBadgeVisualSpec(badgeType, safeLabel, null)
+    if (shared) {
+        return {
+            title: shared.title,
+            icon: shared.icon,
+            containerClass: `${metallicContainer} ${shared.centerGradientClass}`,
+            iconClass: shared.iconClassName,
+            coreBorderColorClassName: shared.coreBorderColorClassName
+        }
+    }
 
     if (badgeType === 'company_size') {
         return {
@@ -1123,7 +2042,31 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
         return {
             title: 'Antigüedad',
             icon: Calendar,
-            containerClass: `${metallicContainer} bg-gradient-to-br from-[#2563eb] to-[#1e3a8a]`,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#4b5563] to-[#111827]`,
+            iconClass: solidIconClass
+        }
+    }
+    if (badgeType === 'prelead_registered') {
+        return {
+            title: 'Pre-Leads',
+            icon: Target,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]`,
+            iconClass: solidIconClass
+        }
+    }
+    if (badgeType === 'lead_registered') {
+        return {
+            title: 'Leads',
+            icon: Users,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]`,
+            iconClass: solidIconClass
+        }
+    }
+    if (badgeType === 'meeting_completed') {
+        return {
+            title: 'Juntas',
+            icon: Calendar,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#7c3aed] to-[#4c1d95]`,
             iconClass: solidIconClass
         }
     }
@@ -1160,13 +2103,15 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
 
     if (badgeType === 'deal_value_tier') {
         return {
-            title: 'Valor de Cierre',
+            title: 'Mensualidad',
             icon: Gem,
-            containerClass: labelLower.includes('1m')
+            containerClass: labelLower.includes('10k+')
                 ? `${metallicContainer} bg-gradient-to-br from-[#7c3aed] to-[#5b21b6]`
-                : labelLower.includes('500')
+                : labelLower.includes('5k-10k')
                     ? `${metallicContainer} bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]`
-                    : `${metallicContainer} bg-gradient-to-br from-[#10b981] to-[#047857]`,
+                    : labelLower.includes('2k-5k')
+                        ? `${metallicContainer} bg-gradient-to-br from-[#10b981] to-[#047857]`
+                        : `${metallicContainer} bg-gradient-to-br from-[#f59e0b] to-[#b45309]`,
             iconClass: solidIconClass
         }
     }
@@ -1189,18 +2134,18 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
 
     if (badgeType === 'admin_granted') {
         const adminGradient = labelLower.includes('jesus gracia')
-            ? 'from-[#a855f7] to-[#6d28d9]' // morado
+            ? 'from-[#a855f7] to-[#6d28d9]'
             : labelLower.includes('rafael sedas')
-                ? 'from-[#ef4444] to-[#991b1b]' // rojo
+                ? 'from-[#ef4444] to-[#991b1b]'
                 : labelLower.includes('alberto castro')
-                    ? 'from-[#3b82f6] to-[#1e3a8a]' // azul
+                    ? 'from-[#3b82f6] to-[#1e3a8a]'
                     : labelLower.includes('eduardo castro')
-                        ? 'from-[#22c55e] to-[#166534]' // verde
+                        ? 'from-[#22c55e] to-[#166534]'
                         : 'from-[#22c55e] to-[#15803d]'
         return {
             title: 'Distinción Admin',
             icon: Medal,
-            containerClass: `${metallicContainer} border-[#fbbf24] bg-gradient-to-br ${adminGradient} shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15),0_6px_14px_rgba(15,23,42,0.22),0_0_0_1px_rgba(251,191,36,0.55)]`,
+            containerClass: `${metallicContainer} bg-gradient-to-br ${adminGradient}`,
             iconClass: solidIconClass
         }
     }
@@ -1228,6 +2173,9 @@ function getSpecialDefaultThreshold(badgeType?: string) {
     if (badgeType === 'seniority_years') return 1
     if (badgeType === 'closure_milestone') return 10
     if (badgeType === 'reliability_score') return 80
+    if (badgeType === 'prelead_registered') return 1
+    if (badgeType === 'lead_registered') return 1
+    if (badgeType === 'meeting_completed') return 1
     if (badgeType === 'closing_streak') return 5
     if (badgeType === 'deal_value_tier') return 1
     if (badgeType === 'race_first_place') return 1
@@ -1248,21 +2196,40 @@ function buildSpecialBadgeCatalog(
     options?: {
         isBadgeLeader?: boolean
         leaderBadgeCount?: number
+        industryBadgeCount?: number
         sellerStats?: {
             totalClosures?: number
             reliabilityScore?: number
             seniorityYears?: number
+            totalPreLeads?: number
+            totalLeads?: number
+            completedMeetings?: number
         }
     }
 ) {
     const isBadgeLeader = Boolean(options?.isBadgeLeader)
     const leaderBadgeCount = Number(options?.leaderBadgeCount || 0)
+    const industryBadgeCount = Math.max(0, Number(options?.industryBadgeCount || 0))
     const seniorityYears = Math.max(0, Number(options?.sellerStats?.seniorityYears || 0))
     const totalClosures = Math.max(0, Number(options?.sellerStats?.totalClosures || 0))
     const reliabilityScore = Math.max(0, Math.min(100, Number(options?.sellerStats?.reliabilityScore || 0)))
     const closureLevel = totalClosures >= 50 ? 3 : totalClosures >= 20 ? 2 : totalClosures >= 10 ? 1 : 0
     const closureNextThreshold = closureLevel === 0 ? 10 : closureLevel === 1 ? 20 : closureLevel === 2 ? 50 : null
     const reliabilityThreshold = 80
+    const unlockedCompanySizeCount = Array.from(
+        new Set(
+            (specialBadges || [])
+                .filter((badge: any) => String(badge?.badge_type || '') === 'company_size' && Number(badge?.level || 0) > 0)
+                .map((badge: any) => String(badge?.badge_key || ''))
+                .filter(Boolean)
+        )
+    ).length
+    const allCompanySizesProgress = unlockedCompanySizeCount
+    const allCompanySizesLevel = allCompanySizesProgress >= 5 ? 1 : 0
+    const allCompanySizesNextThreshold = allCompanySizesLevel > 0 ? null : 5
+    const multiIndustryProgress = industryBadgeCount
+    const multiIndustryLevel = multiIndustryProgress >= 20 ? 4 : multiIndustryProgress >= 15 ? 3 : multiIndustryProgress >= 10 ? 2 : multiIndustryProgress >= 5 ? 1 : 0
+    const multiIndustryNextThreshold = multiIndustryLevel === 0 ? 5 : multiIndustryLevel === 1 ? 10 : multiIndustryLevel === 2 ? 15 : multiIndustryLevel === 3 ? 20 : null
     const map = new Map<string, any>()
     const baseCatalog = [
         {
@@ -1270,18 +2237,18 @@ function buildSpecialBadgeCatalog(
             badge_type: 'all_company_sizes',
             badge_key: 'all_sizes',
             badge_label: 'Todos los Tamaños',
-            progress_count: 0,
-            level: 0,
-            next_level_threshold: 5
+            progress_count: allCompanySizesProgress,
+            level: allCompanySizesLevel,
+            next_level_threshold: allCompanySizesNextThreshold
         },
         {
             id: 'virtual-multi-industry',
             badge_type: 'multi_industry',
             badge_key: 'multi_industry',
             badge_label: 'Multi Industria',
-            progress_count: 0,
-            level: 0,
-            next_level_threshold: 5
+            progress_count: multiIndustryProgress,
+            level: multiIndustryLevel,
+            next_level_threshold: multiIndustryNextThreshold
         },
         {
             id: 'virtual-seniority-years',
@@ -1311,6 +2278,33 @@ function buildSpecialBadgeCatalog(
             next_level_threshold: reliabilityScore >= reliabilityThreshold ? null : reliabilityThreshold
         },
         {
+            id: 'virtual-prelead-registered',
+            badge_type: 'prelead_registered',
+            badge_key: 'prelead_registered',
+            badge_label: 'Pre-Leads Registrados',
+            progress_count: Math.max(0, Number(options?.sellerStats?.totalPreLeads || 0)),
+            level: 0,
+            next_level_threshold: 1
+        },
+        {
+            id: 'virtual-lead-registered',
+            badge_type: 'lead_registered',
+            badge_key: 'lead_registered',
+            badge_label: 'Leads Registrados',
+            progress_count: Math.max(0, Number(options?.sellerStats?.totalLeads || 0)),
+            level: 0,
+            next_level_threshold: 1
+        },
+        {
+            id: 'virtual-meeting-completed',
+            badge_type: 'meeting_completed',
+            badge_key: 'meeting_completed',
+            badge_label: 'Juntas Completadas',
+            progress_count: Math.max(0, Number(options?.sellerStats?.completedMeetings || 0)),
+            level: 0,
+            next_level_threshold: 1
+        },
+        {
             id: 'virtual-closing-streak',
             badge_type: 'closing_streak',
             badge_key: 'closing_streak',
@@ -1320,28 +2314,37 @@ function buildSpecialBadgeCatalog(
             next_level_threshold: 5
         },
         {
-            id: 'virtual-value-100k',
+            id: 'virtual-value-1k-2k',
             badge_type: 'deal_value_tier',
-            badge_key: 'value_100k',
-            badge_label: 'Valor 100K',
+            badge_key: 'value_1k_2k',
+            badge_label: 'Mensualidad 1,000-1,999 USD',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
         },
         {
-            id: 'virtual-value-500k',
+            id: 'virtual-value-2k-5k',
             badge_type: 'deal_value_tier',
-            badge_key: 'value_500k',
-            badge_label: 'Valor 500K',
+            badge_key: 'value_2k_5k',
+            badge_label: 'Mensualidad 2,000-4,999 USD',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
         },
         {
-            id: 'virtual-value-1m',
+            id: 'virtual-value-5k-10k',
             badge_type: 'deal_value_tier',
-            badge_key: 'value_1m',
-            badge_label: 'Valor 1M',
+            badge_key: 'value_5k_10k',
+            badge_label: 'Mensualidad 5,000-9,999 USD',
+            progress_count: 0,
+            level: 0,
+            next_level_threshold: 1
+        },
+        {
+            id: 'virtual-value-10k-100k',
+            badge_type: 'deal_value_tier',
+            badge_key: 'value_10k_100k',
+            badge_label: 'Mensualidad 10,000-100,000 USD',
             progress_count: 0,
             level: 0,
             next_level_threshold: 1
@@ -1542,7 +2545,7 @@ function buildSpecialBadgeCatalog(
             if (type === 'closure_milestone') return 'closure_milestone'
             if (type === 'reliability_score') return 'reliability_score'
             if (type === 'closing_streak') return 'closing_streak'
-            if (type === 'deal_value_tier') return 'deal_value_tier'
+            if (type === 'deal_value_tier') return badge?.badge_key || 'deal_value_tier'
             if (type === 'race_first_place') return 'race_first'
             if (type === 'race_second_place') return 'race_second'
             if (type === 'race_third_place') return 'race_third'
@@ -1560,27 +2563,6 @@ function buildSpecialBadgeCatalog(
 
         if (!prev) {
             map.set(key, { ...badge, badge_key: badge?.badge_key || normalizedKey })
-            continue
-        }
-
-        if (type === 'deal_value_tier') {
-            const rank = (value: any) => {
-                const keyValue = String(value?.badge_key || '')
-                if (keyValue === 'value_1m') return 3
-                if (keyValue === 'value_500k') return 2
-                if (keyValue === 'value_100k') return 1
-                return 0
-            }
-            const prevRank = rank(prev)
-            const nextRank = rank(badge)
-            if (nextRank >= prevRank) {
-                map.set(key, {
-                    ...prev,
-                    ...badge,
-                    progress_count: Math.max(prev?.progress_count || 0, badge?.progress_count || 0),
-                    level: Math.max(prev?.level || 0, badge?.level || 0)
-                })
-            }
             continue
         }
 
@@ -1615,25 +2597,28 @@ function buildSpecialBadgeCatalog(
 
 function getSpecialBadgeOrder(type?: string) {
     if (type === 'seniority_years') return 1
-    if (type === 'closing_streak') return 2
-    if (type === 'closure_milestone') return 3
-    if (type === 'deal_value_tier') return 4
-    if (type === 'reliability_score') return 5
-    if (type === 'all_company_sizes') return 6
-    if (type === 'company_size') return 7
-    if (type === 'location_city') return 8
-    if (type === 'location_country') return 9
-    if (type === 'multi_industry') return 10
-    if (type === 'race_first_place') return 11
-    if (type === 'race_second_place') return 12
-    if (type === 'race_third_place') return 13
-    if (type === 'race_all_positions') return 14
-    if (type === 'race_total_trophies') return 15
-    if (type === 'race_points_leader') return 16
-    if (type === 'quote_contribution') return 17
-    if (type === 'quote_likes_received') return 18
-    if (type === 'admin_granted') return 19
-    if (type === 'badge_leader') return 20
+    if (type === 'prelead_registered') return 2
+    if (type === 'lead_registered') return 3
+    if (type === 'meeting_completed') return 4
+    if (type === 'closing_streak') return 5
+    if (type === 'closure_milestone') return 6
+    if (type === 'deal_value_tier') return 7
+    if (type === 'reliability_score') return 8
+    if (type === 'all_company_sizes') return 9
+    if (type === 'company_size') return 10
+    if (type === 'location_city') return 11
+    if (type === 'location_country') return 12
+    if (type === 'multi_industry') return 13
+    if (type === 'race_first_place') return 14
+    if (type === 'race_second_place') return 15
+    if (type === 'race_third_place') return 16
+    if (type === 'race_all_positions') return 17
+    if (type === 'race_total_trophies') return 18
+    if (type === 'race_points_leader') return 19
+    if (type === 'quote_contribution') return 20
+    if (type === 'quote_likes_received') return 21
+    if (type === 'admin_granted') return 22
+    if (type === 'badge_leader') return 23
     return 99
 }
 
@@ -1641,31 +2626,34 @@ function getSpecialBadgeCategoryMeta(type?: string) {
     if (type === 'company_size' || type === 'all_company_sizes' || type === 'multi_industry' || type === 'closure_milestone') {
         return { key: 'commercial', title: 'Comercial y Cobertura', order: 1 }
     }
+    if (type === 'prelead_registered' || type === 'lead_registered' || type === 'meeting_completed') {
+        return { key: 'activity', title: 'Actividad Comercial', order: 2 }
+    }
     if (type === 'closing_streak') {
-        return { key: 'consistency', title: 'Consistencia', order: 2 }
+        return { key: 'consistency', title: 'Consistencia', order: 3 }
     }
     if (type === 'deal_value_tier') {
-        return { key: 'deal_value', title: 'Valor de Cierre', order: 3 }
+        return { key: 'deal_value', title: 'Mensualidad (Valor Real)', order: 4 }
     }
     if (type === 'location_city' || type === 'location_country') {
-        return { key: 'territory', title: 'Territorio', order: 4 }
+        return { key: 'territory', title: 'Territorio', order: 5 }
     }
     if (type === 'seniority_years') {
-        return { key: 'trajectory', title: 'Trayectoria', order: 5 }
+        return { key: 'trajectory', title: 'Trayectoria', order: 6 }
     }
     if (type === 'reliability_score') {
-        return { key: 'performance', title: 'Rendimiento', order: 6 }
+        return { key: 'performance', title: 'Rendimiento', order: 7 }
     }
     if (type === 'race_first_place' || type === 'race_second_place' || type === 'race_third_place' || type === 'race_all_positions' || type === 'race_total_trophies' || type === 'race_points_leader') {
-        return { key: 'competition', title: 'Competencia', order: 7 }
+        return { key: 'competition', title: 'Competencia', order: 8 }
     }
     if (type === 'quote_contribution' || type === 'quote_likes_received') {
-        return { key: 'quotes', title: 'Frases', order: 8 }
+        return { key: 'quotes', title: 'Frases', order: 9 }
     }
     if (type === 'admin_granted' || type === 'badge_leader') {
-        return { key: 'distinctions', title: 'Distinciones', order: 9 }
+        return { key: 'distinctions', title: 'Distinciones', order: 10 }
     }
-    return { key: 'others', title: 'Otros', order: 99 }
+    return { key: 'others', title: 'Especiales Adicionales', order: 11 }
 }
 
 function getSpecialBadgeOverlayNumber(badge: any): string | null {
@@ -1685,5 +2673,17 @@ function getSpecialBadgeOverlayNumber(badge: any): string | null {
         if (streak <= 0) return null
         return String(streak)
     }
+    if (badge?.badge_type === 'deal_value_tier') {
+        const key = String(badge?.badge_key || '')
+        if (key === 'value_1k_2k') return '1k'
+        if (key === 'value_2k_5k') return '2k'
+        if (key === 'value_5k_10k') return '5k'
+        if (key === 'value_10k_100k' || key === 'value_10k_plus') return '10k'
+        return null
+    }
     return null
+}
+
+function getSpecialBadgeRingStyleByType(type?: string, label?: string | null, key?: string | null): 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple' {
+    return getSpecialBadgeVisualSpec(type, label || null, key || null)?.ringStyle || 'match'
 }

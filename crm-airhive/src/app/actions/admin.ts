@@ -93,7 +93,8 @@ export async function getAdminCorrelationData() {
             { data: companies, error: compError },
             { data: taskHistory, error: taskError },
             { data: preLeads, error: preError },
-            { data: crmEvents, error: eventsError }
+            { data: crmEvents, error: eventsError },
+            { data: reliabilityMetricsRows, error: reliabilityMetricsError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name') as any,
             dbClient.from('employee_profiles').select('*') as any,
@@ -107,7 +108,8 @@ export async function getAdminCorrelationData() {
             dbClient.from('pre_leads').select('*') as any,
             dbClient.from('crm_events')
                 .select('user_id, event_type, created_at')
-                .gte('created_at', eventsWindowStart.toISOString()) as any
+                .gte('created_at', eventsWindowStart.toISOString()) as any,
+            dbClient.from('seller_forecast_reliability_metrics').select('*') as any
         ])
 
         if (profError) throw profError
@@ -123,6 +125,13 @@ export async function getAdminCorrelationData() {
         if (eventsError && eventsError.code !== '42P01') {
             throw eventsError
         }
+        if (reliabilityMetricsError && reliabilityMetricsError.code !== '42P01') {
+            throw reliabilityMetricsError
+        }
+
+        const reliabilityMetricsByUser = new Map<string, any>(
+            ((reliabilityMetricsRows || []) as any[]).map((row: any) => [row.seller_id, row])
+        )
 
         const eventsByUser = (crmEvents || []).reduce((acc: Record<string, any[]>, evt: any) => {
             if (!evt?.user_id) return acc
@@ -214,7 +223,11 @@ export async function getAdminCorrelationData() {
                 // Expectation for closed won is 100%
                 totalForecastError += (100 - prob)
             })
-            const forecastAccuracy = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
+            const forecastAccuracyFallback = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
+            const persistedReliability = reliabilityMetricsByUser.get(p.id)
+            const forecastAccuracy = Number(
+                persistedReliability?.probability_reliability_score ?? forecastAccuracyFallback ?? 0
+            )
 
             // Industry Success
             const industryMap: Record<string, number> = {}
@@ -358,6 +371,7 @@ export async function getAdminCorrelationData() {
                 growth,
                 meetingsPerClose,
                 forecastAccuracy,
+                forecastAccuracySamples: Number(persistedReliability?.probability_reliability_samples ?? closedWon.length ?? 0),
                 topIndustry,
                 physicalCloseRate,
                 avgResponseTimeHours,
@@ -844,7 +858,8 @@ export async function getUserActivitySummary(targetUserId: string) {
             { data: companies },
             { data: industryBadges },
             { data: specialBadges },
-            { data: allQuotesRows }
+            { data: allQuotesRows },
+            { data: persistedReliabilityMetrics, error: persistedReliabilityMetricsError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name').eq('id', targetUserId).maybeSingle() as any,
             dbClient.from('race_results').select('*').eq('user_id', targetUserId).order('period', { ascending: true }) as any,
@@ -867,8 +882,17 @@ export async function getUserActivitySummary(targetUserId: string) {
             dbClient
                 .from('crm_quotes')
                 .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
-                .is('deleted_at', null) as any
+                .is('deleted_at', null) as any,
+            dbClient
+                .from('seller_forecast_reliability_metrics')
+                .select('*')
+                .eq('seller_id', targetUserId)
+                .maybeSingle() as any
         ])
+
+        if (persistedReliabilityMetricsError && persistedReliabilityMetricsError.code !== '42P01') {
+            throw persistedReliabilityMetricsError
+        }
 
         const targetName = normalizeComparableName((targetProfile as any)?.full_name)
         const quoteRows = (allQuotesRows || []) as any[]
@@ -973,12 +997,54 @@ export async function getUserActivitySummary(targetUserId: string) {
             if (res.medal === 'bronze') medals.bronze++
         })
 
-        const closedWon = (clients || []).filter((c: any) => c.etapa === 'Cerrada Ganada')
+        const isWonStage = (stage: unknown) => String(stage || '').trim().toLowerCase().includes('ganad')
+        const closedWon = (clients || []).filter((c: any) => isWonStage(c.etapa))
         const meetingsPerClose = closedWon.length > 0 ? (meetings || []).length / closedWon.length : (meetings || []).length
 
         let totalForecastError = 0
         closedWon.forEach((c: any) => totalForecastError += (100 - (c.probabilidad || 0)))
         const forecastAccuracy = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
+
+        const valueAccuracySamples = closedWon
+            .map((c: any) => {
+                const estimated = Number(c.value_forecast_estimated ?? c.valor_estimado ?? 0)
+                const actual = Number(c.value_forecast_actual ?? c.valor_real_cierre ?? c.valor_estimado ?? 0)
+                if (!Number.isFinite(estimated) || !Number.isFinite(actual)) return null
+                if (estimated <= 0 && actual <= 0) return null
+                const denom = Math.max(actual, 1)
+                const errorPct = Math.abs(actual - estimated) / denom
+                return Math.max(0, 100 - Math.min(100, errorPct * 100))
+            })
+            .filter((v: number | null): v is number => v !== null)
+        const valueForecastAccuracy = valueAccuracySamples.length > 0
+            ? valueAccuracySamples.reduce((acc: number, v: number) => acc + v, 0) / valueAccuracySamples.length
+            : 0
+
+        const closeDateForecastAccuracySamples = closedWon
+            .map((c: any) => {
+                const predictedRaw = c.forecast_close_date
+                const actualRaw = c.closed_at_real ?? c.forecast_scored_at ?? null
+                if (!predictedRaw || !actualRaw) return null
+                const predicted = new Date(`${String(predictedRaw).slice(0, 10)}T00:00:00.000Z`)
+                const actual = new Date(actualRaw)
+                if (Number.isNaN(predicted.getTime()) || Number.isNaN(actual.getTime())) return null
+                const actualDay = new Date(Date.UTC(actual.getUTCFullYear(), actual.getUTCMonth(), actual.getUTCDate()))
+                const diffDays = Math.abs(Math.round((actualDay.getTime() - predicted.getTime()) / (1000 * 60 * 60 * 24)))
+                if (diffDays === 0) return 100
+                if (diffDays <= 3) return 90
+                if (diffDays <= 7) return 75
+                if (diffDays <= 14) return 55
+                if (diffDays <= 30) return 35
+                return 15
+            })
+            .filter((v: number | null): v is number => v !== null)
+        const closeDateForecastAccuracy = closeDateForecastAccuracySamples.length > 0
+            ? closeDateForecastAccuracySamples.reduce((acc: number, v: number) => acc + v, 0) / closeDateForecastAccuracySamples.length
+            : 0
+
+        const persistedReliability = (persistedReliabilityMetricsError?.code === '42P01')
+            ? null
+            : (persistedReliabilityMetrics as any)
 
         const industryMap: Record<string, number> = {}
         closedWon.forEach((c: any) => {
@@ -1055,6 +1121,10 @@ export async function getUserActivitySummary(targetUserId: string) {
                     totalMedals: medals.gold + medals.silver + medals.bronze,
                     meetingsPerClose,
                     forecastAccuracy,
+                    valueForecastAccuracy: Number(persistedReliability?.value_reliability_score ?? valueForecastAccuracy ?? 0),
+                    closeDateForecastAccuracy: Number(persistedReliability?.close_date_reliability_score ?? closeDateForecastAccuracy ?? 0),
+                    valueForecastAccuracySamples: Number(persistedReliability?.value_reliability_samples ?? valueAccuracySamples.length ?? 0),
+                    closeDateForecastAccuracySamples: Number(persistedReliability?.close_date_reliability_samples ?? closeDateForecastAccuracySamples.length ?? 0),
                     topIndustry,
                     physicalCloseRate,
                     avgResponseTimeHours,

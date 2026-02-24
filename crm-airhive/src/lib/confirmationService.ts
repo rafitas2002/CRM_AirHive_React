@@ -56,21 +56,41 @@ export async function confirmMeeting(
         let snapshotCreated = false
 
         let frozenProbability = meeting.frozen_probability_value
+        let forecastValueAmount: number | null = null
+        let forecastImplementationAmount: number | null = null
+        let forecastCloseDate: string | null = null
 
         // Fallback if not frozen (unlikely but possible)
         if (wasHeld && frozenProbability === null) {
             console.log('⚠️ Frozen probability missing, fetching current lead probability as fallback')
             const { data: clientData, error: clientError } = await supabase
                 .from('clientes')
-                .select('probabilidad')
+                .select('probabilidad, valor_estimado, valor_implementacion_estimado, forecast_close_date')
                 .eq('id', meeting.lead_id)
                 .single()
 
             if (!clientError && clientData) {
                 frozenProbability = (clientData as any).probabilidad
+                forecastValueAmount = Number((clientData as any).valor_estimado || 0)
+                forecastImplementationAmount = Number((clientData as any).valor_implementacion_estimado || 0)
+                forecastCloseDate = (clientData as any).forecast_close_date || null
             } else {
                 console.warn('⚠️ Could not fetch client probability for fallback:', clientError)
                 frozenProbability = 50 // Default fallback
+            }
+        }
+
+        if (wasHeld && (forecastValueAmount === null || forecastImplementationAmount === null || forecastCloseDate === null)) {
+            const { data: leadForecastData } = await (supabase
+                .from('clientes') as any)
+                .select('valor_estimado, valor_implementacion_estimado, forecast_close_date')
+                .eq('id', meeting.lead_id)
+                .maybeSingle()
+
+            if (leadForecastData) {
+                if (forecastValueAmount === null) forecastValueAmount = Number((leadForecastData as any).valor_estimado || 0)
+                if (forecastImplementationAmount === null) forecastImplementationAmount = Number((leadForecastData as any).valor_implementacion_estimado || 0)
+                if (forecastCloseDate === null) forecastCloseDate = (leadForecastData as any).forecast_close_date || null
             }
         }
 
@@ -107,6 +127,9 @@ export async function confirmMeeting(
                         meeting_id: meetingId,
                         snapshot_number: snapshotNumber,
                         probability: frozenProbability,
+                        forecast_value_amount: forecastValueAmount,
+                        forecast_implementation_amount: forecastImplementationAmount,
+                        forecast_close_date: forecastCloseDate,
                         snapshot_timestamp: meeting.start_time,
                         source: 'meeting_confirmed_held'
                     })

@@ -435,22 +435,6 @@ export default function TopBar() {
                         />
                     </Link>
 
-                    {/* EQUIPO */}
-                    <Link
-                        href='/usuarios'
-                        className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
-                    >
-                        Equipo
-                        <span
-                            className={[
-                                'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
-                                'transition-all duration-300 ease-out',
-                                pathname === '/usuarios' ? 'w-full opacity-100' : 'w-0 opacity-0',
-                                'group-hover:w-full group-hover:opacity-100'
-                            ].join(' ')}
-                        />
-                    </Link>
-
                     {/* Menú Desplegable CUSTOMER */}
                     <div className='relative group h-full flex items-center'>
                         <button
@@ -610,6 +594,22 @@ export default function TopBar() {
                             </div>
                         </div>
                     )}
+
+                    {/* EQUIPO */}
+                    <Link
+                        href='/usuarios'
+                        className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
+                    >
+                        Equipo
+                        <span
+                            className={[
+                                'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                'transition-all duration-300 ease-out',
+                                pathname === '/usuarios' ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                'group-hover:w-full group-hover:opacity-100'
+                            ].join(' ')}
+                        />
+                    </Link>
                 </nav>
 
                 <div className='flex-1' />

@@ -300,6 +300,9 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         meeting_id: meetingId,
         snapshot_number: snapshotNumber,
         probability: lead.probabilidad || 50,
+        forecast_value_amount: Number((lead as any).valor_estimado || 0),
+        forecast_implementation_amount: Number((lead as any).valor_implementacion_estimado || 0),
+        forecast_close_date: (lead as any).forecast_close_date || null,
         snapshot_timestamp: meeting.start_time,
         source: 'meeting_start_snapshot'
     }
@@ -334,6 +337,9 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         metadata: {
             lead_id: leadId,
             probability: lead.probabilidad,
+            forecast_value_amount: Number((lead as any).valor_estimado || 0),
+            forecast_implementation_amount: Number((lead as any).valor_implementacion_estimado || 0),
+            forecast_close_date: (lead as any).forecast_close_date || null,
             snapshot_number: snapshotNumber
         }
     })

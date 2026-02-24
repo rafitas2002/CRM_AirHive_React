@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { empresa, nombre, contacto, email, telefono, notas, owner_id } = body
+        const { empresa, nombre, contacto, email, telefono, notas, owner_id, forecast_close_date } = body
 
         if (!nombre) {
             return NextResponse.json({ error: 'Bad Request: "nombre" is required' }, { status: 400 })
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
                 telefono,
                 notas,
                 owner_id,
+                forecast_close_date: typeof forecast_close_date === 'string' && forecast_close_date.trim() ? forecast_close_date : null,
                 etapa: 'Nuevo', // Default stage for new leads
                 fecha_registro: new Date().toISOString(),
                 probabilidad: 10 // Starting probability

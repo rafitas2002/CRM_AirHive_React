@@ -8,6 +8,8 @@ import ClientDetailView from './ClientDetailView'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { FileText, MapPin, Globe, Users2, ClipboardList } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
+import BadgeMedallion from '@/components/BadgeMedallion'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 
@@ -144,13 +146,24 @@ export default function AdminCompanyDetailView({
                                                     const badgeVisual = getIndustryBadgeVisualFromMap(industry.id, companyBadgeVisualMap, industry.name)
                                                     const IndustryIcon = badgeVisual.icon
                                                     return (
-                                                        <span
+                                                        <BadgeInfoTooltip
                                                             key={industry.id}
-                                                            className={`w-9 h-9 rounded-lg border flex items-center justify-center shadow-sm ${badgeVisual.containerClass}`}
                                                             title={industry.name}
+                                                            subtitle='Industria de empresa'
+                                                            rows={[
+                                                                { label: 'Empresa', value: company.nombre || 'N/A' },
+                                                                { label: 'Badge', value: 'Activo en ficha de empresa' }
+                                                            ]}
                                                         >
-                                                            <IndustryIcon size={15} className={badgeVisual.iconClass} strokeWidth={2.3} />
-                                                        </span>
+                                                            <BadgeMedallion
+                                                                icon={IndustryIcon}
+                                                                centerClassName={badgeVisual.containerClass}
+                                                                iconClassName={badgeVisual.iconClass}
+                                                                size='xs'
+                                                                iconSize={13}
+                                                                strokeWidth={2.3}
+                                                            />
+                                                        </BadgeInfoTooltip>
                                                     )
                                                 })}
                                             </div>

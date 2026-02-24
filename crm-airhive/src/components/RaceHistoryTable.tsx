@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { Trophy, Medal, RefreshCw, Pencil, Save, X } from 'lucide-react'
-import { getPastRaces, overrideRaceResult, recalculateRacePeriod } from '@/app/actions/race'
+import { getPastRaces, overrideRaceResult, recalculateAllRacePeriods, recalculateRacePeriod } from '@/app/actions/race'
 
 interface RaceResult {
     id: string
@@ -23,6 +23,7 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
     const [localRaces, setLocalRaces] = useState<Record<string, RaceResult[]>>(races)
     const [loadingPeriod, setLoadingPeriod] = useState<string | null>(null)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [recalculatingAll, setRecalculatingAll] = useState(false)
     const [editRank, setEditRank] = useState<number>(4)
     const [editMedal, setEditMedal] = useState<'gold' | 'silver' | 'bronze' | 'none'>('none')
     const [editTotalSales, setEditTotalSales] = useState<number>(0)
@@ -92,6 +93,26 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
 
     return (
         <div className="space-y-8">
+            <div className="flex justify-end">
+                <button
+                    onClick={async () => {
+                        setRecalculatingAll(true)
+                        const res = await recalculateAllRacePeriods()
+                        if (!res.success) {
+                            const err = 'error' in res ? String(res.error) : ((res as any).failures?.[0]?.error || 'Error desconocido')
+                            alert(`No se pudo recalcular el historial completo: ${err}`)
+                        }
+                        await refreshHistory()
+                        setRecalculatingAll(false)
+                    }}
+                    disabled={recalculatingAll}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all hover:opacity-90 cursor-pointer"
+                    style={{ borderColor: 'var(--card-border)', color: 'var(--text-primary)', background: 'var(--card-bg)' }}
+                >
+                    <RefreshCw className={`w-3.5 h-3.5 ${recalculatingAll ? 'animate-spin' : ''}`} />
+                    {recalculatingAll ? 'Recalculando Historial...' : 'Recalcular Todo'}
+                </button>
+            </div>
             {periods.map((period) => {
                 const results = localRaces[period]
                 const title = results[0]?.title || `Carrera de ${period}`

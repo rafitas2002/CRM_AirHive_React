@@ -201,9 +201,44 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
 
 const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string }> = [
     {
+        keywords: ['salud farmaceut', 'farmaceutica', 'farmacéutica', 'pharma'],
+        icon: Pill,
+        colorClass: 'bg-gradient-to-br from-[#ef4444] to-[#991b1b]'
+    },
+    {
+        keywords: ['soluciones renovables', 'renovable', 'energia renovable', 'energias renovables'],
+        icon: Leaf,
+        colorClass: 'bg-gradient-to-br from-[#22c55e] to-[#166534]'
+    },
+    {
+        keywords: ['agricultura', 'ganaderia', 'agro'],
+        icon: Tractor,
+        colorClass: 'bg-gradient-to-br from-[#facc15] to-[#a3a31a]'
+    },
+    {
+        keywords: ['turismo', 'hospitalidad', 'hotel', 'viajes'],
+        icon: Plane,
+        colorClass: 'bg-gradient-to-br from-[#38bdf8] to-[#0e7490]'
+    },
+    {
+        keywords: ['textil', 'moda', 'fashion'],
+        icon: ShoppingBag,
+        colorClass: 'bg-gradient-to-br from-[#ec4899] to-[#9d174d]'
+    },
+    {
+        keywords: ['finanzas', 'servicios financieros', 'banca', 'seguros', 'credito'],
+        icon: Landmark,
+        colorClass: 'bg-gradient-to-br from-[#22c55e] to-[#166534]'
+    },
+    {
+        keywords: ['tecnologia', 'software', 'it', 'digital'],
+        icon: Code2,
+        colorClass: 'bg-gradient-to-br from-[#6366f1] to-[#312e81]'
+    },
+    {
         keywords: ['alimentos', 'bebidas', 'restaur', 'food'],
         icon: Utensils,
-        colorClass: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]'
+        colorClass: 'bg-gradient-to-br from-[#fb923c] to-[#ea580c]'
     }
 ]
 

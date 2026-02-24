@@ -16,9 +16,18 @@ interface SellerRaceData {
 interface SellerRaceProps {
     sellers: SellerRaceData[]
     maxGoal: number
+    title?: string
+    subtitle?: string
+    goalLabel?: string
 }
 
-export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
+export default function SellerRace({
+    sellers,
+    maxGoal,
+    title = 'Carrera de Cierre',
+    subtitle = 'Valor en Negociación vs Meta de Equipo',
+    goalLabel = 'Meta'
+}: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
     const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
     const orderedSellers = rankedSellers.map((entry) => entry.item)
@@ -56,7 +65,7 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                     <div className='flex items-center gap-3'>
                         <h3 className='text-xl font-black tracking-tight flex items-center gap-2' style={{ color: 'var(--text-primary)' }}>
                             <Trophy className='w-5 h-5 text-amber-500' />
-                            Carrera de Cierre
+                            {title}
                         </h3>
                         <button
                             onClick={() => setIsINFOOpen(true)}
@@ -66,10 +75,10 @@ export default function SellerRace({ sellers, maxGoal }: SellerRaceProps) {
                             <Info size={14} />
                         </button>
                     </div>
-                    <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Valor en Negociación vs Meta de Equipo</p>
+                    <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>{subtitle}</p>
                 </div>
                 <div className='text-right'>
-                    <p className='text-xs font-black text-[#1700AC] uppercase tracking-tighter'>Meta: ${maxGoal.toLocaleString()}</p>
+                    <p className='text-xs font-black text-[#1700AC] uppercase tracking-tighter'>{goalLabel}: ${maxGoal.toLocaleString()}</p>
                 </div>
             </div>
 

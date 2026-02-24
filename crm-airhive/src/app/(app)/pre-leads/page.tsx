@@ -323,7 +323,7 @@ export default function PreLeadsPage() {
             email: pl.correos?.[0] || '',
             telefono: pl.telefonos?.[0] || '',
             notas: pl.notas || '',
-            etapa: 'Prospección',
+            etapa: 'Negociación',
             valor_estimado: 0,
             probabilidad: 50,
             calificacion: 3
@@ -520,7 +520,7 @@ export default function PreLeadsPage() {
                         >
                             <div className='flex items-center gap-2'>
                                 {isEditingMode ? (
-                                    <span>Bloquear Edición</span>
+                                    <span>Terminar Edición</span>
                                 ) : (
                                     <>
                                         <span>Editar Vista</span>
