@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
-import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
@@ -566,6 +566,10 @@ export default function GlobalBadgeCelebration() {
     const Icon = industryVisual?.icon || popupSpecialSpec?.icon || specialVisual.icon
     const containerClass = industryVisual?.containerClass || popupSpecialSpec?.centerGradientClass || specialVisual.containerClass
     const iconClass = industryVisual?.iconClass || popupSpecialSpec?.iconClassName || specialVisual.iconClass
+    const industryCoreBorderColorClassName = industryVisual?.coreBorderColorClassName || ''
+    const industryLevelVisual = current.sourceType === 'industry'
+        ? getIndustryBadgeLevelMedallionVisual(current.level, industryVisual || undefined)
+        : null
     const isUnlocked = current.eventType === 'unlocked'
     const specialBadgeOverlay = getSpecialBadgeOverlayNumber(current.badgeType, current.badgeKey, current.badgeLabel)
     const closeCta = isUnlocked ? 'Recibir Reconocimiento' : 'Seguir Sumando'
@@ -639,8 +643,9 @@ export default function GlobalBadgeCelebration() {
                                 overlayText={specialBadgeOverlay}
                                 ringStyle={current.sourceType === 'special'
                                     ? (popupSpecialSpec?.ringStyle || 'match')
-                                    : 'match'}
-                                coreBorderColorClassName={String(popupSpecialSpec?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(current.badgeType) ? '!border-white/90' : '')}
+                                    : (industryLevelVisual?.ringStyle || 'match')}
+                                coreBorderColorClassName={industryLevelVisual?.coreBorderColorClassName || industryCoreBorderColorClassName || String(popupSpecialSpec?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(current.badgeType) ? '!border-white/90' : '')}
+                                coreBorderStyle={industryLevelVisual?.coreBorderStyle}
                                 size='xl'
                                 iconSize={42}
                                 strokeWidth={2.5}

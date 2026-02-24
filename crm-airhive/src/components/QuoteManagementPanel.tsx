@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react'
 import { Check, MessageSquareQuote, Pencil, Plus, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
-import { bootstrapLegacyQuotesIfEmpty, createQuote, createQuoteRequest, deleteQuote, getActiveQuotes, getAirHiveUsersForQuotes, getAllQuotesForAdmin, getMyQuoteAuthorPreset, getPendingQuoteRequestsForAdmin, getQuoteAuthorPresetByUserId, getQuoteReactionUsers, reviewQuoteRequest, toggleQuoteActive, updateQuote } from '@/app/actions/quotes'
+import { createQuote, createQuoteRequest, deleteQuote, getActiveQuotes, getAllQuotesForAdmin, getMyQuoteAuthorPreset, getPendingQuoteRequestsForAdmin, getQuoteAuthorPresetByUserId, getQuoteManagementPanelBootstrapData, getQuoteReactionUsers, reviewQuoteRequest, toggleQuoteActive, updateQuote } from '@/app/actions/quotes'
 
 export type QuoteRow = {
     id: number
@@ -92,7 +92,8 @@ const FALLBACK_QUOTES: QuoteRow[] = [
 ]
 
 export default function QuoteManagementPanel({ initialQuotes, initialLoadError = '' }: Props) {
-    const { profile } = useAuth()
+    const auth = useAuth()
+    const { profile } = auth
     const isAdmin = profile?.role === 'admin'
     const [quotes, setQuotes] = useState<QuoteRow[]>(initialQuotes)
     const [isPending, startTransition] = useTransition()
@@ -202,68 +203,49 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
 
     useEffect(() => {
         let cancelled = false
-        const loadAuthors = async () => {
-            const result = await getAirHiveUsersForQuotes()
-            if (!cancelled && result.success) {
-                const rawUsers = Array.isArray(result.data) ? result.data : []
-                const users = rawUsers.map((raw) => {
-                    const u = raw as Record<string, unknown>
-                    return {
-                        id: String(u.id || ''),
-                        full_name: String(u.full_name || ''),
-                        author_context: String(u.author_context || '')
-                    }
-                })
-                setAirHiveAuthors(users)
-            }
-        }
-        loadAuthors()
-        return () => { cancelled = true }
-    }, [])
-
-    useEffect(() => {
-        let cancelled = false
-        const hydrateQuotes = async () => {
+        const bootstrapPanel = async () => {
+            if (auth.loading) return
             if (hasServerSeededQuotes) return
-            if (quotes.length === 0 && !cancelled) {
+
+            if (!isAdmin && quotes.length === 0 && !cancelled) {
                 setQuotes(FALLBACK_QUOTES)
             }
 
-            const currentResult = isAdmin ? await getAllQuotesForAdmin() : await getActiveQuotes()
-            if (!cancelled && currentResult.success && (currentResult.data || []).length > 0) {
-                setQuotes(currentResult.data as QuoteRow[])
-                return
+            const result = await getQuoteManagementPanelBootstrapData()
+            if (cancelled || !result.success || !result.data) return
+
+            const rawAuthors = Array.isArray(result.data.authors) ? result.data.authors : []
+            const authors = rawAuthors.map((raw) => {
+                const u = raw as Record<string, unknown>
+                return {
+                    id: String(u.id || ''),
+                    full_name: String(u.full_name || ''),
+                    author_context: String(u.author_context || '')
+                }
+            })
+            setAirHiveAuthors(authors)
+
+            const loadedQuotes = Array.isArray(result.data.quotes) ? (result.data.quotes as QuoteRow[]) : []
+            if (loadedQuotes.length > 0) {
+                setQuotes(loadedQuotes)
+            } else if (!isAdmin && !cancelled) {
+                setQuotes(FALLBACK_QUOTES)
             }
 
-            if (!isAdmin) return
-
-            await bootstrapLegacyQuotesIfEmpty()
-            const refreshed = await getAllQuotesForAdmin()
-            if (!cancelled && refreshed.success && (refreshed.data || []).length > 0) {
-                setQuotes(refreshed.data as QuoteRow[])
+            if (result.data.isAdmin) {
+                setPendingRequests((Array.isArray(result.data.pendingRequests) ? result.data.pendingRequests : []) as QuoteRequestRow[])
+            } else {
+                setPendingRequests([])
             }
+
+            const quoteError = String(result.data.errors?.quotes || '')
+            if (quoteError) setError((prev) => prev || quoteError)
         }
 
-        hydrateQuotes()
+        void bootstrapPanel()
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAdmin, hasServerSeededQuotes])
-
-    useEffect(() => {
-        if (!isAdmin) {
-            setPendingRequests([])
-            return
-        }
-        let cancelled = false
-        const loadPending = async () => {
-            const result = await getPendingQuoteRequestsForAdmin()
-            if (!cancelled && result.success) {
-                setPendingRequests((result.data || []) as QuoteRequestRow[])
-            }
-        }
-        loadPending()
-        return () => { cancelled = true }
-    }, [isAdmin])
+    }, [auth.loading, isAdmin, hasServerSeededQuotes])
 
     useEffect(() => {
         if (typeof window === 'undefined') return

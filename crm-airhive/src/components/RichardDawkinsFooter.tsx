@@ -64,9 +64,18 @@ function isReactionsModuleUnavailableError(message: unknown) {
     )
 }
 
+function pickRandomQuoteId(quotes: QuoteRow[], excludeId?: number | null) {
+    if (!quotes.length) return null
+    if (quotes.length === 1) return quotes[0]?.id ?? null
+    const filtered = quotes.filter((q) => q.id !== excludeId)
+    const pool = filtered.length > 0 ? filtered : quotes
+    const next = pool[Math.floor(Math.random() * pool.length)]
+    return next?.id ?? quotes[0]?.id ?? null
+}
+
 export default function RichardDawkinsFooter() {
     const [quotes, setQuotes] = useState<QuoteRow[]>(fallbackQuotes)
-    const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(fallbackQuotes[0]?.id ?? null)
+    const [selectedQuoteId, setSelectedQuoteId] = useState<number | null>(() => pickRandomQuoteId(fallbackQuotes))
     const [reactionError, setReactionError] = useState('')
     const [reactionsUnavailable, setReactionsUnavailable] = useState(false)
     const [isPendingReaction, startReactionTransition] = useTransition()
@@ -78,17 +87,22 @@ export default function RichardDawkinsFooter() {
             if (!cancelled && result.success && (result.data || []).length > 0) {
                 const nextQuotes = result.data as QuoteRow[]
                 setQuotes(nextQuotes)
-                setSelectedQuoteId((prev) => {
-                    if (prev && nextQuotes.some((q) => q.id === prev)) return prev
-                    const next = nextQuotes[Math.floor(Math.random() * nextQuotes.length)]
-                    return next?.id ?? nextQuotes[0]?.id ?? null
-                })
+                setSelectedQuoteId(() => pickRandomQuoteId(nextQuotes))
             }
         }
 
         loadQuotes()
         return () => { cancelled = true }
     }, [])
+
+    useEffect(() => {
+        if (!quotes.length) return
+        const delayMs = 26000 + Math.floor(Math.random() * 18000) // 26-44s, distinto por ventana
+        const timer = window.setInterval(() => {
+            setSelectedQuoteId((prev) => pickRandomQuoteId(quotes, prev))
+        }, delayMs)
+        return () => window.clearInterval(timer)
+    }, [quotes])
 
     const randomQuoteData = useMemo(() => {
         if (!quotes.length) return fallbackQuotes[0]

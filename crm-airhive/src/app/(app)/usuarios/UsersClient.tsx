@@ -11,7 +11,7 @@ import { getRoleMeta, getRoleSilhouetteColor } from '@/lib/roleUtils'
 import { useTheme } from '@/lib/ThemeContext'
 import { useAuth } from '@/lib/auth'
 import BadgeMedallion from '@/components/BadgeMedallion'
-import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 
@@ -639,6 +639,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
 
         if (badge.source === 'industry') {
             const visual = getIndustryBadgeVisualFromMap(String(badge.key || ''), industryVisualMap, String(badge.label || 'Industria'))
+            const levelVisual = getIndustryBadgeLevelMedallionVisual(Number(badge.level || 1), visual)
             return (
                 <BadgeInfoTooltip
                     key={slotKey}
@@ -660,7 +661,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             icon={visual.icon}
                             centerClassName={visual.containerClass}
                             iconClassName={visual.iconClass || 'text-white'}
-                            ringStyle='match'
+                            coreBorderColorClassName={levelVisual.coreBorderColorClassName}
+                            coreBorderStyle={levelVisual.coreBorderStyle}
+                            ringStyle={levelVisual.ringStyle}
                             cornerTagText={badgeTag.text}
                             cornerTagClassName={badgeTag.className}
                             cornerTagVariant='dot'

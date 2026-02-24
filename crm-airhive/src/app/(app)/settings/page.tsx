@@ -7,8 +7,25 @@ export default function SettingsPage() {
     const router = useRouter()
 
     useEffect(() => {
-        // Redirect to personalizacion by default
-        router.replace('/settings/personalizacion')
+        const fallback = '/settings/personalizacion'
+        let target = fallback
+
+        if (typeof window !== 'undefined') {
+            try {
+                const saved = localStorage.getItem('airhive_settings_last_subroute') || ''
+                const isValidSettingsSubroute = (
+                    saved.startsWith('/settings/')
+                    && saved !== '/settings'
+                )
+                if (isValidSettingsSubroute) {
+                    target = saved
+                }
+            } catch {
+                // noop
+            }
+        }
+
+        router.replace(target)
     }, [router])
 
     return null

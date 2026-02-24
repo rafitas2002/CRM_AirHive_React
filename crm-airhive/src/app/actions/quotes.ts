@@ -650,7 +650,6 @@ export async function toggleQuoteReaction(quoteId: number, reactionType: QuoteRe
 
         const reactionStats = await buildReactionStatsByQuote(dbClient, [quoteId], current.userId)
         revalidatePath('/settings/personalizacion')
-        revalidatePath('/settings')
         return {
             success: true,
             data: reactionStats[quoteId] || { likes_count: 0, dislikes_count: 0, current_user_reaction: null }
@@ -1006,6 +1005,43 @@ export async function getPendingQuoteRequestsForAdmin() {
         return { success: true, data: hydrated }
     } catch (error: any) {
         return { success: false, error: error.message, data: [] as any[] }
+    }
+}
+
+export async function getQuoteManagementPanelBootstrapData() {
+    try {
+        const current = await getCurrentUserAndRole()
+
+        const [authorsRes, quotesResInitial, pendingRes] = await Promise.all([
+            getAirHiveUsersForQuotes(),
+            current.role === 'admin' ? getAllQuotesForAdmin() : getActiveQuotes(),
+            current.role === 'admin'
+                ? getPendingQuoteRequestsForAdmin()
+                : Promise.resolve({ success: true, data: [] as any[] })
+        ])
+
+        let quotesRes = quotesResInitial
+        if (current.role === 'admin' && (Array.isArray(quotesRes.data) ? quotesRes.data.length : 0) === 0) {
+            await bootstrapLegacyQuotesIfEmpty()
+            quotesRes = await getAllQuotesForAdmin()
+        }
+
+        return {
+            success: true,
+            data: {
+                isAdmin: current.role === 'admin',
+                authors: Array.isArray(authorsRes.data) ? authorsRes.data : [],
+                quotes: Array.isArray(quotesRes.data) ? quotesRes.data : [],
+                pendingRequests: Array.isArray(pendingRes.data) ? pendingRes.data : [],
+                errors: {
+                    authors: authorsRes.success ? '' : String(authorsRes.error || ''),
+                    quotes: quotesRes.success ? '' : String(quotesRes.error || ''),
+                    pendingRequests: pendingRes.success ? '' : String((pendingRes as any).error || '')
+                }
+            }
+        }
+    } catch (error: any) {
+        return { success: false, error: error.message, data: null }
     }
 }
 

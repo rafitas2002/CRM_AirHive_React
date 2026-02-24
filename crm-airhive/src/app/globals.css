@@ -348,6 +348,17 @@ body {
   z-index: 10090;
 }
 
+.ah-badge-tooltip--portal-host {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  display: block !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+  z-index: 10089 !important;
+}
+
 .ah-badge-tooltip-bubble--portal::after {
   left: var(--ah-tooltip-arrow-left, 50%) !important;
   right: auto !important;
