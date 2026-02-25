@@ -13,6 +13,7 @@ import { grantAdminBadgeToSeller } from '@/app/actions/badges'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
+import { formatLocalDateOnly } from '@/lib/dateUtils'
 
 const BADGE_GRANT_ALLOWED_ADMINS = [
     'Jesus Gracia',
@@ -50,6 +51,8 @@ const INDUSTRY_BADGE_EVOLUTION_DEFAULT_LEVELS = [
     { level: 8, min_closures: 50 } // Nivel final usa aro distintivo.
 ] as const
 
+const CLOSING_STREAK_EIGHT_TIER_THRESHOLDS = [2, 5, 8, 12, 18, 24, 36, 48] as const
+
 type ProfileViewCachePayload = {
     savedAt: number
     profile: any
@@ -64,6 +67,9 @@ type ProfileViewCachePayload = {
         totalPreLeads: number
         totalLeads: number
         completedMeetings: number
+        closingStreakCurrentMonths?: number
+        closingStreakBestMonths?: number
+        closingStreakIsActive?: boolean
     }
     isBadgeLeader: boolean
     leaderBadgeCount: number
@@ -101,6 +107,74 @@ function getIndustryEvolutionLevels(
     return Array.from(byLevel.values())
         .filter((row) => row.level >= 1 && row.level <= 8)
         .sort((a, b) => a.level - b.level)
+}
+
+function getThresholdLevelMetaFromList(progress: number, thresholds: readonly number[]) {
+    const safeProgress = Math.max(0, Number(progress || 0))
+    let level = 0
+    let next: number | null = thresholds[0] ?? null
+    thresholds.forEach((threshold, index) => {
+        if (safeProgress >= threshold) {
+            level = index + 1
+            next = thresholds[index + 1] ?? null
+        }
+    })
+    return { level, next }
+}
+
+function getClosingStreakMetricsFromClosureRows(rows: Array<{ closed_at?: string | null }> | null | undefined) {
+    const monthIndexes = Array.from(new Set(
+        (Array.isArray(rows) ? rows : [])
+            .map((row) => {
+                const raw = row?.closed_at
+                if (!raw) return null
+                const d = new Date(raw)
+                if (Number.isNaN(d.getTime())) return null
+                return d.getUTCFullYear() * 12 + d.getUTCMonth()
+            })
+            .filter((value): value is number => Number.isFinite(value))
+    )).sort((a, b) => a - b)
+
+    if (monthIndexes.length === 0) {
+        return {
+            currentMonths: 0,
+            bestMonths: 0,
+            isActive: false,
+            latestClosedMonthIndex: null as number | null
+        }
+    }
+
+    let bestMonths = 1
+    let currentRun = 1
+    let latestRun = 1
+
+    for (let i = 1; i < monthIndexes.length; i += 1) {
+        if (monthIndexes[i] === monthIndexes[i - 1] + 1) {
+            currentRun += 1
+        } else {
+            bestMonths = Math.max(bestMonths, currentRun)
+            currentRun = 1
+        }
+    }
+    bestMonths = Math.max(bestMonths, currentRun)
+    latestRun = currentRun
+
+    const latestClosedMonthIndex = monthIndexes[monthIndexes.length - 1]
+    const now = new Date()
+    const currentMonthIndex = now.getUTCFullYear() * 12 + now.getUTCMonth()
+    const previousMonthIndex = currentMonthIndex - 1
+
+    const currentMonths = (latestClosedMonthIndex === currentMonthIndex || latestClosedMonthIndex === previousMonthIndex)
+        ? latestRun
+        : 0
+    const isActive = currentMonths >= 2
+
+    return {
+        currentMonths,
+        bestMonths,
+        isActive,
+        latestClosedMonthIndex
+    }
 }
 
 function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
@@ -150,7 +224,10 @@ export default function ProfileView({ userId }: ProfileViewProps) {
         seniorityYears: 0,
         totalPreLeads: 0,
         totalLeads: 0,
-        completedMeetings: 0
+        completedMeetings: 0,
+        closingStreakCurrentMonths: 0,
+        closingStreakBestMonths: 0,
+        closingStreakIsActive: false
     })
     const [isBadgeLeader, setIsBadgeLeader] = useState(false)
     const [leaderBadgeCount, setLeaderBadgeCount] = useState(0)
@@ -197,13 +274,16 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             setBadges(Array.isArray(cached.badges) ? cached.badges : [])
             setBadgeLevels(Array.isArray(cached.badgeLevels) ? cached.badgeLevels : [])
             setSpecialBadges(Array.isArray(cached.specialBadges) ? cached.specialBadges : [])
-            setSellerStats(cached.sellerStats || {
-                totalClosures: 0,
-                reliabilityScore: 0,
-                seniorityYears: 0,
-                totalPreLeads: 0,
-                totalLeads: 0,
-                completedMeetings: 0
+            setSellerStats({
+                totalClosures: Math.max(0, Number(cached.sellerStats?.totalClosures || 0)),
+                reliabilityScore: Math.max(0, Number(cached.sellerStats?.reliabilityScore || 0)),
+                seniorityYears: Math.max(0, Number(cached.sellerStats?.seniorityYears || 0)),
+                totalPreLeads: Math.max(0, Number(cached.sellerStats?.totalPreLeads || 0)),
+                totalLeads: Math.max(0, Number(cached.sellerStats?.totalLeads || 0)),
+                completedMeetings: Math.max(0, Number(cached.sellerStats?.completedMeetings || 0)),
+                closingStreakCurrentMonths: Math.max(0, Number(cached.sellerStats?.closingStreakCurrentMonths || 0)),
+                closingStreakBestMonths: Math.max(0, Number(cached.sellerStats?.closingStreakBestMonths || 0)),
+                closingStreakIsActive: Boolean(cached.sellerStats?.closingStreakIsActive)
             })
             setIsBadgeLeader(Boolean(cached.isBadgeLeader))
             setLeaderBadgeCount(Number(cached.leaderBadgeCount || 0))
@@ -238,7 +318,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     { data: userBadges },
                     { data: levels },
                     { data: userSpecialBadges },
-                    { count: closuresCount },
+                    { data: closureRows },
                     { count: totalPreLeadsCount },
                     { count: totalLeadsCount },
                     { count: completedMeetingsCount },
@@ -267,7 +347,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         .order('progress_count', { ascending: false }),
                     (supabase
                         .from('seller_badge_closures') as any)
-                        .select('lead_id', { count: 'exact', head: true })
+                        .select('closed_at')
                         .eq('seller_id', userId),
                     (supabase
                         .from('pre_leads') as any)
@@ -299,6 +379,9 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 const cats = directCatalogs || {}
                 const industries = (industriesRaw || []) as any[]
                 const profileRow = (p || {}) as any
+                const closureRowsList = Array.isArray(closureRows) ? (closureRows as Array<{ closed_at?: string | null }>) : []
+                const totalClosuresCount = closureRowsList.length
+                const closingStreakMetrics = getClosingStreakMetricsFromClosureRows(closureRowsList)
 
                 setProfile(profileRow)
                 setDetails(d || {})
@@ -397,8 +480,8 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             const totalLeads = Math.max(0, Number(totalLeadsCount || 0))
             const completedMeetings = Math.max(0, Number(completedMeetingsCount || 0))
             const preLeadLevelMeta = getThresholdLevelMeta(totalPreLeads, [1, 25, 100, 300])
-            const leadLevelMeta = getThresholdLevelMeta(totalLeads, [1, 5, 15, 50])
-            const meetingLevelMeta = getThresholdLevelMeta(completedMeetings, [1, 10, 25, 50])
+            const leadLevelMeta = getThresholdLevelMeta(totalLeads, [1, 10, 25, 50, 75, 100, 200, 500])
+            const meetingLevelMeta = getThresholdLevelMeta(completedMeetings, [1, 10, 25, 50, 75, 100, 200, 500])
             const derivedSpecial: any[] = []
             if (contributionLevelMeta.level > 0) {
                 derivedSpecial.push({
@@ -470,7 +553,22 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     mergedByKey.set(key, row)
                 }
             }
-            setSpecialBadges(Array.from(mergedByKey.values()))
+            const mergedSpecialBadges = Array.from(mergedByKey.values()).map((row: any) => {
+                if (String(row?.badge_type || '') !== 'closing_streak') return row
+                const normalizedBestStreak = Math.max(0, Number(row?.progress_count || closingStreakMetrics.bestMonths || 0))
+                const normalizedLevelMeta = getThresholdLevelMetaFromList(normalizedBestStreak, CLOSING_STREAK_EIGHT_TIER_THRESHOLDS)
+                return {
+                    ...row,
+                    badge_label: `Racha Imparable · ${closingStreakMetrics.isActive ? 'Activa' : 'Inactiva'}`,
+                    progress_count: normalizedBestStreak,
+                    level: normalizedLevelMeta.level,
+                    next_level_threshold: normalizedLevelMeta.next,
+                    current_streak_months: closingStreakMetrics.currentMonths,
+                    best_streak_months: normalizedBestStreak,
+                    streak_is_active: closingStreakMetrics.isActive
+                }
+            })
+            setSpecialBadges(mergedSpecialBadges)
             setBadgeLevels(levels || [])
             setAllIndustries((industries || []) as { id: string, name: string, is_active?: boolean }[])
             setCatalogs(cats)
@@ -493,12 +591,15 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             const rawAcc = Math.max(0, 1 - avgLogloss)
             const relScore = relN > 0 ? Math.max(0, Math.min(100, (rawAcc * (relN / (relN + 4))) * 100)) : 0
             setSellerStats({
-                    totalClosures: Math.max(0, Number(closuresCount || 0)),
+                    totalClosures: Math.max(0, totalClosuresCount),
                     reliabilityScore: Math.round(relScore),
                     seniorityYears: years,
                     totalPreLeads,
                     totalLeads,
-                    completedMeetings
+                    completedMeetings,
+                    closingStreakCurrentMonths: closingStreakMetrics.currentMonths,
+                    closingStreakBestMonths: closingStreakMetrics.bestMonths,
+                    closingStreakIsActive: closingStreakMetrics.isActive
                 })
                 // Lightweight leader badge state from precomputed badge (no global table scans).
                 const badgeLeader = (userSpecialBadges || []).find((badge: any) => badge?.badge_type === 'badge_leader')
@@ -510,14 +611,17 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     details: d || {},
                     badges: userBadges || [],
                     badgeLevels: levels || [],
-                    specialBadges: Array.from(mergedByKey.values()),
+                    specialBadges: mergedSpecialBadges,
                     sellerStats: {
-                        totalClosures: Math.max(0, Number(closuresCount || 0)),
+                        totalClosures: Math.max(0, totalClosuresCount),
                         reliabilityScore: Math.round(relScore),
                         seniorityYears: years,
                         totalPreLeads,
                         totalLeads,
-                        completedMeetings
+                        completedMeetings,
+                        closingStreakCurrentMonths: closingStreakMetrics.currentMonths,
+                        closingStreakBestMonths: closingStreakMetrics.bestMonths,
+                        closingStreakIsActive: closingStreakMetrics.isActive
                     },
                     isBadgeLeader: Boolean(badgeLeader && Number(badgeLeader?.level || 0) > 0),
                     leaderBadgeCount: Number(badgeLeader?.progress_count || 0),
@@ -630,6 +734,19 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 { label: 'Antigüedad', value: formatTenureExactLabel(tenureBadgeMetrics) },
                 { label: 'Progreso', value: `${tenureBadgeMetrics.progressPctToNextLevel.toFixed(2)}%` },
                 { label: 'Siguiente', value: `${tenureBadgeMetrics.nextLevelYears} años` }
+            ]
+        }
+        if (type === 'closing_streak') {
+            const currentStreak = Math.max(0, Number(badge?.current_streak_months ?? badge?.progress_count ?? 0))
+            const bestStreak = Math.max(0, Number(badge?.best_streak_months ?? badge?.progress_count ?? 0))
+            const streakActive = typeof badge?.streak_is_active === 'boolean'
+                ? badge.streak_is_active
+                : String(badge?.badge_label || '').toLowerCase().includes('activa')
+            return [
+                { label: 'Estado', value: streakActive ? 'Activa' : 'Inactiva' },
+                { label: 'Racha actual', value: `${currentStreak} mes${currentStreak === 1 ? '' : 'es'}` },
+                { label: 'Mejor racha', value: `${bestStreak} mes${bestStreak === 1 ? '' : 'es'}` },
+                { label: 'Siguiente', value: achievedMax ? 'Nivel máximo' : `${nextThreshold || 0} meses` }
             ]
         }
 
@@ -807,10 +924,15 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                             {summarySpecialBadges.map((badge: any, index: number) => (
                                 (() => {
                                     const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
-                                    const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
+                                    const typeMeta = getSpecialBadgeTypeMeta(
+                                        String(badge?.badge_type || 'special'),
+                                        safeLabel,
+                                        String(badge?.badge_key || '')
+                                    )
                                     const Icon = typeMeta.icon
                                     const badgeOverlayNumber = getSpecialBadgeOverlayNumber(badge)
                                     const isSeniorityBadge = String(badge?.badge_type || '') === 'seniority_years'
+                                    const isStreakBadge = String(badge?.badge_type || '') === 'closing_streak'
                                     const progressCount = Number(badge?.progress_count || 0)
                                     const level = Number(badge?.level || 0)
                                     const nextThreshold = badge?.next_level_threshold
@@ -830,8 +952,14 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                                         icon={Icon}
                                                         centerClassName={typeMeta.containerClass}
                                                         iconClassName={typeMeta.iconClass}
-                                                        overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
-                                                        footerBubbleText={isSeniorityBadge ? String(tenureBadgeMetrics?.years ?? badgeOverlayNumber ?? '') : null}
+                                                        overlayText={(isSeniorityBadge || isStreakBadge) ? null : badgeOverlayNumber}
+                                                        footerBubbleText={
+                                                            isSeniorityBadge
+                                                                ? String(tenureBadgeMetrics?.years ?? badgeOverlayNumber ?? '')
+                                                                : isStreakBadge
+                                                                    ? String(badgeOverlayNumber ?? '')
+                                                                    : null
+                                                        }
                                                         ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
                                                         coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
                                                         size='sm'
@@ -895,7 +1023,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         <div className='space-y-5'>
                             <div className='grid grid-cols-1 gap-4'>
                                 <InfoRow label="Género" value={resolve('genders', details.gender_id)} icon={<User size={14} className="text-blue-500" />} />
-                                <InfoRow label="Fecha Nacimiento" value={details.birth_date ? new Date(details.birth_date + 'T12:00:00').toLocaleDateString() : '-'} icon={<Calendar size={14} className="text-pink-500" />} />
+                                <InfoRow label="Fecha Nacimiento" value={formatLocalDateOnly(details.birth_date)} icon={<Calendar size={14} className="text-pink-500" />} />
                                 <InfoRow label="Ciudad" value={resolve('cities', details.city_id)} icon={<MapPin size={14} className="text-orange-500" />} />
                                 <InfoRow label="País" value={resolve('countries', details.country_id)} icon={<Globe size={14} className="text-green-500" />} />
                             </div>
@@ -987,6 +1115,9 @@ function AllBadgesModal({
         totalPreLeads: number
         totalLeads: number
         completedMeetings: number
+        closingStreakCurrentMonths?: number
+        closingStreakBestMonths?: number
+        closingStreakIsActive?: boolean
     }
     employeeStartDate?: string | null
 }) {
@@ -1112,6 +1243,19 @@ function AllBadgesModal({
                 { label: 'Antigüedad', value: formatTenureExactLabel(allBadgesTenureMetrics) },
                 { label: 'Progreso', value: `${allBadgesTenureMetrics.progressPctToNextLevel.toFixed(2)}%` },
                 { label: 'Siguiente', value: `${allBadgesTenureMetrics.nextLevelYears} años` }
+            ]
+        }
+        if (type === 'closing_streak') {
+            const currentStreak = Math.max(0, Number(badge?.current_streak_months ?? badge?.progress_count ?? 0))
+            const bestStreak = Math.max(0, Number(badge?.best_streak_months ?? badge?.progress_count ?? 0))
+            const streakActive = typeof badge?.streak_is_active === 'boolean'
+                ? badge.streak_is_active
+                : String(badge?.badge_label || '').toLowerCase().includes('activa')
+            return [
+                { label: 'Estado', value: streakActive ? 'Activa' : 'Inactiva' },
+                { label: 'Racha actual', value: `${currentStreak} mes${currentStreak === 1 ? '' : 'es'}` },
+                { label: 'Mejor racha', value: `${bestStreak} mes${bestStreak === 1 ? '' : 'es'}` },
+                { label: 'Siguiente', value: achievedMax ? 'Nivel máximo' : `${nextThreshold ?? '-'} meses` }
             ]
         }
         return baseRows
@@ -1287,7 +1431,11 @@ function AllBadgesModal({
                                     <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                             {group.items.map((badge, index) => {
                                 const safeLabel = typeof badge.badge_label === 'string' ? badge.badge_label : 'Badge Especial'
-                                const typeMeta = getSpecialBadgeTypeMeta(badge.badge_type, safeLabel)
+                                const typeMeta = getSpecialBadgeTypeMeta(
+                                    badge.badge_type,
+                                    safeLabel,
+                                    String(badge?.badge_key || '')
+                                )
                                 const Icon = typeMeta.icon
                                 const badgeOverlayNumber = getSpecialBadgeOverlayNumber(badge)
                                 const progressCount = badge.progress_count || 0
@@ -1298,7 +1446,10 @@ function AllBadgesModal({
                                 const isClosureBadge = badge.badge_type === 'closure_milestone'
                                 const isSeniorityBadge = badge.badge_type === 'seniority_years'
                                 const isStreakBadge = badge.badge_type === 'closing_streak'
-                                const isStreakPaused = isStreakBadge && String(safeLabel).toLowerCase().includes('pausada')
+                                const isStreakPaused = isStreakBadge && (() => {
+                                    const streakLabel = String(safeLabel).toLowerCase()
+                                    return streakLabel.includes('pausada') || streakLabel.includes('inactiva')
+                                })()
                                 const isDealValueBadge = badge.badge_type === 'deal_value_tier'
                                 const isRacePointsLeaderBadge = badge.badge_type === 'race_points_leader'
                                 const isQuoteContributionBadge = badge.badge_type === 'quote_contribution'
@@ -1324,8 +1475,14 @@ function AllBadgesModal({
                                                         icon={Icon}
                                                         centerClassName={typeMeta.containerClass}
                                                         iconClassName={`${typeMeta.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
-                                                        overlayText={isSeniorityBadge ? null : badgeOverlayNumber}
-                                                        footerBubbleText={isSeniorityBadge ? String(allBadgesTenureMetrics?.years ?? badgeOverlayNumber ?? '') : null}
+                                                        overlayText={(isSeniorityBadge || isStreakBadge) ? null : badgeOverlayNumber}
+                                                        footerBubbleText={
+                                                            isSeniorityBadge
+                                                                ? String(allBadgesTenureMetrics?.years ?? badgeOverlayNumber ?? '')
+                                                                : isStreakBadge
+                                                                    ? String(badgeOverlayNumber ?? '')
+                                                                    : null
+                                                        }
                                                         ringStyle={getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
                                                         coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(badge.badge_type) ? '!border-white/90' : '')}
                                                         size='sm'
@@ -1340,7 +1497,7 @@ function AllBadgesModal({
                                                         </p>
                                                         {isStreakBadge && (
                                                             <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md border uppercase tracking-widest ${isStreakPaused ? 'text-zinc-300 border-zinc-500/50 bg-zinc-700/20' : 'text-orange-200 border-orange-400/60 bg-orange-500/20'}`}>
-                                                                {isStreakPaused ? 'Pausada' : 'Activa'}
+                                                                {isStreakPaused ? 'Inactiva' : 'Activa'}
                                                             </span>
                                                         )}
                                                     </div>
@@ -1358,7 +1515,7 @@ function AllBadgesModal({
                                                             : isSeniorityBadge
                                                                 ? `${progressCount} años`
                                                             : isStreakBadge
-                                                                    ? `${progressCount} meses`
+                                                                    ? `${Math.max(0, Number(badge?.current_streak_months ?? progressCount))} meses`
                                                                     : isDealValueBadge
                                                                         ? `${progressCount} cierres`
                                                                         : isRacePointsLeaderBadge
@@ -1595,16 +1752,25 @@ function IndustryBadgeEvolutionCard({
 
 function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
     const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
-    const typeMeta = getSpecialBadgeTypeMeta(String(badge?.badge_type || 'special'), safeLabel)
+    const typeMeta = getSpecialBadgeTypeMeta(
+        String(badge?.badge_type || 'special'),
+        safeLabel,
+        String(badge?.badge_key || '')
+    )
     const milestones = getSpecialBadgeEvolutionMilestones(badge)
     if (milestones.length <= 1) return null
     const unlocked = Number(badge?.level || 0) > 0
     const isSeniorityBadge = String(badge?.badge_type || '') === 'seniority_years'
     const isClosureBadge = String(badge?.badge_type || '') === 'closure_milestone'
+    const isClosingStreakBadge = String(badge?.badge_type || '') === 'closing_streak'
+    const isLeadRegisteredBadge = String(badge?.badge_type || '') === 'lead_registered'
+    const isMeetingCompletedBadge = String(badge?.badge_type || '') === 'meeting_completed'
     const isCompanySizeBadge = String(badge?.badge_type || '') === 'company_size'
+    const isAllCompanySizesBadge = String(badge?.badge_type || '') === 'all_company_sizes'
     const isDealValueBadge = String(badge?.badge_type || '') === 'deal_value_tier'
+    const isMultiIndustryBadge = String(badge?.badge_type || '') === 'multi_industry'
     const closureHeaderVisual = isClosureBadge ? getClosureMilestoneBadgeLevelMedallionVisual(Number(badge?.level || 1)) : null
-    const generic8TierHeaderVisual = (isCompanySizeBadge || isDealValueBadge)
+    const generic8TierHeaderVisual = (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge)
         ? getGenericEightTierBadgeLevelMedallionVisual(
             Number(badge?.level || 1),
             getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
@@ -1620,8 +1786,8 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                         icon={typeMeta.icon}
                         centerClassName={typeMeta.containerClass}
                         iconClassName={typeMeta.iconClass}
-                        overlayText={isSeniorityBadge ? null : getSpecialBadgeOverlayNumber(badge)}
-                        footerBubbleText={isSeniorityBadge ? String(getSpecialBadgeOverlayNumber(badge) ?? '') : null}
+                        overlayText={(isSeniorityBadge || isClosingStreakBadge) ? null : getSpecialBadgeOverlayNumber(badge)}
+                        footerBubbleText={(isSeniorityBadge || isClosingStreakBadge) ? String(getSpecialBadgeOverlayNumber(badge) ?? '') : null}
                         ringStyle={closureHeaderVisual?.ringStyle || generic8TierHeaderVisual?.ringStyle || getSpecialBadgeRingStyleByType(String(badge?.badge_type || ''), String(badge?.badge_label || ''), String(badge?.badge_key || ''))}
                         coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
                         coreBorderStyle={closureHeaderVisual?.coreBorderStyle || generic8TierHeaderVisual?.coreBorderStyle}
@@ -1653,7 +1819,7 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                 getNodeMedallionVisual={
                     isClosureBadge
                         ? (node) => getClosureMilestoneBadgeLevelMedallionVisual(node.level)
-                        : (isCompanySizeBadge || isDealValueBadge)
+                        : (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge)
                             ? (node) => getGenericEightTierBadgeLevelMedallionVisual(
                                 node.level,
                                 getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
@@ -1980,7 +2146,6 @@ function getEvolutionVisualTier(index: number, achieved: boolean, next: boolean,
 
 function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, threshold: number, caption: string }> {
     const type = String(badge?.badge_type || '')
-    const currentLevel = Number(badge?.level || 0)
 
     if (type === 'quote_contribution') {
         return [
@@ -2009,6 +2174,30 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
             { level: 8, threshold: 50, caption: '50 cierres' }
         ]
     }
+    if (type === 'multi_industry') {
+        return [
+            { level: 1, threshold: 3, caption: '3 industrias' },
+            { level: 2, threshold: 5, caption: '5 industrias' },
+            { level: 3, threshold: 7, caption: '7 industrias' },
+            { level: 4, threshold: 10, caption: '10 industrias' },
+            { level: 5, threshold: 12, caption: '12 industrias' },
+            { level: 6, threshold: 15, caption: '15 industrias' },
+            { level: 7, threshold: 18, caption: '18 industrias' },
+            { level: 8, threshold: 20, caption: '20 industrias' }
+        ]
+    }
+    if (type === 'all_company_sizes') {
+        return [
+            { level: 1, threshold: 1, caption: '1 cierre de cada tamaño' },
+            { level: 2, threshold: 2, caption: '2 cierres de cada tamaño' },
+            { level: 3, threshold: 3, caption: '3 cierres de cada tamaño' },
+            { level: 4, threshold: 5, caption: '5 cierres de cada tamaño' },
+            { level: 5, threshold: 7, caption: '7 cierres de cada tamaño' },
+            { level: 6, threshold: 10, caption: '10 cierres de cada tamaño' },
+            { level: 7, threshold: 12, caption: '12 cierres de cada tamaño' },
+            { level: 8, threshold: 15, caption: '15 cierres de cada tamaño' }
+        ]
+    }
     if (type === 'company_size' || type === 'deal_value_tier') {
         return [
             { level: 1, threshold: 1, caption: '1 cierre' },
@@ -2032,9 +2221,13 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
     if (type === 'lead_registered') {
         return [
             { level: 1, threshold: 1, caption: '1 lead' },
-            { level: 2, threshold: 5, caption: '5 leads' },
-            { level: 3, threshold: 15, caption: '15 leads' },
-            { level: 4, threshold: 50, caption: '50 leads' }
+            { level: 2, threshold: 10, caption: '10 leads' },
+            { level: 3, threshold: 25, caption: '25 leads' },
+            { level: 4, threshold: 50, caption: '50 leads' },
+            { level: 5, threshold: 75, caption: '75 leads' },
+            { level: 6, threshold: 100, caption: '100 leads' },
+            { level: 7, threshold: 200, caption: '200 leads' },
+            { level: 8, threshold: 500, caption: '500 leads' }
         ]
     }
     if (type === 'meeting_completed') {
@@ -2042,19 +2235,27 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
             { level: 1, threshold: 1, caption: '1 junta' },
             { level: 2, threshold: 10, caption: '10 juntas' },
             { level: 3, threshold: 25, caption: '25 juntas' },
-            { level: 4, threshold: 50, caption: '50 juntas' }
+            { level: 4, threshold: 50, caption: '50 juntas' },
+            { level: 5, threshold: 75, caption: '75 juntas' },
+            { level: 6, threshold: 100, caption: '100 juntas' },
+            { level: 7, threshold: 200, caption: '200 juntas' },
+            { level: 8, threshold: 500, caption: '500 juntas' }
+        ]
+    }
+    if (type === 'closing_streak') {
+        return [
+            { level: 1, threshold: 2, caption: '2 meses seguidos' },
+            { level: 2, threshold: 5, caption: '5 meses seguidos' },
+            { level: 3, threshold: 8, caption: '8 meses seguidos' },
+            { level: 4, threshold: 12, caption: '12 meses seguidos' },
+            { level: 5, threshold: 18, caption: '18 meses seguidos' },
+            { level: 6, threshold: 24, caption: '24 meses seguidos' },
+            { level: 7, threshold: 36, caption: '36 meses seguidos' },
+            { level: 8, threshold: 48, caption: '48 meses seguidos' }
         ]
     }
     if (type === 'seniority_years') {
-        const anchor = Math.max(1, currentLevel || 1)
-        return [0, 1, 2, 3].map((offset) => {
-            const year = anchor + offset
-            return {
-                level: year,
-                threshold: year,
-                caption: `${year} año${year === 1 ? '' : 's'}`
-            }
-        })
+        return []
     }
     return []
 }
@@ -2073,14 +2274,15 @@ function InfoRow({ label, value, highlight, icon }: { label: string, value: stri
     )
 }
 
-function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
+function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null, badgeKey?: string | null) {
     const safeLabel = typeof label === 'string' ? label : ''
     const labelLower = safeLabel.toLowerCase()
+    const safeBadgeKey = typeof badgeKey === 'string' ? badgeKey : ''
     const isMexicoCity = ['monterrey', 'guadalajara', 'cdmx', 'ciudad de mexico', 'puebla', 'queretaro', 'querétaro', 'tijuana', 'merida', 'mérida']
         .some((city) => labelLower.includes(city))
     const metallicContainer = 'border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(0,0,0,0.15),0_6px_14px_rgba(15,23,42,0.22)]'
     const solidIconClass = 'text-white'
-    const shared = getSpecialBadgeVisualSpec(badgeType, safeLabel, null)
+    const shared = getSpecialBadgeVisualSpec(badgeType, safeLabel, safeBadgeKey || null)
     if (shared) {
         return {
             title: shared.title,
@@ -2126,7 +2328,7 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
         return {
             title: 'Todos los Tamaños',
             icon: Ruler,
-            containerClass: `${metallicContainer} bg-gradient-to-br from-[#f59e0b] to-[#b45309]`,
+            containerClass: `${metallicContainer} bg-gradient-to-br from-[#fde047] via-[#f59e0b] to-[#f97316]`,
             iconClass: solidIconClass
         }
     }
@@ -2240,7 +2442,7 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
     }
 
     if (badgeType === 'closing_streak') {
-        const isPaused = labelLower.includes('pausada')
+        const isPaused = labelLower.includes('pausada') || labelLower.includes('inactiva')
         return {
             title: 'Racha Imparable',
             icon: Flame,
@@ -2318,15 +2520,15 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null) {
 }
 
 function getSpecialDefaultThreshold(badgeType?: string) {
-    if (badgeType === 'multi_industry') return 5
-    if (badgeType === 'all_company_sizes') return 5
+    if (badgeType === 'multi_industry') return 3
+    if (badgeType === 'all_company_sizes') return 1
     if (badgeType === 'seniority_years') return 1
     if (badgeType === 'closure_milestone') return 1
     if (badgeType === 'reliability_score') return 80
     if (badgeType === 'prelead_registered') return 1
     if (badgeType === 'lead_registered') return 1
     if (badgeType === 'meeting_completed') return 1
-    if (badgeType === 'closing_streak') return 5
+    if (badgeType === 'closing_streak') return 2
     if (badgeType === 'deal_value_tier') return 1
     if (badgeType === 'race_first_place') return 1
     if (badgeType === 'race_second_place') return 1
@@ -2354,6 +2556,9 @@ function buildSpecialBadgeCatalog(
             totalPreLeads?: number
             totalLeads?: number
             completedMeetings?: number
+            closingStreakCurrentMonths?: number
+            closingStreakBestMonths?: number
+            closingStreakIsActive?: boolean
         }
     }
 ) {
@@ -2363,6 +2568,10 @@ function buildSpecialBadgeCatalog(
     const seniorityYears = Math.max(0, Number(options?.sellerStats?.seniorityYears || 0))
     const totalClosures = Math.max(0, Number(options?.sellerStats?.totalClosures || 0))
     const reliabilityScore = Math.max(0, Math.min(100, Number(options?.sellerStats?.reliabilityScore || 0)))
+    const closingStreakCurrentMonths = Math.max(0, Number(options?.sellerStats?.closingStreakCurrentMonths || 0))
+    const closingStreakBestMonths = Math.max(0, Number(options?.sellerStats?.closingStreakBestMonths || 0))
+    const closingStreakIsActive = Boolean(options?.sellerStats?.closingStreakIsActive)
+    const closingStreakLevelMeta = getThresholdLevelMetaFromList(closingStreakBestMonths, CLOSING_STREAK_EIGHT_TIER_THRESHOLDS)
     const closureLevel = totalClosures >= 50 ? 8
         : totalClosures >= 40 ? 7
         : totalClosures >= 30 ? 6
@@ -2382,20 +2591,56 @@ function buildSpecialBadgeCatalog(
         : closureLevel === 7 ? 50
         : null
     const reliabilityThreshold = 80
-    const unlockedCompanySizeCount = Array.from(
-        new Set(
-            (specialBadges || [])
-                .filter((badge: any) => String(badge?.badge_type || '') === 'company_size' && Number(badge?.level || 0) > 0)
-                .map((badge: any) => String(badge?.badge_key || ''))
-                .filter(Boolean)
-        )
-    ).length
-    const allCompanySizesProgress = unlockedCompanySizeCount
-    const allCompanySizesLevel = allCompanySizesProgress >= 5 ? 1 : 0
-    const allCompanySizesNextThreshold = allCompanySizesLevel > 0 ? null : 5
+    const companySizeProgressByKey = new Map<string, number>()
+    ;(specialBadges || [])
+        .filter((badge: any) => String(badge?.badge_type || '') === 'company_size')
+        .forEach((badge: any) => {
+            const key = String(badge?.badge_key || '')
+            if (!key) return
+            companySizeProgressByKey.set(key, Math.max(0, Number(badge?.progress_count || 0)))
+        })
+    const requiredCompanySizeKeys = ['size_1', 'size_2', 'size_3', 'size_4', 'size_5']
+    const hasAllCompanySizes = requiredCompanySizeKeys.every((k) => companySizeProgressByKey.has(k))
+    const allCompanySizesProgress = hasAllCompanySizes
+        ? Math.min(...requiredCompanySizeKeys.map((k) => companySizeProgressByKey.get(k) || 0))
+        : 0
+    const allCompanySizesLevel = allCompanySizesProgress >= 15 ? 8
+        : allCompanySizesProgress >= 12 ? 7
+        : allCompanySizesProgress >= 10 ? 6
+        : allCompanySizesProgress >= 7 ? 5
+        : allCompanySizesProgress >= 5 ? 4
+        : allCompanySizesProgress >= 3 ? 3
+        : allCompanySizesProgress >= 2 ? 2
+        : allCompanySizesProgress >= 1 ? 1
+        : 0
+    const allCompanySizesNextThreshold = allCompanySizesLevel === 0 ? 1
+        : allCompanySizesLevel === 1 ? 2
+        : allCompanySizesLevel === 2 ? 3
+        : allCompanySizesLevel === 3 ? 5
+        : allCompanySizesLevel === 4 ? 7
+        : allCompanySizesLevel === 5 ? 10
+        : allCompanySizesLevel === 6 ? 12
+        : allCompanySizesLevel === 7 ? 15
+        : null
     const multiIndustryProgress = industryBadgeCount
-    const multiIndustryLevel = multiIndustryProgress >= 20 ? 4 : multiIndustryProgress >= 15 ? 3 : multiIndustryProgress >= 10 ? 2 : multiIndustryProgress >= 5 ? 1 : 0
-    const multiIndustryNextThreshold = multiIndustryLevel === 0 ? 5 : multiIndustryLevel === 1 ? 10 : multiIndustryLevel === 2 ? 15 : multiIndustryLevel === 3 ? 20 : null
+    const multiIndustryLevel = multiIndustryProgress >= 20 ? 8
+        : multiIndustryProgress >= 18 ? 7
+        : multiIndustryProgress >= 15 ? 6
+        : multiIndustryProgress >= 12 ? 5
+        : multiIndustryProgress >= 10 ? 4
+        : multiIndustryProgress >= 7 ? 3
+        : multiIndustryProgress >= 5 ? 2
+        : multiIndustryProgress >= 3 ? 1
+        : 0
+    const multiIndustryNextThreshold = multiIndustryLevel === 0 ? 3
+        : multiIndustryLevel === 1 ? 5
+        : multiIndustryLevel === 2 ? 7
+        : multiIndustryLevel === 3 ? 10
+        : multiIndustryLevel === 4 ? 12
+        : multiIndustryLevel === 5 ? 15
+        : multiIndustryLevel === 6 ? 18
+        : multiIndustryLevel === 7 ? 20
+        : null
     const map = new Map<string, any>()
     const baseCatalog = [
         {
@@ -2474,10 +2719,13 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-closing-streak',
             badge_type: 'closing_streak',
             badge_key: 'closing_streak',
-            badge_label: 'Racha Imparable · Pausada',
-            progress_count: 0,
-            level: 0,
-            next_level_threshold: 5
+            badge_label: `Racha Imparable · ${closingStreakIsActive ? 'Activa' : 'Inactiva'}`,
+            progress_count: closingStreakBestMonths,
+            level: closingStreakLevelMeta.level,
+            next_level_threshold: closingStreakLevelMeta.next,
+            current_streak_months: closingStreakCurrentMonths,
+            best_streak_months: closingStreakBestMonths,
+            streak_is_active: closingStreakIsActive
         },
         {
             id: 'virtual-value-1k-2k',
@@ -2755,7 +3003,23 @@ function buildSpecialBadgeCatalog(
         }
     }
 
-    return Array.from(map.values()).sort((a, b) => {
+    const normalizedRows = Array.from(map.values()).map((row) => {
+        if (String(row?.badge_type || '') !== 'closing_streak') return row
+        const normalizedBestStreak = Math.max(Math.max(0, Number(row?.progress_count || 0)), closingStreakBestMonths)
+        const normalizedLevelMeta = getThresholdLevelMetaFromList(normalizedBestStreak, CLOSING_STREAK_EIGHT_TIER_THRESHOLDS)
+        return {
+            ...row,
+            badge_label: `Racha Imparable · ${closingStreakIsActive ? 'Activa' : 'Inactiva'}`,
+            progress_count: normalizedBestStreak,
+            level: normalizedLevelMeta.level,
+            next_level_threshold: normalizedLevelMeta.next,
+            current_streak_months: closingStreakCurrentMonths,
+            best_streak_months: normalizedBestStreak,
+            streak_is_active: closingStreakIsActive
+        }
+    })
+
+    return normalizedRows.sort((a, b) => {
         const ao = getSpecialBadgeOrder(a?.badge_type)
         const bo = getSpecialBadgeOrder(b?.badge_type)
         if (ao !== bo) return ao - bo
@@ -2848,8 +3112,8 @@ function getSpecialBadgeOverlayNumber(badge: any): string | null {
         return String(years)
     }
     if (badge?.badge_type === 'closing_streak') {
-        const streak = Number(badge?.progress_count || 0)
-        if (streak <= 0) return null
+        const streak = Math.max(0, Number(badge?.current_streak_months ?? badge?.progress_count ?? 0))
+        if (streak <= 0 && Number(badge?.level || 0) <= 0) return null
         return String(streak)
     }
     if (badge?.badge_type === 'deal_value_tier') {
@@ -2906,7 +3170,19 @@ function getGenericEightTierBadgeLevelMedallionVisual(
 }
 
 function getSpecialBadgeAccentColor(badgeType: string, badgeKey?: string | null, badgeLabel?: string | null): string {
-    if (badgeType === 'company_size') return '#3b82f6'
+    if (badgeType === 'company_size') {
+        const key = String(badgeKey || '')
+        if (key === 'size_1') return '#bfdbfe'
+        if (key === 'size_2') return '#2563eb'
+        if (key === 'size_3') return '#1d4ed8'
+        if (key === 'size_4') return '#1e3a8a'
+        if (key === 'size_5') return '#172554'
+        return '#3b82f6'
+    }
+    if (badgeType === 'all_company_sizes') return '#f59e0b'
+    if (badgeType === 'multi_industry') return '#d946ef'
+    if (badgeType === 'meeting_completed') return '#7c3aed'
+    if (badgeType === 'closing_streak') return '#f97316'
     if (badgeType === 'deal_value_tier') {
         const key = String(badgeKey || '')
         if (key === 'value_10k_100k' || key === 'value_10k_plus') return '#7c3aed'

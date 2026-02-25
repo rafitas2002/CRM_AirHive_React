@@ -19,6 +19,7 @@ interface BadgeMedallionProps {
     className?: string
     iconSize?: number
     strokeWidth?: number
+    normalizeIconMetrics?: boolean
     ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
     coreBorderColorClassName?: string
     coreBorderStyle?: CSSProperties
@@ -41,6 +42,8 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
     iconLiftWithNumber: string
     footerBubbleTextClass: string
     footerBubbleBottom: string
+    coreBorderWidthIsolatedClass: string
+    coreBorderWidthDefaultClass: string
 }> = {
     xs: {
         wrap: 'w-10 h-10',
@@ -54,7 +57,9 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
         overlayBottom: 'bottom-[1px]',
         iconLiftWithNumber: '-translate-y-[2px]'
         ,footerBubbleTextClass: 'text-[7px] px-1 min-w-[14px] h-[12px]',
-        footerBubbleBottom: '-bottom-[2px]'
+        footerBubbleBottom: '-bottom-[2px]',
+        coreBorderWidthIsolatedClass: 'border-[2px]',
+        coreBorderWidthDefaultClass: 'border'
     },
     sm: {
         wrap: 'w-12 h-12',
@@ -68,7 +73,9 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
         overlayBottom: 'bottom-[1px]',
         iconLiftWithNumber: '-translate-y-[4px]'
         ,footerBubbleTextClass: 'text-[7px] px-1 min-w-[14px] h-[12px]',
-        footerBubbleBottom: '-bottom-[2px]'
+        footerBubbleBottom: '-bottom-[2px]',
+        coreBorderWidthIsolatedClass: 'border-[2px]',
+        coreBorderWidthDefaultClass: 'border'
     },
     md: {
         wrap: 'w-14 h-14',
@@ -82,7 +89,9 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
         overlayBottom: 'bottom-[2px]',
         iconLiftWithNumber: '-translate-y-[4px]'
         ,footerBubbleTextClass: 'text-[8px] px-1.5 min-w-[16px] h-[14px]',
-        footerBubbleBottom: '-bottom-[2px]'
+        footerBubbleBottom: '-bottom-[2px]',
+        coreBorderWidthIsolatedClass: 'border-[3px]',
+        coreBorderWidthDefaultClass: 'border'
     },
     lg: {
         wrap: 'w-16 h-16',
@@ -96,7 +105,9 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
         overlayBottom: 'bottom-[2px]',
         iconLiftWithNumber: '-translate-y-[4px]'
         ,footerBubbleTextClass: 'text-[8px] px-1.5 min-w-[16px] h-[14px]',
-        footerBubbleBottom: '-bottom-[2px]'
+        footerBubbleBottom: '-bottom-[2px]',
+        coreBorderWidthIsolatedClass: 'border-[3px]',
+        coreBorderWidthDefaultClass: 'border'
     },
     xl: {
         wrap: 'w-28 h-28 md:w-32 md:h-32',
@@ -110,7 +121,9 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
         overlayBottom: 'bottom-[6px]',
         iconLiftWithNumber: '-translate-y-[6px]'
         ,footerBubbleTextClass: 'text-[11px] px-2 min-w-[24px] h-[18px]',
-        footerBubbleBottom: '-bottom-[2px]'
+        footerBubbleBottom: '-bottom-[2px]',
+        coreBorderWidthIsolatedClass: 'border-[4px] md:border-[5px]',
+        coreBorderWidthDefaultClass: 'border md:border-[2px]'
     }
 }
 
@@ -124,6 +137,7 @@ export default function BadgeMedallion({
     className = '',
     iconSize,
     strokeWidth = 2.5,
+    normalizeIconMetrics = true,
     ringStyle = 'match',
     coreBorderColorClassName = '',
     coreBorderStyle,
@@ -133,9 +147,18 @@ export default function BadgeMedallion({
     cornerTagPlacement = 'top-right'
 }: BadgeMedallionProps) {
     const s = SIZE_MAP[size]
+    const normalizedStrokeWidthBySize: Record<BadgeMedallionSize, number> = {
+        xs: 2.25,
+        sm: 2.35,
+        md: 2.5,
+        lg: 2.55,
+        xl: 2.6
+    }
+    const effectiveIconSize = normalizeIconMetrics ? s.defaultIconSize : (iconSize || s.defaultIconSize)
+    const effectiveStrokeWidth = normalizeIconMetrics ? normalizedStrokeWidthBySize[size] : strokeWidth
     const showIsolatedRing = BADGE_ISOLATED_RING_EXPERIMENT
     const activeCoreInset = showIsolatedRing ? s.coreInsetIsolated : s.coreInset
-    const coreBorderClass = showIsolatedRing ? 'border-[3px]' : 'border'
+    const coreBorderClass = showIsolatedRing ? s.coreBorderWidthIsolatedClass : s.coreBorderWidthDefaultClass
     const defaultCoreBorderToneClass = 'border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
     const ringToneMap = {
         gold: {
@@ -219,10 +242,9 @@ export default function BadgeMedallion({
                 style={coreBorderStyle}
             >
                 <span className='absolute inset-0 opacity-30 bg-[linear-gradient(140deg,rgba(255,255,255,0.65),transparent_42%,transparent_60%,rgba(255,255,255,0.22))]' />
-                <span className='absolute top-[12%] left-[14%] w-[72%] h-[1px] bg-white/85 rounded-full pointer-events-none' />
                 <Icon
-                    size={iconSize || s.defaultIconSize}
-                    strokeWidth={strokeWidth}
+                    size={effectiveIconSize}
+                    strokeWidth={effectiveStrokeWidth}
                     className={`relative z-[1] ${hasBottomNumber ? s.iconLiftWithNumber : ''} ${iconClassName}`.trim()}
                 />
                 {hasBottomNumber ? (

@@ -42,14 +42,14 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
 
     if (type === 'admin_granted') {
         const adminGradient = labelLower.includes('jesus gracia')
-            ? 'bg-gradient-to-br from-[#a855f7] to-[#6d28d9]'
+            ? 'bg-[radial-gradient(circle,rgba(243,232,255,0.68)_0_1px,rgba(243,232,255,0)_1.3px),radial-gradient(circle,rgba(255,255,255,0.30)_0_0.85px,rgba(255,255,255,0)_1.15px),linear-gradient(145deg,#ddd6fe_0%,#c084fc_22%,#a855f7_50%,#7e22ce_76%,#5b21b6_100%)] bg-[length:8px_8px,8px_8px,100%_100%] bg-[position:0_0,4px_4px,0_0]'
             : labelLower.includes('rafael sedas')
-                ? 'bg-gradient-to-br from-[#ef4444] to-[#991b1b]'
+                ? 'bg-[radial-gradient(circle,rgba(254,242,242,0.68)_0_1px,rgba(254,242,242,0)_1.3px),radial-gradient(circle,rgba(255,255,255,0.32)_0_0.85px,rgba(255,255,255,0)_1.15px),linear-gradient(145deg,#fca5a5_0%,#ef4444_34%,#dc2626_62%,#991b1b_100%)] bg-[length:8px_8px,8px_8px,100%_100%] bg-[position:0_0,4px_4px,0_0]'
                 : labelLower.includes('alberto castro')
-                    ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]'
+                    ? 'bg-[radial-gradient(circle,rgba(219,234,254,0.72)_0_1px,rgba(219,234,254,0)_1.3px),radial-gradient(circle,rgba(255,255,255,0.30)_0_0.85px,rgba(255,255,255,0)_1.15px),linear-gradient(145deg,#93c5fd_0%,#3b82f6_38%,#1d4ed8_66%,#1e3a8a_100%)] bg-[length:8px_8px,8px_8px,100%_100%] bg-[position:0_0,4px_4px,0_0]'
                     : labelLower.includes('eduardo castro')
-                        ? 'bg-gradient-to-br from-[#22c55e] to-[#166534]'
-                        : 'bg-gradient-to-br from-[#22c55e] to-[#15803d]'
+                        ? 'bg-[radial-gradient(circle,rgba(220,252,231,0.70)_0_1px,rgba(220,252,231,0)_1.3px),radial-gradient(circle,rgba(255,255,255,0.28)_0_0.85px,rgba(255,255,255,0)_1.15px),linear-gradient(145deg,#86efac_0%,#22c55e_30%,#16a34a_58%,#166534_100%)] bg-[length:8px_8px,8px_8px,100%_100%] bg-[position:0_0,4px_4px,0_0]'
+                        : 'bg-[radial-gradient(circle,rgba(220,252,231,0.70)_0_1px,rgba(220,252,231,0)_1.3px),radial-gradient(circle,rgba(255,255,255,0.28)_0_0.85px,rgba(255,255,255,0)_1.15px),linear-gradient(145deg,#86efac_0%,#22c55e_30%,#16a34a_58%,#15803d_100%)] bg-[length:8px_8px,8px_8px,100%_100%] bg-[position:0_0,4px_4px,0_0]'
         const ringStyle: SpecialBadgeRingStyle = 'royal'
         return {
             title: 'Distinción Admin',
@@ -62,13 +62,36 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
         }
     }
     if (type === 'company_size') {
-        return { title: 'Tamaño Empresa', category: 'Comercial y Cobertura', icon: Building2, centerGradientClass: 'bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]', iconClassName: 'text-white', ringStyle: 'match' }
+        const centerGradientClass = key === 'size_1'
+            ? 'bg-gradient-to-br from-[#bfdbfe] to-[#60a5fa]'
+            : key === 'size_2'
+                ? 'bg-gradient-to-br from-[#93c5fd] to-[#2563eb]'
+                : key === 'size_3'
+                    ? 'bg-gradient-to-br from-[#60a5fa] to-[#1d4ed8]'
+                    : key === 'size_4'
+                        ? 'bg-gradient-to-br from-[#2563eb] to-[#1e3a8a]'
+                        : 'bg-gradient-to-br from-[#1d4ed8] to-[#172554]'
+        return { title: 'Tamaño Empresa', category: 'Comercial y Cobertura', icon: Building2, centerGradientClass, iconClassName: 'text-white', ringStyle: 'match' }
     }
     if (type === 'all_company_sizes') {
-        return { title: 'Todos los Tamaños', category: 'Comercial y Cobertura', icon: Ruler, centerGradientClass: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]', iconClassName: 'text-white', ringStyle: 'match' }
+        return {
+            title: 'Todos los Tamaños',
+            category: 'Comercial y Cobertura',
+            icon: Ruler,
+            centerGradientClass: 'bg-[repeating-linear-gradient(135deg,rgba(194,65,12,0.72)_0_6px,rgba(194,65,12,0.20)_6px_12px),linear-gradient(135deg,#fef9c3_0%,#fef08a_18%,#fde047_42%,#facc15_62%,#f59e0b_80%,#ea580c_100%)]',
+            iconClassName: 'text-white',
+            ringStyle: 'match'
+        }
     }
     if (type === 'multi_industry') {
-        return { title: 'Multi-Industria', category: 'Comercial y Cobertura', icon: Layers, centerGradientClass: 'bg-gradient-to-br from-[#d946ef] to-[#a21caf]', iconClassName: 'text-white', ringStyle: 'match' }
+        return {
+            title: 'Multi-Industria',
+            category: 'Comercial y Cobertura',
+            icon: Layers,
+            centerGradientClass: 'bg-[repeating-linear-gradient(135deg,rgba(186,230,253,0.62)_0_6px,rgba(186,230,253,0.16)_6px_12px),linear-gradient(135deg,#e879f9_0%,#d946ef_22%,#c026d3_55%,#a21caf_100%)]',
+            iconClassName: 'text-white',
+            ringStyle: 'match'
+        }
     }
     if (type === 'deal_value_tier') {
         const centerGradientClass = key === 'value_10k_100k' || key === 'value_10k_plus' || labelLower.includes('10,000-100,000') || labelLower.includes('10k+')
@@ -121,7 +144,7 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
         return { title: 'Juntas', category: 'Actividad Comercial', icon: Calendar, centerGradientClass: 'bg-gradient-to-br from-[#7c3aed] to-[#4c1d95]', iconClassName: 'text-white', ringStyle: 'match' }
     }
     if (type === 'closing_streak') {
-        const centerGradientClass = labelLower.includes('pausada')
+        const centerGradientClass = (labelLower.includes('pausada') || labelLower.includes('inactiva'))
             ? 'bg-gradient-to-br from-[#6b7280] to-[#374151]'
             : 'bg-gradient-to-br from-[#f97316] to-[#b45309]'
         return { title: 'Racha Imparable', category: 'Consistencia', icon: Flame, centerGradientClass, iconClassName: 'text-white', ringStyle: 'match' }
@@ -136,7 +159,14 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
         return { title: 'Carrera · 3er Lugar', category: 'Competencia', icon: Trophy, centerGradientClass: 'bg-gradient-to-br from-[#b45309] to-[#7c2d12]', iconClassName: 'text-white', ringStyle: 'match' }
     }
     if (type === 'race_all_positions') {
-        return { title: 'Carrera · Podio Completo', category: 'Competencia', icon: Layers, centerGradientClass: 'bg-gradient-to-br from-[#0ea5e9] to-[#0369a1]', iconClassName: 'text-white', ringStyle: 'match' }
+        return {
+            title: 'Carrera · Podio Completo',
+            category: 'Competencia',
+            icon: Layers,
+            centerGradientClass: 'bg-[repeating-linear-gradient(135deg,rgba(241,245,249,0.52)_0_6px,rgba(241,245,249,0.12)_6px_12px),linear-gradient(135deg,#38bdf8_0%,#0ea5e9_42%,#0369a1_100%)]',
+            iconClassName: 'text-white',
+            ringStyle: 'match'
+        }
     }
     if (type === 'race_total_trophies') {
         return { title: 'Carrera · 10 Trofeos', category: 'Competencia', icon: Trophy, centerGradientClass: 'bg-gradient-to-br from-[#10b981] to-[#047857]', iconClassName: 'text-white', ringStyle: 'match' }

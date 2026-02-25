@@ -46,6 +46,7 @@ import { useTheme } from '@/lib/ThemeContext'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
+import { formatLocalDateOnly } from '@/lib/dateUtils'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { getIndustryBadgeLevelMedallionVisual } from '@/lib/industryBadgeVisuals'
@@ -558,7 +559,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                             <InfoItem icon={Users} label="Área" value={getAreaNames()} />
                                             <InfoItem icon={Shield} label="Seniority" value={resolve('seniority_levels', details.seniority_id)} />
                                             <InfoItem icon={Activity} label="Modalidad" value={resolve('work_modalities', details.work_modality_id)} />
-                                            <InfoItem icon={Calendar} label="Fecha de Ingreso" value={details.start_date ? new Date(details.start_date).toLocaleDateString('es-MX', { dateStyle: 'long' }) : '-'} />
+                                            <InfoItem icon={Calendar} label="Fecha de Ingreso" value={formatLocalDateOnly(details.start_date, 'es-MX', { dateStyle: 'long' })} />
                                             <InfoItem icon={Clock} label="Antigüedad" value={calculateTenure(details.start_date)} highlight />
                                         </div>
                                     </section>
@@ -571,7 +572,7 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                                         {canSeeAll ? (
                                             <div className="grid grid-cols-1 gap-4">
                                                 <InfoItem icon={Mail} label="Email Corporativo" value={user.username || user.email || '-'} />
-                                                <InfoItem icon={Cake} label="Nacimiento" value={details.birth_date ? new Date(details.birth_date).toLocaleDateString('es-MX', { dateStyle: 'long' }) : '-'} />
+                                                <InfoItem icon={Cake} label="Nacimiento" value={formatLocalDateOnly(details.birth_date, 'es-MX', { dateStyle: 'long' })} />
                                                 <InfoItem icon={Activity} label="Edad" value={calculateAge(details.birth_date)} />
                                                 <InfoItem icon={GraduationCap} label="Nivel Educativo" value={resolve('education_levels', details.education_level_id)} />
                                                 <InfoItem icon={Briefcase} label="Carrera" value={resolve('careers', details.career_id)} />

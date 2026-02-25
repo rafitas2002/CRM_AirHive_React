@@ -35,6 +35,11 @@ export type ClientData = {
     next_meeting_id?: string | null
     email?: string
     telefono?: string
+    loss_reason_id?: string | null
+    loss_subreason_id?: string | null
+    loss_notes?: string | null
+    loss_recorded_at?: string | null
+    loss_recorded_by?: string | null
 }
 
 function formatCurrencyInputNumber(value: number | null | undefined): string {
@@ -87,6 +92,24 @@ type ProjectCatalogItem = {
     is_active?: boolean
 }
 
+type LossReasonCatalogItem = {
+    id: string
+    code: string
+    label: string
+    description?: string | null
+    sort_order?: number | null
+    is_active?: boolean
+}
+
+type LossSubreasonCatalogItem = {
+    id: string
+    reason_id: string
+    code: string
+    label: string
+    sort_order?: number | null
+    is_active?: boolean
+}
+
 export default function ClientModal({
     isOpen,
     onClose,
@@ -118,7 +141,12 @@ export default function ClientModal({
         proyectos_implementados_reales_ids: [],
         proyectos_implementados_reales_valores: {},
         email: '',
-        telefono: ''
+        telefono: '',
+        loss_reason_id: null,
+        loss_subreason_id: null,
+        loss_notes: '',
+        loss_recorded_at: null,
+        loss_recorded_by: null
     })
     const [phoneError, setPhoneError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -137,6 +165,10 @@ export default function ClientModal({
     const [pendingCloseImplementationRealValue, setPendingCloseImplementationRealValue] = useState<number | null>(null)
     const [projectsCatalog, setProjectsCatalog] = useState<ProjectCatalogItem[]>([])
     const [projectsLoading, setProjectsLoading] = useState(false)
+    const [lossReasonsCatalog, setLossReasonsCatalog] = useState<LossReasonCatalogItem[]>([])
+    const [lossSubreasonsCatalog, setLossSubreasonsCatalog] = useState<LossSubreasonCatalogItem[]>([])
+    const [lossCatalogLoading, setLossCatalogLoading] = useState(false)
+    const [lossCatalogError, setLossCatalogError] = useState<string | null>(null)
     const areRealCloseValueFieldsLockedInForm = true
     const lastLoadedProjectsCompanyRef = useRef<string | null>(null)
 
@@ -158,7 +190,12 @@ export default function ClientModal({
                         ? (initialData as any).proyectos_implementados_reales_valores
                         : {},
                     email: initialData.email || '',
-                    telefono: initialData.telefono || ''
+                    telefono: initialData.telefono || '',
+                    loss_reason_id: (initialData as any).loss_reason_id ?? null,
+                    loss_subreason_id: (initialData as any).loss_subreason_id ?? null,
+                    loss_notes: (initialData as any).loss_notes ?? '',
+                    loss_recorded_at: (initialData as any).loss_recorded_at ?? null,
+                    loss_recorded_by: (initialData as any).loss_recorded_by ?? null
                 })
                 if (mode === 'edit') {
                     checkProbabilityEditability()
@@ -185,7 +222,12 @@ export default function ClientModal({
                     proyectos_implementados_reales_ids: [],
                     proyectos_implementados_reales_valores: {},
                     email: '',
-                    telefono: ''
+                    telefono: '',
+                    loss_reason_id: null,
+                    loss_subreason_id: null,
+                    loss_notes: '',
+                    loss_recorded_at: null,
+                    loss_recorded_by: null
                 })
                 setPhoneError('')
                 setIsProbEditable(true)
@@ -224,6 +266,73 @@ export default function ClientModal({
         }
 
         void loadProjectsCatalog()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, supabase])
+
+    useEffect(() => {
+        if (!isOpen) return
+        let cancelled = false
+
+        const loadLossCatalogs = async () => {
+            setLossCatalogLoading(true)
+            setLossCatalogError(null)
+
+            const [reasonsRes, subreasonsRes] = await Promise.all([
+                (supabase.from('lead_loss_reasons') as any)
+                    .select('id, code, label, description, sort_order, is_active')
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true })
+                    .order('label', { ascending: true }),
+                (supabase.from('lead_loss_subreasons') as any)
+                    .select('id, reason_id, code, label, sort_order, is_active')
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true })
+                    .order('label', { ascending: true })
+            ])
+
+            const reasonsError = (reasonsRes as any).error
+            const subreasonsError = (subreasonsRes as any).error
+            if (reasonsError || subreasonsError) {
+                const rawMessage = String(reasonsError?.message || subreasonsError?.message || 'No se pudo cargar catálogo de razones de pérdida.')
+                const normalized = rawMessage.toLowerCase()
+                const isMissingCatalog = normalized.includes('lead_loss_reasons') || normalized.includes('lead_loss_subreasons') || normalized.includes('does not exist') || normalized.includes('42p01')
+                if (!cancelled) {
+                    setLossReasonsCatalog([])
+                    setLossSubreasonsCatalog([])
+                    setLossCatalogError(
+                        isMissingCatalog
+                            ? 'El catálogo de razones de pérdida aún no está disponible en esta base de datos. Ejecuta la migración 060.'
+                            : rawMessage
+                    )
+                    setLossCatalogLoading(false)
+                }
+                return
+            }
+
+            if (!cancelled) {
+                setLossReasonsCatalog(Array.isArray((reasonsRes as any).data) ? (reasonsRes as any).data.map((row: any) => ({
+                    id: String(row.id),
+                    code: String(row.code || ''),
+                    label: String(row.label || 'Motivo'),
+                    description: row.description == null ? null : String(row.description),
+                    sort_order: row.sort_order == null ? null : Number(row.sort_order),
+                    is_active: !!row.is_active
+                })) : [])
+                setLossSubreasonsCatalog(Array.isArray((subreasonsRes as any).data) ? (subreasonsRes as any).data.map((row: any) => ({
+                    id: String(row.id),
+                    reason_id: String(row.reason_id),
+                    code: String(row.code || ''),
+                    label: String(row.label || 'Submotivo'),
+                    sort_order: row.sort_order == null ? null : Number(row.sort_order),
+                    is_active: !!row.is_active
+                })) : [])
+                setLossCatalogLoading(false)
+            }
+        }
+
+        void loadLossCatalogs()
         return () => {
             cancelled = true
         }
@@ -386,6 +495,11 @@ export default function ClientModal({
         () => [...projectsCatalog].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
         [projectsCatalog]
     )
+    const filteredLossSubreasons = useMemo(() => {
+        const reasonId = (formData as any).loss_reason_id || null
+        if (!reasonId) return []
+        return lossSubreasonsCatalog.filter((item) => item.reason_id === reasonId)
+    }, [lossSubreasonsCatalog, (formData as any).loss_reason_id])
     const hasLeadChanges = useMemo(() => {
         if (mode !== 'edit' || !initialData) return true
 
@@ -437,6 +551,9 @@ export default function ClientModal({
             String(formData.oportunidad || '') === String(initialData.oportunidad || '') &&
             asNum(formData.calificacion) === asNum(initialData.calificacion) &&
             String(formData.notas || '') === String(initialData.notas || '') &&
+            norm((formData as any).loss_reason_id) === norm((initialData as any).loss_reason_id) &&
+            norm((formData as any).loss_subreason_id) === norm((initialData as any).loss_subreason_id) &&
+            String(((formData as any).loss_notes || '')) === String((((initialData as any).loss_notes) || '')) &&
             asNum(formData.probabilidad) === asNum(initialData.probabilidad) &&
             norm(formData.forecast_close_date) === norm(initialData.forecast_close_date) &&
             norm(formData.closed_at_real) === norm((initialData as any).closed_at_real) &&
@@ -570,6 +687,17 @@ export default function ClientModal({
             }
             if (((formData as any).valor_implementacion_real_cierre ?? 0) <= 0) {
                 alert('Debes registrar el valor real de implementación para un lead ganado.')
+                return
+            }
+        }
+
+        if (isLostStageLocal(formData.etapa)) {
+            if (lossCatalogError) {
+                alert('No se puede registrar Cerrado Perdido sin catálogo de razones/submotivos. Ejecuta la migración 060 en Supabase.')
+                return
+            }
+            if (!(formData as any).loss_reason_id || !(formData as any).loss_subreason_id) {
+                alert('Para cerrar como perdido debes seleccionar un motivo y un submotivo.')
                 return
             }
         }
@@ -1088,6 +1216,88 @@ export default function ClientModal({
                                         >
                                             Confirmar Cierre
                                         </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {isLostStageLocal(formData.etapa) && (
+                                <div className='mt-3 p-4 rounded-2xl border space-y-4' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                    <div className='flex items-center justify-between gap-2'>
+                                        <p className='text-[10px] font-black uppercase tracking-widest text-rose-300'>Razón de Pérdida</p>
+                                        {lossCatalogLoading && (
+                                            <span className='text-[9px] font-black uppercase tracking-wider text-[var(--text-secondary)]/70'>Cargando...</span>
+                                        )}
+                                    </div>
+
+                                    {lossCatalogError && (
+                                        <div className='rounded-xl border px-3 py-2 text-[10px] font-bold'
+                                            style={{
+                                                background: 'color-mix(in srgb, #f59e0b 10%, var(--background))',
+                                                borderColor: 'color-mix(in srgb, #f59e0b 28%, var(--card-border))',
+                                                color: 'color-mix(in srgb, #f59e0b 82%, white)'
+                                            }}>
+                                            {lossCatalogError}
+                                        </div>
+                                    )}
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                            Motivo *
+                                        </label>
+                                        <select
+                                            value={(formData as any).loss_reason_id || ''}
+                                            onChange={(e) => setFormData((prev) => ({
+                                                ...prev,
+                                                loss_reason_id: e.target.value || null,
+                                                loss_subreason_id: null
+                                            }))}
+                                            disabled={!!lossCatalogError || lossCatalogLoading}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 font-bold transition-all cursor-pointer appearance-none'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            <option value=''>Selecciona un motivo</option>
+                                            {lossReasonsCatalog.map((reason) => (
+                                                <option key={reason.id} value={reason.id}>
+                                                    {reason.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                            Submotivo *
+                                        </label>
+                                        <select
+                                            value={(formData as any).loss_subreason_id || ''}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, loss_subreason_id: e.target.value || null }))}
+                                            disabled={!!lossCatalogError || lossCatalogLoading || !(formData as any).loss_reason_id}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 font-bold transition-all cursor-pointer appearance-none disabled:opacity-60'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            <option value=''>
+                                                {(formData as any).loss_reason_id ? 'Selecciona un submotivo' : 'Selecciona primero un motivo'}
+                                            </option>
+                                            {filteredLossSubreasons.map((subreason) => (
+                                                <option key={subreason.id} value={subreason.id}>
+                                                    {subreason.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                            Nota de pérdida (opcional)
+                                        </label>
+                                        <textarea
+                                            rows={3}
+                                            value={(formData as any).loss_notes || ''}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, loss_notes: e.target.value }))}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-500 font-bold text-xs transition-all resize-y'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                            placeholder='Ej. Decidieron pausar por presupuesto del trimestre / proveedor actual / timing interno...'
+                                        />
                                     </div>
                                 </div>
                             )}

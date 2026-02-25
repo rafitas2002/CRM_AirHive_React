@@ -418,6 +418,71 @@ function getSemanticAreaColor(name: string, index: number): AreaColorMeta {
     return getUniqueAreaColor(index)
 }
 
+function getAreaProjectChipHoverColor(name: string, index: number, theme: 'claro' | 'gris' | 'oscuro'): AreaColorMeta {
+    const normalized = normalizeAreaName(name || '')
+    let lane: 'emerald' | 'amber' | 'fuchsia' | 'blue'
+
+    if (
+        normalized.includes('comercial')
+        || normalized.includes('ventas')
+        || normalized.includes('venta')
+        || normalized.includes('customer success')
+    ) {
+        lane = 'emerald'
+    } else if (
+        normalized.includes('finanza')
+        || normalized.includes('administracion')
+        || normalized.includes('operacion')
+        || normalized === 'rh'
+        || normalized.includes('recursos humanos')
+    ) {
+        lane = 'amber'
+    } else if (
+        normalized.includes('marketing')
+        || normalized.includes('diseno')
+        || normalized.includes('direccion')
+        || normalized.includes('producto')
+    ) {
+        lane = 'fuchsia'
+    } else if (
+        normalized.includes('tecnolog')
+        || normalized.includes('desarrollo')
+        || normalized.includes('developer')
+        || normalized.includes('developers')
+        || normalized.includes('datos')
+        || normalized.includes('bi')
+        || normalized.includes('soporte')
+    ) {
+        lane = 'blue'
+    } else {
+        const lanes: Array<typeof lane> = ['emerald', 'amber', 'fuchsia', 'blue']
+        lane = lanes[index % lanes.length]
+    }
+
+    const palettes = {
+        oscuro: {
+            emerald: { bg: 'rgba(16,185,129,0.10)', border: 'rgba(52,211,153,0.25)', text: '#a7f3d0', bgStrong: '#059669', borderStrong: '#047857' },
+            amber: { bg: 'rgba(245,158,11,0.10)', border: 'rgba(251,191,36,0.25)', text: '#fde68a', bgStrong: '#d97706', borderStrong: '#b45309' },
+            fuchsia: { bg: 'rgba(217,70,239,0.10)', border: 'rgba(232,121,249,0.25)', text: '#f5d0fe', bgStrong: '#c026d3', borderStrong: '#a21caf' },
+            blue: { bg: 'rgba(59,130,246,0.10)', border: 'rgba(96,165,250,0.25)', text: '#bfdbfe', bgStrong: '#2563eb', borderStrong: '#1d4ed8' }
+        },
+        gris: {
+            emerald: { bg: 'rgba(16,185,129,0.12)', border: 'rgba(52,211,153,0.30)', text: '#a7f3d0', bgStrong: '#059669', borderStrong: '#047857' },
+            amber: { bg: 'rgba(245,158,11,0.12)', border: 'rgba(251,191,36,0.30)', text: '#fde68a', bgStrong: '#d97706', borderStrong: '#b45309' },
+            fuchsia: { bg: 'rgba(217,70,239,0.12)', border: 'rgba(232,121,249,0.30)', text: '#f5d0fe', bgStrong: '#c026d3', borderStrong: '#a21caf' },
+            blue: { bg: 'rgba(59,130,246,0.12)', border: 'rgba(96,165,250,0.30)', text: '#bfdbfe', bgStrong: '#2563eb', borderStrong: '#1d4ed8' }
+        },
+        claro: {
+            emerald: { bg: '#ecfdf5', border: '#34d399', text: '#065f46', bgStrong: '#10b981', borderStrong: '#059669' },
+            amber: { bg: '#fffbeb', border: '#fbbf24', text: '#92400e', bgStrong: '#f59e0b', borderStrong: '#d97706' },
+            fuchsia: { bg: '#fdf4ff', border: '#e879f9', text: '#86198f', bgStrong: '#d946ef', borderStrong: '#c026d3' },
+            blue: { bg: '#eff6ff', border: '#60a5fa', text: '#1d4ed8', bgStrong: '#3b82f6', borderStrong: '#2563eb' }
+        }
+    } as const
+
+    return palettes[theme][lane]
+}
+
 export default function UsersClient({ initialUsers }: UsersClientProps) {
     const { theme } = useTheme()
     const auth = useAuth()
@@ -622,6 +687,12 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
     const areaColorMap: Record<string, AreaColorMeta> = ((catalogs.areas || []) as { id: string, name: string }[])
         .reduce((acc: Record<string, AreaColorMeta>, area, index) => {
             if (area?.id) acc[area.id] = getSemanticAreaColor(area.name || '', index)
+            return acc
+        }, {})
+
+    const areaHoverColorMap: Record<string, AreaColorMeta> = ((catalogs.areas || []) as { id: string, name: string }[])
+        .reduce((acc: Record<string, AreaColorMeta>, area, index) => {
+            if (area?.id) acc[area.id] = getAreaProjectChipHoverColor(area.name || '', index, theme)
             return acc
         }, {})
 
@@ -975,14 +1046,16 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                             style={{
                                 background: selectedArea === area.id
                                     ? (areaColorMap[area.id]?.bgStrong || '#2048FF')
-                                    : (hoveredArea === area.id ? (areaColorMap[area.id]?.bg || 'var(--hover-bg)') : 'var(--card-bg)'),
+                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.bg || 'var(--hover-bg)') : 'var(--card-bg)'),
                                 borderColor: selectedArea === area.id
                                     ? (areaColorMap[area.id]?.borderStrong || '#2048FF')
-                                    : (hoveredArea === area.id ? (areaColorMap[area.id]?.border || 'var(--card-border)') : 'var(--card-border)'),
+                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.border || 'var(--card-border)') : 'var(--card-border)'),
                                 color: selectedArea === area.id
                                     ? '#ffffff'
-                                    : (hoveredArea === area.id ? (areaColorMap[area.id]?.text || 'var(--text-primary)') : 'var(--text-secondary)'),
-                                boxShadow: selectedArea === area.id ? `0 10px 22px -12px ${areaColorMap[area.id]?.borderStrong || '#2048FF'}` : 'none'
+                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.text || 'var(--text-primary)') : 'var(--text-secondary)'),
+                                boxShadow: selectedArea === area.id
+                                    ? `0 10px 22px -12px ${areaColorMap[area.id]?.borderStrong || '#2048FF'}`
+                                    : 'none'
                             }}
                         >
                             {area.name}
@@ -1172,7 +1245,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                     {areaItems.length > 0 ? (
                                         <div className="flex flex-wrap items-center justify-center gap-1.5">
                                             {areaItems.map(area => {
-                                                const colorMeta = areaColorMap[area.id] || getAreaColorFromSeed(area.id || area.name, theme, area.name)
+                                                const colorMeta = areaHoverColorMap[area.id] || getAreaProjectChipHoverColor(area.name, positiveMod(hashSeed(area.id || area.name), 4), theme)
                                                 return (
                                                     <span
                                                         key={`${user.id}-${area.id}`}

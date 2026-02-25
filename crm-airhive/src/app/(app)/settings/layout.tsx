@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useEffect } from 'react'
 import { Settings, Palette, Link2, UserRound, Users } from 'lucide-react'
 
 const settingsLinks = [
@@ -15,16 +14,6 @@ const settingsLinks = [
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const { profile } = useAuth()
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-        if (!pathname || pathname === '/settings' || !pathname.startsWith('/settings/')) return
-        try {
-            localStorage.setItem('airhive_settings_last_subroute', pathname)
-        } catch {
-            // noop
-        }
-    }, [pathname])
 
     // Check if user is Admin or RH
     const isAdminOrRH = profile?.role === 'admin' || profile?.role === 'rh'

@@ -97,7 +97,7 @@ export default function RichardDawkinsFooter() {
 
     useEffect(() => {
         if (!quotes.length) return
-        const delayMs = 26000 + Math.floor(Math.random() * 18000) // 26-44s, distinto por ventana
+        const delayMs = 30 * 60 * 1000 // 30 minutos por ventana
         const timer = window.setInterval(() => {
             setSelectedQuoteId((prev) => pickRandomQuoteId(quotes, prev))
         }, delayMs)

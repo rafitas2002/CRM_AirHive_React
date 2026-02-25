@@ -33,7 +33,12 @@ const normalizeLead = (lead: Lead) => ({
     empresa_id: lead.empresa_id || undefined,
     probabilidad: (lead as any).probabilidad || 0,
     forecast_close_date: (lead as any).forecast_close_date || null,
-    closed_at_real: ((lead as any).closed_at_real ? String((lead as any).closed_at_real).slice(0, 10) : null)
+    closed_at_real: ((lead as any).closed_at_real ? String((lead as any).closed_at_real).slice(0, 10) : null),
+    loss_reason_id: (lead as any).loss_reason_id ?? null,
+    loss_subreason_id: (lead as any).loss_subreason_id ?? null,
+    loss_notes: (lead as any).loss_notes ?? '',
+    loss_recorded_at: (lead as any).loss_recorded_at ?? null,
+    loss_recorded_by: (lead as any).loss_recorded_by ?? null
 })
 
 import { useAuth } from '@/lib/auth'
@@ -104,8 +109,8 @@ export default function LeadsPage() {
 
     // Filtering State
     const [filterSearch, setFilterSearch] = useState('')
-    const [filterStage, setFilterStage] = useState('All')
     const [filterOwner, setFilterOwner] = useState('All')
+    const [pipelineScope, setPipelineScope] = useState<'active' | 'prospection' | 'negotiation' | 'all'>('active')
 
     // Email Composer State
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
@@ -165,10 +170,22 @@ export default function LeadsPage() {
                 lead.email?.toLowerCase().includes(filterSearch.toLowerCase()) ||
                 lead.telefono?.toLowerCase().includes(filterSearch.toLowerCase())
 
-            const matchesStage = filterStage === 'All' || lead.etapa === filterStage
             const matchesOwner = filterOwner === 'All' || lead.owner_username === filterOwner
 
-            return matchesSearch && matchesStage && matchesOwner
+            const stageNormalized = String(lead.etapa || '').trim().toLowerCase()
+            const isClosedStage = isWonStage(lead.etapa) || isLostStage(lead.etapa)
+            const isProspectionStage = stageNormalized === 'prospección' || stageNormalized === 'prospeccion'
+            const isNegotiationStage = stageNormalized === 'negociación' || stageNormalized === 'negociacion'
+
+            const matchesScope = pipelineScope === 'all'
+                ? true
+                : pipelineScope === 'active'
+                    ? !isClosedStage
+                    : pipelineScope === 'prospection'
+                        ? isProspectionStage
+                        : isNegotiationStage
+
+            return matchesSearch && matchesOwner && matchesScope
         })
 
         // Apply Sorting
@@ -212,13 +229,20 @@ export default function LeadsPage() {
 
             return isAsc ? comparison : -comparison
         })
-    }, [leads, filterSearch, filterStage, filterOwner, sortBy])
+    }, [leads, filterSearch, filterOwner, sortBy, pipelineScope])
 
     // Get unique owners for filter dropdown
     const uniqueOwners = useMemo(() => {
         const owners = new Set(leads.map(l => l.owner_username).filter((o): o is string => !!o))
         return Array.from(owners).sort()
     }, [leads])
+
+    const pipelineScopeLabel = useMemo(() => {
+        if (pipelineScope === 'active') return 'Activas'
+        if (pipelineScope === 'prospection') return 'Prospección'
+        if (pipelineScope === 'negotiation') return 'Negociación'
+        return 'Todas'
+    }, [pipelineScope])
 
     const fetchLeads = async () => {
         setLoading(true)
@@ -407,6 +431,7 @@ export default function LeadsPage() {
 
         if (modalMode === 'create') {
             const isWon = isWonStage(leadData.etapa)
+            const isLost = isLostStage(leadData.etapa)
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
@@ -431,10 +456,17 @@ export default function LeadsPage() {
                 probabilidad: leadData.probabilidad,
                 owner_id: currentUser.id,
                 owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
-                empresa_id: finalEmpresaId as string
+                empresa_id: finalEmpresaId as string,
+                loss_reason_id: isLost ? ((leadData as any).loss_reason_id || null) : ((leadData as any).loss_reason_id || null),
+                loss_subreason_id: isLost ? ((leadData as any).loss_subreason_id || null) : ((leadData as any).loss_subreason_id || null),
+                loss_notes: isLost ? ((leadData as any).loss_notes || null) : ((leadData as any).loss_notes || null)
             }
             if (isLostStage(leadData.etapa) || isWon) {
                 payload.closed_at_real = toIsoFromDateOnly((leadData as any).closed_at_real) || null
+            }
+            if (isLost) {
+                payload.loss_recorded_at = (leadData as any).loss_recorded_at || new Date().toISOString()
+                payload.loss_recorded_by = (leadData as any).loss_recorded_by || currentUser.id
             }
 
             const { data, error } = await (supabase
@@ -533,6 +565,7 @@ export default function LeadsPage() {
             }
 
             const isWon = isWonStage(leadData.etapa)
+            const isLost = isLostStage(leadData.etapa)
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
                 : null
@@ -554,7 +587,10 @@ export default function LeadsPage() {
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
                 probabilidad: leadData.probabilidad,
-                empresa_id: finalEmpresaId as string
+                empresa_id: finalEmpresaId as string,
+                loss_reason_id: (leadData as any).loss_reason_id || null,
+                loss_subreason_id: (leadData as any).loss_subreason_id || null,
+                loss_notes: ((leadData as any).loss_notes || '').trim() || null
             }
 
             if (isWon) {
@@ -566,6 +602,15 @@ export default function LeadsPage() {
                 payload.closed_at_real = isLostStage(leadData.etapa)
                     ? (toIsoFromDateOnly((leadData as any).closed_at_real) || null)
                     : null
+            }
+
+            if (isLost) {
+                payload.loss_recorded_at = (leadData as any).loss_recorded_at
+                    || ((currentLead as any).loss_recorded_at ?? null)
+                    || new Date().toISOString()
+                payload.loss_recorded_by = (leadData as any).loss_recorded_by
+                    || ((currentLead as any).loss_recorded_by ?? null)
+                    || currentUser.id
             }
 
             // SCORING LOGIC
@@ -827,10 +872,10 @@ export default function LeadsPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Leads
+                                    Negociaciones activas
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Gestión y seguimiento de oportunidades comerciales.
+                                    Pipeline operativo comercial: prospección y negociación. Los cierres se consultan en Empresas Cerradas.
                                 </p>
                             </div>
                         </div>
@@ -877,8 +922,8 @@ export default function LeadsPage() {
                                     <ListFilter size={22} strokeWidth={2} />
                                 </div>
                                 <div>
-                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Bandeja de leads</h2>
-                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Pipeline de Ventas y Seguimiento</p>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Pipeline activo</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Prospección + Negociación (con vista segmentada)</p>
                                 </div>
                             </div>
 
@@ -886,11 +931,44 @@ export default function LeadsPage() {
                                 <div className='ah-count-chip'>
                                     <span className='ah-count-chip-number'>{sortedAndFilteredLeads.length}</span>
                                     <div className='ah-count-chip-meta'>
-                                        <span className='ah-count-chip-title'>Prospectos</span>
+                                        <span className='ah-count-chip-title'>{pipelineScopeLabel}</span>
                                         <span className='ah-count-chip-subtitle'>Filtrados</span>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className='flex flex-wrap items-center gap-2'>
+                            {[
+                                { key: 'active', label: 'Activas' },
+                                { key: 'prospection', label: 'Prospección' },
+                                { key: 'negotiation', label: 'Negociación' },
+                                { key: 'all', label: 'Todas' }
+                            ].map((scope) => {
+                                const active = pipelineScope === scope.key
+                                return (
+                                    <button
+                                        key={scope.key}
+                                        type='button'
+                                        onClick={() => setPipelineScope(scope.key as typeof pipelineScope)}
+                                        className={[
+                                            'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
+                                            active
+                                                ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
+                                                : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
+                                        ].join(' ')}
+                                    >
+                                        {scope.label}
+                                    </button>
+                                )
+                            })}
+                            <button
+                                type='button'
+                                onClick={() => router.push('/cierres')}
+                                className='ml-auto px-3 py-1.5 rounded-xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-200 text-[10px] font-black uppercase tracking-[0.15em] hover:bg-emerald-500/15 hover:border-emerald-300/35 transition-all cursor-pointer'
+                            >
+                                Ver Empresas Cerradas
+                            </button>
                         </div>
 
                         <div className='ah-table-toolbar'>
@@ -905,17 +983,6 @@ export default function LeadsPage() {
                                         className='ah-search-input'
                                     />
                                 </div>
-                                <select
-                                    value={filterStage}
-                                    onChange={(e) => setFilterStage(e.target.value)}
-                                    className='ah-select-control'
-                                >
-                                    <option value="All">Etapa: Todas</option>
-                                    <option value="Negociación">Negociación</option>
-                                    <option value="Cerrado Ganado">Cerrado Ganado</option>
-                                    <option value="Cerrado Perdido">Cerrado Perdido</option>
-                                </select>
-
                                 <select
                                     value={filterOwner}
                                     onChange={(e) => setFilterOwner(e.target.value)}
@@ -937,13 +1004,13 @@ export default function LeadsPage() {
                                     <option value="calificacion-desc">Orden: Estrellas</option>
                                     <option value="probabilidad-desc">Orden: Prob.</option>
                                 </select>
-                                {(filterSearch || filterStage !== 'All' || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc') && (
+                                {(filterSearch || filterOwner !== 'All' || sortBy !== 'fecha_registro-desc' || pipelineScope !== 'active') && (
                                     <button
                                         onClick={() => {
                                             setFilterSearch('')
-                                            setFilterStage('All')
                                             setFilterOwner('All')
                                             setSortBy('fecha_registro-desc')
+                                            setPipelineScope('active')
                                         }}
                                         className='ah-reset-filter-btn'
                                         title='Limpiar Filtros'

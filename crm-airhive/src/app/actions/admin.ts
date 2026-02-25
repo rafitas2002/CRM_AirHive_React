@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { cookies } from 'next/headers'
+import { parseLocalDateOnly } from '@/lib/dateUtils'
 
 export interface CommercialForecastFilters {
     dateFrom?: string
@@ -315,19 +316,23 @@ export async function getAdminCorrelationData() {
             // Tenure Calculation (Months)
             let tenureMonths = 0
             if (emp.start_date) {
-                const start = new Date(emp.start_date)
+                const start = parseLocalDateOnly(emp.start_date)
                 const today = new Date()
-                tenureMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth())
+                if (start) {
+                    tenureMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth())
+                }
             }
 
             // Age Calculation
             let age = null
             if (emp.birth_date) {
-                const birth = new Date(emp.birth_date)
+                const birth = parseLocalDateOnly(emp.birth_date)
                 const today = new Date()
-                age = today.getFullYear() - birth.getFullYear()
-                const m = today.getMonth() - birth.getMonth()
-                if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+                if (birth) {
+                    age = today.getFullYear() - birth.getFullYear()
+                    const m = today.getMonth() - birth.getMonth()
+                    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+                }
             }
 
             // Growth Calculation

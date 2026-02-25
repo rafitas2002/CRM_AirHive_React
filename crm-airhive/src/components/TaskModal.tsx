@@ -23,6 +23,7 @@ interface TaskModalProps {
     onSave: (data: any) => void
     initialData?: any
     leadId?: number
+    leadOptions?: { id: number, empresa: string, nombre: string }[]
     mode: 'create' | 'edit'
 }
 
@@ -45,6 +46,7 @@ export default function TaskModal({
     onSave,
     initialData,
     leadId,
+    leadOptions,
     mode
 }: TaskModalProps) {
     useBodyScrollLock(isOpen)
@@ -75,10 +77,16 @@ export default function TaskModal({
 
     useEffect(() => {
         if (isOpen) {
-            if (!leadId) fetchLeads()
+            if (!leadId) {
+                if (Array.isArray(leadOptions) && leadOptions.length > 0) {
+                    setLeads(leadOptions)
+                } else {
+                    fetchLeads()
+                }
+            }
             fetchUsers()
         }
-    }, [isOpen, leadId])
+    }, [isOpen, leadId, leadOptions])
 
     useEffect(() => {
         if (initialData) {
