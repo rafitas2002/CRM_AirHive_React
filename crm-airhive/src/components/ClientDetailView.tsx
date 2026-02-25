@@ -36,6 +36,11 @@ type ClientData = {
     last_snapshot_at?: string | null
     email?: string | null
     telefono?: string | null
+    loss_reason_id?: string | null
+    loss_subreason_id?: string | null
+    loss_notes?: string | null
+    loss_recorded_at?: string | null
+    loss_recorded_by?: string | null
 }
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
@@ -87,6 +92,8 @@ export default function ClientDetailView({
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
     const [taskKey, setTaskKey] = useState(0)
+    const [lossReasonLabel, setLossReasonLabel] = useState<string | null>(null)
+    const [lossSubreasonLabel, setLossSubreasonLabel] = useState<string | null>(null)
 
     useEffect(() => {
         if (client?.empresa_id) {
@@ -98,6 +105,7 @@ export default function ClientDetailView({
         if (client) {
             fetchMeetingsData()
             fetchCurrentUser()
+            fetchLossLabels(client)
         }
     }, [client])
 
@@ -134,6 +142,34 @@ export default function ClientDetailView({
         }
     }
 
+    const fetchLossLabels = async (clientRow: ClientData) => {
+        const reasonId = (clientRow as any).loss_reason_id || null
+        const subreasonId = (clientRow as any).loss_subreason_id || null
+
+        if (!reasonId && !subreasonId) {
+            setLossReasonLabel(null)
+            setLossSubreasonLabel(null)
+            return
+        }
+
+        try {
+            const [reasonRes, subreasonRes] = await Promise.all([
+                reasonId
+                    ? (supabase.from('lead_loss_reasons') as any).select('label').eq('id', reasonId).maybeSingle()
+                    : Promise.resolve({ data: null, error: null }),
+                subreasonId
+                    ? (supabase.from('lead_loss_subreasons') as any).select('label').eq('id', subreasonId).maybeSingle()
+                    : Promise.resolve({ data: null, error: null })
+            ])
+
+            setLossReasonLabel((reasonRes as any)?.data?.label ? String((reasonRes as any).data.label) : null)
+            setLossSubreasonLabel((subreasonRes as any)?.data?.label ? String((subreasonRes as any).data.label) : null)
+        } catch {
+            setLossReasonLabel(null)
+            setLossSubreasonLabel(null)
+        }
+    }
+
     const handleCreateMeeting = async (meetingData: any) => {
         try {
             await createMeeting(meetingData)
@@ -159,6 +195,7 @@ export default function ClientDetailView({
     }
 
     if (!isOpen || !client) return null
+    const isLostLead = ['cerrado perdido', 'cerrada perdida'].includes(String(client.etapa || '').trim().toLowerCase())
 
     const headerTheme = {
         claro: {
@@ -306,6 +343,60 @@ export default function ClientDetailView({
                                         </div>
                                     </div>
                                 </div>
+
+                                {isLostLead && (
+                                    <div className='space-y-4 pt-4 border-t border-[var(--card-border)]'>
+                                        <div className='rounded-3xl border p-4 space-y-3'
+                                            style={{
+                                                background: 'color-mix(in srgb, #ef4444 8%, var(--card-bg))',
+                                                borderColor: 'color-mix(in srgb, #ef4444 22%, var(--card-border))'
+                                            }}>
+                                            <div className='flex items-center justify-between gap-3'>
+                                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'color-mix(in srgb, #f87171 85%, white)' }}>
+                                                    Razón de pérdida
+                                                </label>
+                                                {(client as any).loss_recorded_at && (
+                                                    <span className='text-[9px] font-black uppercase tracking-wider'
+                                                        style={{ color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                                        {new Date((client as any).loss_recorded_at).toLocaleDateString('es-MX')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className='grid grid-cols-1 gap-3'>
+                                                <div>
+                                                    <p className='text-[9px] font-black uppercase tracking-wider mb-1'
+                                                        style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+                                                        Motivo
+                                                    </p>
+                                                    <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>
+                                                        {lossReasonLabel || 'Sin motivo registrado'}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className='text-[9px] font-black uppercase tracking-wider mb-1'
+                                                        style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+                                                        Submotivo
+                                                    </p>
+                                                    <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>
+                                                        {lossSubreasonLabel || 'Sin submotivo registrado'}
+                                                    </p>
+                                                </div>
+                                                {((client as any).loss_notes || '').trim() && (
+                                                    <div>
+                                                        <p className='text-[9px] font-black uppercase tracking-wider mb-1'
+                                                            style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+                                                            Nota de pérdida
+                                                        </p>
+                                                        <p className='text-[11px] font-bold leading-relaxed whitespace-pre-wrap'
+                                                            style={{ color: 'var(--text-primary)' }}>
+                                                            {(client as any).loss_notes}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className='space-y-3 pt-4 border-t border-[var(--card-border)]'>
                                     <div className='flex justify-between items-end'>

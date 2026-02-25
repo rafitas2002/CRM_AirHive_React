@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { CSSProperties, useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
@@ -29,6 +29,8 @@ interface CompanyModalProps {
     initialData?: CompanyData | null
     mode?: 'create' | 'edit'
     companies?: CompanyData[]
+    overlayClassName?: string
+    overlayStyle?: CSSProperties
 }
 
 export default function CompanyModal({
@@ -37,7 +39,9 @@ export default function CompanyModal({
     onSave,
     initialData,
     mode = 'create',
-    companies = []
+    companies = [],
+    overlayClassName = '',
+    overlayStyle
 }: CompanyModalProps) {
     useBodyScrollLock(isOpen)
     const auth = useAuth()
@@ -272,7 +276,7 @@ export default function CompanyModal({
     if (!isOpen) return null
 
     return (
-        <div className='ah-modal-overlay transition-opacity'>
+        <div className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
             <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
                 {/* Header */}
                 <div className='ah-modal-header'>

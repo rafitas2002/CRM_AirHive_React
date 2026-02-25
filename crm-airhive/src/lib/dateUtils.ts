@@ -28,3 +28,30 @@ export function fromLocalISOString(isoString: string): Date {
     if (!isoString) return new Date()
     return new Date(isoString)
 }
+
+/**
+ * Parses a date-only string (YYYY-MM-DD) as a local calendar date.
+ * Uses noon local time to avoid timezone/UTC shifts when formatting later.
+ */
+export function parseLocalDateOnly(dateString?: string | null): Date | null {
+    const raw = String(dateString || '').trim()
+    if (!raw) return null
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) {
+        const fallback = new Date(raw)
+        return Number.isNaN(fallback.getTime()) ? null : fallback
+    }
+    const [, y, m, d] = match
+    const parsed = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0, 0)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function formatLocalDateOnly(
+    dateString?: string | null,
+    locale = 'es-MX',
+    options?: Intl.DateTimeFormatOptions
+): string {
+    const parsed = parseLocalDateOnly(dateString)
+    if (!parsed) return '-'
+    return parsed.toLocaleDateString(locale, options)
+}

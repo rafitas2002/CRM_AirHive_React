@@ -400,6 +400,20 @@ export default function EmpresasPage() {
                 console.error('Error updating company industries:', industryError)
                 alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
             }
+
+            setSelectedCompany((prev) => (
+                prev && prev.id === modalCompanyData.id
+                    ? {
+                        ...prev,
+                        ...companyData,
+                        industria: companyData.industria,
+                        industria_id: companyData.industria_id || prev.industria_id,
+                        industria_ids: companyData.industria_ids || prev.industria_ids,
+                        industrias: companyData.industrias || prev.industrias,
+                        website: companyData.website
+                    } as CompanyWithProjects
+                    : prev
+            ))
         } else {
             let createdCompany: any = null
             let createError: any = null
@@ -673,6 +687,8 @@ export default function EmpresasPage() {
                 onSave={handleSaveCompany}
                 initialData={modalCompanyData}
                 companies={companies as any}
+                overlayClassName={isDetailOpen ? 'z-[160]' : ''}
+                overlayStyle={isDetailOpen ? { zIndex: 160 } : undefined}
             />
 
             {/* Detail View Modal/Overlay */}
@@ -682,6 +698,10 @@ export default function EmpresasPage() {
                     onClose={handleCloseDetail}
                     company={selectedCompany}
                     currentUserProfile={auth.profile}
+                    onEditCompany={(companyData) => {
+                        setModalCompanyData(companyData as CompanyWithProjects)
+                        setIsCompanyModalOpen(true)
+                    }}
                 />
             )}
 

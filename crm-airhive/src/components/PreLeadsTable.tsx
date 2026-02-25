@@ -61,7 +61,7 @@ export default function PreLeadsTable({
     if (preLeads.length === 0) {
         return (
             <div className='w-full p-12 text-center rounded-[40px] border-2 border-dashed' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
-                <p className='font-bold uppercase text-[10px] tracking-widest' style={{ color: 'var(--text-secondary)' }}>No hay pre-leads registrados</p>
+                <p className='font-bold uppercase text-[10px] tracking-widest' style={{ color: 'var(--text-secondary)' }}>No hay empresas objetivo registradas</p>
             </div>
         )
     }
