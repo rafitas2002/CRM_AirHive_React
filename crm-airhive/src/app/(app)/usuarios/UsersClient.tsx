@@ -96,6 +96,30 @@ function getBadgeRarityLabel(holderCount: number) {
     return 'Común'
 }
 
+function getDealValueTierShowcaseLabel(badge?: ShowcaseBadge | null) {
+    const key = String(badge?.key || '')
+    if (key === 'value_1k_2k') return 'Mensualidad 1k'
+    if (key === 'value_2k_5k') return 'Mensualidad 2k'
+    if (key === 'value_5k_10k') return 'Mensualidad 5k'
+    if (key === 'value_10k_100k' || key === 'value_10k_plus') return 'Mensualidad 10k'
+
+    const label = String(badge?.label || '').toLowerCase()
+    if (label.includes('10,000-100,000') || label.includes('10k')) return 'Mensualidad 10k'
+    if (label.includes('5,000-9,999') || label.includes('5k')) return 'Mensualidad 5k'
+    if (label.includes('2,000-4,999') || label.includes('2k')) return 'Mensualidad 2k'
+    if (label.includes('1,000-1,999') || label.includes('1k')) return 'Mensualidad 1k'
+
+    return String(badge?.label || 'Mensualidad')
+}
+
+function getShowcaseBadgeDisplayLabel(badge?: ShowcaseBadge | null, fallback = 'Badge especial') {
+    if (!badge) return fallback
+    if (badge.source === 'special' && String(badge.type || '') === 'deal_value_tier') {
+        return getDealValueTierShowcaseLabel(badge)
+    }
+    return String(badge.label || fallback)
+}
+
 function getSpecialBadgeShowcaseVisual(badge: ShowcaseBadge) {
     const metallic = 'bg-gradient-to-br from-[#475569] to-[#0f172a]'
     const type = String(badge?.type || '')
@@ -108,9 +132,11 @@ function getSpecialBadgeShowcaseVisual(badge: ShowcaseBadge) {
             category: shared.category,
             icon: shared.icon,
             className: shared.centerGradientClass,
+            matchRingClassName: shared.matchRingClassName,
             iconClassName: shared.iconClassName,
             ringStyle: shared.ringStyle,
-            coreBorderColorClassName: shared.coreBorderColorClassName
+            coreBorderColorClassName: shared.coreBorderColorClassName,
+            clipCenterFillToCoreInterior: shared.clipCenterFillToCoreInterior
         }
     }
 
@@ -756,7 +782,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
         return (
             <BadgeInfoTooltip
                 key={slotKey}
-                title={String(badge.label || visual.title || 'Badge especial')}
+                title={getShowcaseBadgeDisplayLabel(badge, String(visual.title || 'Badge especial'))}
                 subtitle={isGrantableAdminBadge ? 'Distinción que puede otorgar' : String(visual.category || 'Badge especial')}
                 rows={isGrantableAdminBadge
                     ? [{ label: 'Otorg.', value: String(grantsGivenCount) }]
@@ -784,6 +810,8 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     <BadgeMedallion
                         icon={visual.icon as LucideIcon}
                         centerClassName={visual.className}
+                        matchRingClassName={String((visual as any)?.matchRingClassName || '') || undefined}
+                        clipCenterFillToCoreInterior={Boolean((visual as any)?.clipCenterFillToCoreInterior)}
                         iconClassName={visual.iconClassName}
                         ringStyle={visual.ringStyle}
                         overlayText={isSeniorityBadge ? null : getSpecialBadgeOverlayNumber(badge as any)}
@@ -911,7 +939,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                                 {renderShowcaseBadge(badge, `modal-edit-selected-${user.id}-${badgeId}`, { align: 'start', placement: 'bottom', tenureStartDate: user?.details?.start_date || null })}
                                             </div>
                                             <div className='min-w-0 flex-1'>
-                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>{badge.label}</p>
+                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>
+                                                    {getShowcaseBadgeDisplayLabel(badge)}
+                                                </p>
                                                 <p className='text-[9px] opacity-70' style={{ color: 'var(--text-secondary)' }}>
                                                     {Number(stats?.holderCount || 0)} usuario{Number(stats?.holderCount || 0) === 1 ? '' : 's'}
                                                 </p>
@@ -970,7 +1000,9 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                                 {renderShowcaseBadge(badge, `modal-edit-pool-${user.id}-${badgeId}`, { align: 'start', placement: 'bottom', tenureStartDate: user?.details?.start_date || null })}
                                             </div>
                                             <div className='min-w-0 flex-1'>
-                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>{badge.label}</p>
+                                                <p className='text-[10px] font-bold leading-tight truncate' style={{ color: 'var(--text-primary)' }}>
+                                                    {getShowcaseBadgeDisplayLabel(badge)}
+                                                </p>
                                                 <p className='text-[9px] opacity-70' style={{ color: 'var(--text-secondary)' }}>
                                                     {Number(stats?.holderCount || 0)} usuarios · niv. max {Number(stats?.maxLevel || 0)}
                                                 </p>

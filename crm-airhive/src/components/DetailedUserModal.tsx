@@ -80,6 +80,21 @@ function shouldUseWhiteCoreBorderForSpecialBadgeType(type?: string) {
         || type === 'quote_likes_received'
 }
 
+function getDealValueTierCatalogLabel(badgeKey?: string | null, badgeLabel?: string | null) {
+    const key = String(badgeKey || '')
+    if (key === 'value_1k_2k') return 'Mensualidad 1k'
+    if (key === 'value_2k_5k') return 'Mensualidad 2k'
+    if (key === 'value_5k_10k') return 'Mensualidad 5k'
+    if (key === 'value_10k_100k' || key === 'value_10k_plus') return 'Mensualidad 10k'
+
+    const label = String(badgeLabel || '').toLowerCase()
+    if (label.includes('10,000-100,000') || label.includes('10k')) return 'Mensualidad 10k'
+    if (label.includes('5,000-9,999') || label.includes('5k')) return 'Mensualidad 5k'
+    if (label.includes('2,000-4,999') || label.includes('2k')) return 'Mensualidad 2k'
+    if (label.includes('1,000-1,999') || label.includes('1k')) return 'Mensualidad 1k'
+    return String(badgeLabel || 'Mensualidad')
+}
+
 export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: DetailedUserModalProps) {
     useBodyScrollLock(isOpen)
     const { profile: currentUser } = useAuth()
@@ -190,7 +205,9 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             id: `special-${badge?.key || badge?.label || 'badge'}`,
             type: String(badge?.type || 'special'),
             key: String(badge?.key || ''),
-            label: String(badge?.label || 'Badge especial'),
+            label: String(badge?.type || '') === 'deal_value_tier'
+                ? getDealValueTierCatalogLabel(String(badge?.key || ''), String(badge?.label || ''))
+                : String(badge?.label || 'Badge especial'),
             level: Number(badge?.level || 0),
             progress: Number(badge?.progress || 0),
             category: 'Especial'
@@ -223,9 +240,11 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
             return {
                 icon: shared.icon,
                 className: `${metallic} ${shared.centerGradientClass}`,
+                matchRingClassName: shared.matchRingClassName ? `${metallic} ${shared.matchRingClassName}` : undefined,
                 iconClassName: shared.iconClassName,
                 ringStyle: shared.ringStyle,
-                coreBorderColorClassName: shared.coreBorderColorClassName
+                coreBorderColorClassName: shared.coreBorderColorClassName,
+                clipCenterFillToCoreInterior: shared.clipCenterFillToCoreInterior
             }
         }
         if (badgeType === 'company_size') {
@@ -906,16 +925,18 @@ function AccumulatedBadgeCard({
                     { label: 'Progreso', value: String(progress) },
                     { label: 'Tipo', value: String(badge?.type || 'special') }
                 ]}
-            className='w-full cursor-pointer relative z-[2] hover:z-[40] focus-within:z-[40]'
+            className='block w-full cursor-pointer relative z-[2] hover:z-[40] focus-within:z-[40]'
         >
             <div
-                className='rounded-2xl border p-3 transition-colors hover:border-blue-400/45'
+                className='w-full min-h-[84px] rounded-2xl border p-3 transition-colors hover:border-blue-400/45'
                 style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}
             >
-                <div className='flex items-center gap-3'>
+                <div className='h-full flex items-center gap-3'>
                     <BadgeMedallion
                         icon={BadgeIcon}
                         centerClassName={visual.className}
+                        matchRingClassName={String((visual as any)?.matchRingClassName || '') || undefined}
+                        clipCenterFillToCoreInterior={Boolean((visual as any)?.clipCenterFillToCoreInterior)}
                         iconClassName={String((visual as any)?.iconClassName || 'text-white')}
                         overlayText={isSeniorityBadge ? null : overlayNumber}
                         footerBubbleText={isSeniorityBadge ? String(tenureMetrics?.years ?? overlayNumber ?? '') : null}

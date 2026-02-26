@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Building2, FileText, Mail, Pencil, Phone, Rocket, UserRound } from 'lucide-react'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 
 interface PreLeadDetailViewProps {
@@ -28,27 +29,25 @@ export default function PreLeadDetailView({
     return (
         <div
             className={`ah-modal-overlay transition-all duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            onClick={onClose}
         >
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-md"
-                onClick={onClose}
-            />
-
             {/* Modal */}
             <div
-                className={`relative w-full max-w-xl rounded-[40px] shadow-2xl border transition-all duration-500 overflow-hidden flex flex-col ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-10'}`}
-                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                className={`ah-modal-panel relative w-full max-w-2xl transition-all duration-300 ${isOpen ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
+                onClick={(event) => event.stopPropagation()}
             >
                 {/* Header Compacto */}
-                <div className='p-6 text-white flex items-center justify-between shrink-0' style={{ background: 'var(--table-header-bg)' }}>
+                <div className='ah-modal-header px-6 py-5'>
                     <div className='flex items-center gap-4'>
-                        <div className='w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl border border-white/10 animate-pulse'>
-                            🏢
+                        <div
+                            className='w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm'
+                            style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
+                        >
+                            <Building2 size={24} strokeWidth={2.2} style={{ color: 'var(--accent-secondary)' }} />
                         </div>
                         <div>
-                            <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>{preLead.nombre_empresa}</h2>
-                            <p className='text-blue-500 text-[10px] font-black uppercase tracking-widest'>Archivo de Pre-Lead</p>
+                            <h2 className='ah-modal-title text-xl tracking-tight'>{preLead.nombre_empresa}</h2>
+                            <p className='ah-modal-subtitle'>Archivo de Pre-Lead</p>
                         </div>
                     </div>
                     <button
@@ -62,7 +61,7 @@ export default function PreLeadDetailView({
                 </div>
 
                 {/* Content Compacto */}
-                <div className='p-8 space-y-6 overflow-y-auto max-h-[70vh] custom-scrollbar flex-1'>
+                <div className='p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1'>
                     {/* Grid Principal */}
                     <div className='grid grid-cols-2 gap-4'>
                         <div className='p-4 rounded-2xl border' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
@@ -78,7 +77,9 @@ export default function PreLeadDetailView({
                     {/* Contact Person Card */}
                     <div className='p-5 rounded-2xl border flex items-center justify-between' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-3'>
-                            <div className='w-10 h-10 rounded-xl shadow-inner flex items-center justify-center text-lg' style={{ background: 'var(--card-bg)' }}>👤</div>
+                            <div className='w-10 h-10 rounded-xl shadow-inner flex items-center justify-center' style={{ background: 'var(--card-bg)' }}>
+                                <UserRound size={18} strokeWidth={2.2} style={{ color: 'var(--text-secondary)' }} />
+                            </div>
                             <div>
                                 <span className='text-[9px] font-black text-blue-600 uppercase tracking-widest block'>Contacto Principal</span>
                                 <p className='text-base font-black' style={{ color: 'var(--text-primary)' }}>{preLead.nombre_contacto || 'No registrado'}</p>
@@ -91,7 +92,8 @@ export default function PreLeadDetailView({
                         {/* Correos */}
                         <div className='space-y-3'>
                             <span className='text-[9px] font-black uppercase tracking-widest flex items-center gap-2' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                ✉️ Correos
+                                <Mail size={12} strokeWidth={2.2} />
+                                Correos
                             </span>
                             <div className='flex flex-col gap-2'>
                                 {preLead.correos?.length > 0 ? (
@@ -121,7 +123,8 @@ export default function PreLeadDetailView({
                         {/* Teléfonos */}
                         <div className='space-y-3'>
                             <span className='text-[9px] font-black uppercase tracking-widest flex items-center gap-2' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                📞 Teléfonos
+                                <Phone size={12} strokeWidth={2.2} />
+                                Teléfonos
                             </span>
                             <div className='flex flex-col gap-2'>
                                 {preLead.telefonos?.length > 0 ? (
@@ -154,7 +157,8 @@ export default function PreLeadDetailView({
                     {preLead.notas && (
                         <div className='space-y-3 pt-2 text-start'>
                             <span className='text-[9px] font-black uppercase tracking-widest flex items-center gap-2' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                📝 Notas y Observaciones
+                                <FileText size={12} strokeWidth={2.2} />
+                                Notas y Observaciones
                             </span>
                             <div className='p-5 rounded-2xl border border-dashed' style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}>
                                 <p className='text-xs font-bold leading-relaxed whitespace-pre-wrap' style={{ color: 'var(--text-primary)' }}>
@@ -167,7 +171,9 @@ export default function PreLeadDetailView({
                     {/* Footer Info */}
                     <div className='pt-6 border-t flex items-center justify-between shrink-0' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-2'>
-                            <div className='w-6 h-6 bg-blue-500/10 rounded-full flex items-center justify-center text-[10px] text-blue-500'>👤</div>
+                            <div className='w-6 h-6 bg-blue-500/10 rounded-full flex items-center justify-center text-blue-500'>
+                                <UserRound size={11} strokeWidth={2.4} />
+                            </div>
                             <span className='text-[10px] font-black' style={{ color: 'var(--text-primary)' }}>Por: {preLead.vendedor_name}</span>
                         </div>
                         <span className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
@@ -177,19 +183,25 @@ export default function PreLeadDetailView({
                 </div>
 
                 {/* Botones de Acción */}
-                <div className='p-6 flex flex-col md:flex-row gap-3 shrink-0' style={{ background: 'var(--table-header-bg)' }}>
+                <div className='p-6 flex flex-col md:flex-row gap-3 shrink-0 border-t bg-[var(--hover-bg)]' style={{ borderColor: 'var(--card-border)' }}>
                     <button
                         onClick={() => onPromote(preLead)}
                         className='flex-1 h-12 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all'
                     >
-                        🚀 Ascender a Lead
+                        <span className='inline-flex items-center justify-center gap-2'>
+                            <Rocket size={13} strokeWidth={2.5} />
+                            Ascender a Lead
+                        </span>
                     </button>
                     <div className='flex gap-3 flex-1'>
                         <button
                             onClick={() => onEdit(preLead)}
                             className='flex-1 h-12 bg-[#2048FF] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95'
                         >
-                            ✏️ Editar
+                            <span className='inline-flex items-center justify-center gap-2'>
+                                <Pencil size={13} strokeWidth={2.5} />
+                                Editar
+                            </span>
                         </button>
                         <button
                             onClick={onClose}

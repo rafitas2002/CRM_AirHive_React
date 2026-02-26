@@ -11,6 +11,7 @@ import ClientDetailView from '@/components/ClientDetailView'
 import CompanyModal, { type CompanyData } from '@/components/CompanyModal'
 import { useAuth } from '@/lib/auth'
 import { getLeadLossAnalyticsSupportData, type LeadLossAnalyticsRow } from '@/app/actions/lossAnalytics'
+import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
 
 type LeadRow = Database['public']['Tables']['clientes']['Row']
 
@@ -38,6 +39,23 @@ type LossAnalyticsKpi = {
     unclassifiedPct: number
     avgCycleDays: number | null
 }
+
+type LossAnalyticsTrendRow = {
+    monthKey: string
+    label: string
+    lostCount: number
+    totalLostValue: number
+}
+
+const LOSS_ANALYTICS_METRICS = {
+    lostCount: getCommercialMetricDefinition('loss_lost_count'),
+    monthlyLostValue: getCommercialMetricDefinition('loss_monthly_value'),
+    implementationLostValue: getCommercialMetricDefinition('loss_implementation_value'),
+    totalLostValue: getCommercialMetricDefinition('loss_total_estimated_value'),
+    topReason: getCommercialMetricDefinition('loss_top_reason'),
+    unclassifiedPct: getCommercialMetricDefinition('loss_unclassified_pct'),
+    avgCycleDays: getCommercialMetricDefinition('loss_avg_cycle_days')
+} as const
 
 function isWonStage(stage: unknown) {
     const normalized = String(stage || '').trim().toLowerCase()
@@ -109,6 +127,101 @@ function getPeriodRange(preset: LossPeriodPreset) {
     start.setDate(1)
     start.setHours(0, 0, 0, 0)
     return { start, end }
+}
+
+function getPreviousPeriodRange(preset: LossPeriodPreset) {
+    if (preset === 'all') return null
+    const current = getPeriodRange(preset)
+    if (!current) return null
+
+    if (preset === '30d') {
+        const end = new Date(current.start)
+        end.setMilliseconds(end.getMilliseconds() - 1)
+        const start = new Date(end)
+        start.setDate(start.getDate() - 29)
+        start.setHours(0, 0, 0, 0)
+        return { start, end }
+    }
+
+    if (preset === 'quarter') {
+        const end = new Date(current.start)
+        end.setMilliseconds(end.getMilliseconds() - 1)
+        const start = new Date(current.start)
+        start.setMonth(start.getMonth() - 3, 1)
+        start.setHours(0, 0, 0, 0)
+        return { start, end }
+    }
+
+    const end = new Date(current.start)
+    end.setMilliseconds(end.getMilliseconds() - 1)
+    const start = new Date(current.start)
+    start.setMonth(start.getMonth() - 1, 1)
+    start.setHours(0, 0, 0, 0)
+    return { start, end }
+}
+
+function formatSignedPercent(value: number | null) {
+    if (value == null || !Number.isFinite(value)) return '—'
+    const rounded = Math.round(value)
+    if (rounded === 0) return '0%'
+    return `${rounded > 0 ? '+' : ''}${rounded}%`
+}
+
+function calculateLossAnalyticsKpis(rows: LeadLossAnalyticsRow[]): LossAnalyticsKpi {
+    if (rows.length === 0) {
+        return {
+            lostCount: 0,
+            monthlyLostValue: 0,
+            implementationLostValue: 0,
+            totalLostValue: 0,
+            topReasonLabel: 'Sin datos',
+            unclassifiedPct: 0,
+            avgCycleDays: null
+        }
+    }
+
+    let monthlyLostValue = 0
+    let implementationLostValue = 0
+    let unclassified = 0
+    const reasonCounts = new Map<string, { label: string; count: number }>()
+    let cycleDaysTotal = 0
+    let cycleDaysCount = 0
+
+    rows.forEach((row) => {
+        monthlyLostValue += Number(row.valor_estimado || 0)
+        implementationLostValue += Number(row.valor_implementacion_estimado || 0)
+        const reasonKey = String(row.loss_reason_id || 'sin-clasificar')
+        const reasonLabel = String(row.loss_reason_label || 'Sin clasificar')
+        const current = reasonCounts.get(reasonKey) || { label: reasonLabel, count: 0 }
+        current.count += 1
+        reasonCounts.set(reasonKey, current)
+
+        if (!row.loss_reason_id || !row.loss_subreason_id) unclassified += 1
+
+        const startRaw = row.fecha_registro || row.created_at || null
+        const endRaw = getLossReferenceDate(row)
+        if (startRaw && endRaw) {
+            const startMs = new Date(startRaw).getTime()
+            const endMs = new Date(endRaw).getTime()
+            if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
+                cycleDaysTotal += Math.round((endMs - startMs) / (1000 * 60 * 60 * 24))
+                cycleDaysCount += 1
+            }
+        }
+    })
+
+    const topReason = Array.from(reasonCounts.values()).sort((a, b) => b.count - a.count)[0]
+    const totalLostValue = monthlyLostValue + implementationLostValue
+
+    return {
+        lostCount: rows.length,
+        monthlyLostValue,
+        implementationLostValue,
+        totalLostValue,
+        topReasonLabel: topReason?.label || 'Sin datos',
+        unclassifiedPct: (unclassified / Math.max(1, rows.length)) * 100,
+        avgCycleDays: cycleDaysCount > 0 ? (cycleDaysTotal / cycleDaysCount) : null
+    }
 }
 
 export default function ClosedCompaniesPage() {
@@ -355,61 +468,112 @@ export default function ClosedCompaniesPage() {
     }, [lossAnalyticsRows, lossPeriodPreset, lossSellerFilter, lossIndustryFilter, lossSizeFilter, lossReasonFilter, lossSubreasonFilter])
 
     const lossAnalyticsKpis = useMemo<LossAnalyticsKpi>(() => {
-        if (lossAnalyticsFilteredRows.length === 0) {
-            return {
-                lostCount: 0,
-                monthlyLostValue: 0,
-                implementationLostValue: 0,
-                totalLostValue: 0,
-                topReasonLabel: 'Sin datos',
-                unclassifiedPct: 0,
-                avgCycleDays: null
-            }
-        }
+        return calculateLossAnalyticsKpis(lossAnalyticsFilteredRows)
+    }, [lossAnalyticsFilteredRows])
 
-        let monthlyLostValue = 0
-        let implementationLostValue = 0
-        let unclassified = 0
-        const reasonCounts = new Map<string, { label: string; count: number }>()
-        let cycleDaysTotal = 0
-        let cycleDaysCount = 0
-
-        lossAnalyticsFilteredRows.forEach((row) => {
-            monthlyLostValue += Number(row.valor_estimado || 0)
-            implementationLostValue += Number(row.valor_implementacion_estimado || 0)
-            const reasonKey = String(row.loss_reason_id || 'sin-clasificar')
-            const reasonLabel = String(row.loss_reason_label || 'Sin clasificar')
-            const current = reasonCounts.get(reasonKey) || { label: reasonLabel, count: 0 }
-            current.count += 1
-            reasonCounts.set(reasonKey, current)
-
-            if (!row.loss_reason_id || !row.loss_subreason_id) unclassified += 1
-
-            const startRaw = row.fecha_registro || row.created_at || null
-            const endRaw = getLossReferenceDate(row)
-            if (startRaw && endRaw) {
-                const startMs = new Date(startRaw).getTime()
-                const endMs = new Date(endRaw).getTime()
-                if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs) {
-                    cycleDaysTotal += Math.round((endMs - startMs) / (1000 * 60 * 60 * 24))
-                    cycleDaysCount += 1
-                }
-            }
+    const lossAnalyticsPreviousRows = useMemo(() => {
+        const previousRange = getPreviousPeriodRange(lossPeriodPreset)
+        if (!previousRange) return [] as LeadLossAnalyticsRow[]
+        return lossAnalyticsRows.filter((row) => {
+            const refDate = getLossReferenceDate(row)
+            if (!refDate) return false
+            const ms = new Date(refDate).getTime()
+            if (!Number.isFinite(ms)) return false
+            if (ms < previousRange.start.getTime() || ms > previousRange.end.getTime()) return false
+            if (lossSellerFilter !== 'all' && String(row.seller_id || '') !== lossSellerFilter) return false
+            if (lossIndustryFilter !== 'all' && String(row.industria || '') !== lossIndustryFilter) return false
+            if (lossSizeFilter !== 'all' && String(row.tamano_empresa ?? '') !== lossSizeFilter) return false
+            if (lossReasonFilter !== 'all' && String(row.loss_reason_id || '') !== lossReasonFilter) return false
+            if (lossSubreasonFilter !== 'all' && String(row.loss_subreason_id || '') !== lossSubreasonFilter) return false
+            return true
         })
+    }, [lossAnalyticsRows, lossPeriodPreset, lossSellerFilter, lossIndustryFilter, lossSizeFilter, lossReasonFilter, lossSubreasonFilter])
 
-        const topReason = Array.from(reasonCounts.values()).sort((a, b) => b.count - a.count)[0]
-        const totalLostValue = monthlyLostValue + implementationLostValue
+    const lossAnalyticsPreviousKpis = useMemo<LossAnalyticsKpi>(() => {
+        return calculateLossAnalyticsKpis(lossAnalyticsPreviousRows)
+    }, [lossAnalyticsPreviousRows])
+
+    const lossAnalyticsComparison = useMemo(() => {
+        const prev = lossAnalyticsPreviousKpis
+        const current = lossAnalyticsKpis
+        const pctDelta = (curr: number, previous: number) => {
+            if (previous === 0) {
+                if (curr === 0) return 0
+                return null
+            }
+            return ((curr - previous) / previous) * 100
+        }
 
         return {
-            lostCount: lossAnalyticsFilteredRows.length,
-            monthlyLostValue,
-            implementationLostValue,
-            totalLostValue,
-            topReasonLabel: topReason?.label || 'Sin datos',
-            unclassifiedPct: (unclassified / Math.max(1, lossAnalyticsFilteredRows.length)) * 100,
-            avgCycleDays: cycleDaysCount > 0 ? (cycleDaysTotal / cycleDaysCount) : null
+            lostCountPct: pctDelta(current.lostCount, prev.lostCount),
+            totalLostValuePct: pctDelta(current.totalLostValue, prev.totalLostValue),
+            avgCycleDaysDiff: (current.avgCycleDays == null || prev.avgCycleDays == null)
+                ? null
+                : current.avgCycleDays - prev.avgCycleDays,
+            topReasonChanged: current.topReasonLabel !== prev.topReasonLabel
+                && current.topReasonLabel !== 'Sin datos'
+                && prev.topReasonLabel !== 'Sin datos'
         }
+    }, [lossAnalyticsKpis, lossAnalyticsPreviousKpis])
+
+    const lossAnalyticsMonthlyTrend = useMemo<LossAnalyticsTrendRow[]>(() => {
+        const monthMap = new Map<string, { lostCount: number; totalLostValue: number; date: Date }>()
+        lossAnalyticsFilteredRows.forEach((row) => {
+            const refDate = getLossReferenceDate(row)
+            if (!refDate) return
+            const d = new Date(refDate)
+            if (Number.isNaN(d.getTime())) return
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            const bucketDate = new Date(d.getFullYear(), d.getMonth(), 1)
+            const current = monthMap.get(key) || { lostCount: 0, totalLostValue: 0, date: bucketDate }
+            current.lostCount += 1
+            current.totalLostValue += Number(row.valor_estimado || 0) + Number(row.valor_implementacion_estimado || 0)
+            monthMap.set(key, current)
+        })
+        return Array.from(monthMap.entries())
+            .sort((a, b) => a[1].date.getTime() - b[1].date.getTime())
+            .slice(-6)
+            .map(([monthKey, row]) => ({
+                monthKey,
+                label: row.date.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }),
+                lostCount: row.lostCount,
+                totalLostValue: row.totalLostValue
+            }))
     }, [lossAnalyticsFilteredRows])
+
+    const lossAnalyticsSignals = useMemo(() => {
+        const signals: string[] = []
+        if (lossAnalyticsComparison.topReasonChanged) {
+            signals.push(`Cambio de patrón: el motivo principal cambió a "${lossAnalyticsKpis.topReasonLabel}".`)
+        }
+        const topReasonLower = String(lossAnalyticsKpis.topReasonLabel || '').toLowerCase()
+        if (topReasonLower.includes('compet')) {
+            signals.push('Competencia domina las pérdidas en este filtro. Revisa propuesta de valor y diferenciadores.')
+        } else if (topReasonLower.includes('tim')) {
+            signals.push('Timing domina el periodo. Conviene reforzar follow-up y fechas de recontacto.')
+        } else if (topReasonLower.includes('fit')) {
+            signals.push('No fit domina el filtro. Revisa calificación y discovery antes de avanzar a negociación.')
+        }
+        if (lossAnalyticsKpis.unclassifiedPct > 10) {
+            signals.push(`Calidad de captura: ${Math.round(lossAnalyticsKpis.unclassifiedPct)}% de pérdidas sin clasificar.`)
+        }
+        const topSeller = Array.from(
+            lossAnalyticsFilteredRows.reduce((acc, row) => {
+                const key = String(row.seller_id || row.seller_username || 'sin-asignar')
+                const name = String(row.seller_full_name || formatSellerDisplayName(row.seller_username) || 'Sin asignar')
+                const current = acc.get(key) || { name, count: 0 }
+                current.count += 1
+                acc.set(key, current)
+                return acc
+            }, new Map<string, { name: string; count: number }>())
+                .values()
+        ).sort((a, b) => b.count - a.count)[0]
+
+        if (topSeller && topSeller.count >= 2) {
+            signals.push(`${topSeller.name} concentra más pérdidas (${topSeller.count}) en el filtro actual.`)
+        }
+        return signals.slice(0, 4)
+    }, [lossAnalyticsComparison.topReasonChanged, lossAnalyticsKpis.topReasonLabel, lossAnalyticsKpis.unclassifiedPct, lossAnalyticsFilteredRows])
 
     const topLossReasons = useMemo(() => {
         const total = Math.max(1, lossAnalyticsFilteredRows.length)
@@ -520,6 +684,9 @@ export default function ClosedCompaniesPage() {
                 id: company.id,
                 nombre: String(company.nombre || ''),
                 tamano: Number(company.tamano || 1),
+                tamano_fuente: company.tamano_fuente || null,
+                tamano_confianza: company.tamano_confianza || null,
+                tamano_senal_principal: company.tamano_senal_principal || null,
                 ubicacion: String(company.ubicacion || ''),
                 logo_url: String(company.logo_url || ''),
                 industria: String(primaryRel?.industrias?.name || company.industria || industryNames[0] || ''),
@@ -570,6 +737,10 @@ export default function ClosedCompaniesPage() {
             return
         }
 
+        const normalizeOptionalText = (value: unknown) => {
+            const normalized = String(value ?? '').trim()
+            return normalized ? normalized : null
+        }
         const basePayload: any = {
             nombre: companyData.nombre,
             tamano: companyData.tamano,
@@ -577,10 +748,28 @@ export default function ClosedCompaniesPage() {
             industria: companyData.industria,
             industria_id: companyData.industria_id || null
         }
+        const sizeAssessmentPayload: any = {
+            tamano_fuente: normalizeOptionalText((companyData as any).tamano_fuente),
+            tamano_confianza: normalizeOptionalText((companyData as any).tamano_confianza),
+            tamano_senal_principal: normalizeOptionalText((companyData as any).tamano_senal_principal)
+        }
+        const basePayloadWithSizeAssessment = {
+            ...basePayload,
+            ...sizeAssessmentPayload
+        }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
-        const candidates = websiteValue !== null
-            ? [{ ...basePayload, website: websiteValue }, { ...basePayload, sitio_web: websiteValue }, basePayload]
-            : [basePayload]
+        const candidates = (() => {
+            const corePayloadVariants = [basePayloadWithSizeAssessment, basePayload]
+            const next: any[] = []
+            for (const corePayload of corePayloadVariants) {
+                if (websiteValue !== null) {
+                    next.push({ ...corePayload, website: websiteValue })
+                    next.push({ ...corePayload, sitio_web: websiteValue })
+                }
+                next.push(corePayload)
+            }
+            return next
+        })()
 
         const isUnknownColumnError = (error: any) => {
             const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
@@ -752,26 +941,26 @@ export default function ClosedCompaniesPage() {
                         )}
                     </section>
 
-                    <section className='mt-6 rounded-2xl border border-white/10 bg-black/15 overflow-hidden'>
-                        <div className='px-5 py-4 border-b border-white/10 flex flex-col gap-3'>
+                    <section className='mt-6 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] overflow-hidden'>
+                        <div className='px-5 py-4 border-b border-[var(--card-border)] flex flex-col gap-3'>
                             <div className='flex items-center justify-between gap-3 flex-wrap'>
                                 <div className='flex items-center gap-2'>
-                                    <TrendingDown size={16} className='text-amber-300' />
+                                    <TrendingDown size={16} className='text-amber-500 dark:text-amber-300' />
                                     <div>
-                                        <p className='text-xs font-black uppercase tracking-[0.16em] text-white/80'>Análisis de pérdidas</p>
-                                        <p className='text-[11px] font-semibold text-white/55'>
+                                        <p className='text-xs font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>Análisis de pérdidas</p>
+                                        <p className='text-[11px] font-semibold text-[var(--text-secondary)]'>
                                             Top motivos/submotivos, monto perdido y distribución por vendedor/industria
                                             {lossAnalyticsScope === 'own' ? ' (tu cartera)' : ''}
                                         </p>
                                     </div>
                                 </div>
-                                <div className='text-[10px] font-black uppercase tracking-[0.14em] text-white/45'>
+                                <div className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
                                     {lossAnalyticsGeneratedAt ? `Actualizado ${formatDate(lossAnalyticsGeneratedAt)}` : 'Sin actualización'}
                                 </div>
                             </div>
 
                             <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-2'>
-                                <div className='flex rounded-xl border border-white/10 bg-white/5 p-1 gap-1 md:col-span-2 xl:col-span-2'>
+                                <div className='flex rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-1 gap-1 md:col-span-2 xl:col-span-2'>
                                     {([
                                         ['month', 'Mes'],
                                         ['30d', '30d'],
@@ -784,7 +973,7 @@ export default function ClosedCompaniesPage() {
                                             className={`flex-1 h-9 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all cursor-pointer ${
                                                 lossPeriodPreset === preset
                                                     ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20'
-                                                    : 'text-white/65 hover:bg-white/5'
+                                                    : 'text-[var(--text-secondary)] hover:bg-white/60 dark:hover:bg-white/5'
                                             }`}
                                         >
                                             {label}
@@ -795,7 +984,7 @@ export default function ClosedCompaniesPage() {
                                 <select
                                     value={lossSellerFilter}
                                     onChange={(e) => setLossSellerFilter(e.target.value)}
-                                    className='h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[11px] font-black uppercase tracking-[0.08em] text-white'
+                                    className='h-11 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--text-primary)]'
                                 >
                                     <option value='all'>Vendedor: Todos</option>
                                     {lossSellerOptions.map((opt) => (
@@ -806,7 +995,7 @@ export default function ClosedCompaniesPage() {
                                 <select
                                     value={lossIndustryFilter}
                                     onChange={(e) => setLossIndustryFilter(e.target.value)}
-                                    className='h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[11px] font-black uppercase tracking-[0.08em] text-white'
+                                    className='h-11 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--text-primary)]'
                                 >
                                     <option value='all'>Industria: Todas</option>
                                     {lossIndustryOptions.map((opt) => (
@@ -817,7 +1006,7 @@ export default function ClosedCompaniesPage() {
                                 <select
                                     value={lossSizeFilter}
                                     onChange={(e) => setLossSizeFilter(e.target.value)}
-                                    className='h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[11px] font-black uppercase tracking-[0.08em] text-white'
+                                    className='h-11 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--text-primary)]'
                                 >
                                     <option value='all'>Tamaño: Todos</option>
                                     {[1, 2, 3, 4, 5].map((size) => (
@@ -831,7 +1020,7 @@ export default function ClosedCompaniesPage() {
                                         setLossReasonFilter(e.target.value)
                                         setLossSubreasonFilter('all')
                                     }}
-                                    className='h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[11px] font-black uppercase tracking-[0.08em] text-white'
+                                    className='h-11 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 text-[11px] font-black uppercase tracking-[0.08em] text-[var(--text-primary)]'
                                 >
                                     <option value='all'>Motivo: Todos</option>
                                     {lossReasonOptions.map((opt) => (
@@ -841,12 +1030,12 @@ export default function ClosedCompaniesPage() {
                             </div>
 
                             <div className='grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-2'>
-                                <div className='rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/45'>Submotivo</p>
+                                <div className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Submotivo</p>
                                     <select
                                         value={lossSubreasonFilter}
                                         onChange={(e) => setLossSubreasonFilter(e.target.value)}
-                                        className='mt-1 w-full h-9 rounded-lg border border-white/10 bg-black/20 px-2 text-[11px] font-bold text-white'
+                                        className='mt-1 w-full h-9 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 text-[11px] font-bold text-[var(--text-primary)]'
                                     >
                                         <option value='all'>Todos</option>
                                         {filteredLossSubreasonOptions.map((opt) => (
@@ -863,7 +1052,7 @@ export default function ClosedCompaniesPage() {
                                         setLossReasonFilter('all')
                                         setLossSubreasonFilter('all')
                                     }}
-                                    className='h-[58px] rounded-xl border border-white/10 bg-white/5 text-[10px] font-black uppercase tracking-[0.14em] text-white/70 hover:bg-white/10 transition-colors cursor-pointer'
+                                    className='h-[58px] rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] hover:bg-white/60 dark:hover:bg-white/10 transition-colors cursor-pointer'
                                 >
                                     Limpiar filtros
                                 </button>
@@ -871,8 +1060,8 @@ export default function ClosedCompaniesPage() {
                         </div>
 
                         {lossAnalyticsError ? (
-                            <div className='px-5 py-4 border-b border-white/10'>
-                                <div className='rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-200 flex items-start gap-2'>
+                            <div className='px-5 py-4 border-b border-[var(--card-border)]'>
+                                <div className='rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700 dark:text-amber-200 flex items-start gap-2'>
                                     <AlertTriangle size={16} className='shrink-0 mt-0.5' />
                                     <span>{lossAnalyticsError}</span>
                                 </div>
@@ -881,38 +1070,119 @@ export default function ClosedCompaniesPage() {
 
                         <div className='p-5'>
                             {lossAnalyticsLoading ? (
-                                <div className='py-10 text-center text-white/60 font-bold animate-pulse'>Cargando analytics de pérdidas...</div>
+                                <div className='py-10 text-center text-[var(--text-secondary)] font-bold animate-pulse'>Cargando analytics de pérdidas...</div>
                             ) : (
                                 <>
                                     <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3'>
-                                        <div className='rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-rose-200'>Cierres perdidos</p>
-                                            <p className='mt-1 text-2xl font-black text-white'>{lossAnalyticsKpis.lostCount}</p>
+                                        <div className='rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4' title={LOSS_ANALYTICS_METRICS.lostCount.shortHelp}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-rose-700 dark:text-rose-200'>{LOSS_ANALYTICS_METRICS.lostCount.label}</p>
+                                            <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{lossAnalyticsKpis.lostCount}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-amber-200'>Monto perdido (mensualidad)</p>
-                                            <p className='mt-1 text-xl font-black text-white'>{formatCurrency(lossAnalyticsKpis.monthlyLostValue)}</p>
+                                        <div className='rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4' title={LOSS_ANALYTICS_METRICS.monthlyLostValue.shortHelp}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200'>{LOSS_ANALYTICS_METRICS.monthlyLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.monthlyLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-orange-400/20 bg-orange-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-orange-200'>Monto perdido (implementación)</p>
-                                            <p className='mt-1 text-xl font-black text-white'>{formatCurrency(lossAnalyticsKpis.implementationLostValue)}</p>
+                                        <div className='rounded-2xl border border-orange-400/20 bg-orange-500/10 p-4' title={LOSS_ANALYTICS_METRICS.implementationLostValue.shortHelp}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-orange-700 dark:text-orange-200'>{LOSS_ANALYTICS_METRICS.implementationLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.implementationLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-blue-200'>Total estimado perdido</p>
-                                            <p className='mt-1 text-xl font-black text-white'>{formatCurrency(lossAnalyticsKpis.totalLostValue)}</p>
+                                        <div className='rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4' title={LOSS_ANALYTICS_METRICS.totalLostValue.shortHelp}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-200'>{LOSS_ANALYTICS_METRICS.totalLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.totalLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-fuchsia-200'>Motivo principal</p>
-                                            <p className='mt-1 text-sm font-black text-white line-clamp-2'>{lossAnalyticsKpis.topReasonLabel}</p>
+                                        <div className='rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4' title={LOSS_ANALYTICS_METRICS.topReason.shortHelp}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-fuchsia-700 dark:text-fuchsia-200'>{LOSS_ANALYTICS_METRICS.topReason.label}</p>
+                                            <p className='mt-1 text-sm font-black text-[var(--text-primary)] line-clamp-2'>{lossAnalyticsKpis.topReasonLabel}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4'>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200'>Calidad / ciclo</p>
-                                            <p className='mt-1 text-sm font-black text-white'>
+                                        <div className='rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4' title={`${LOSS_ANALYTICS_METRICS.unclassifiedPct.shortHelp} ${LOSS_ANALYTICS_METRICS.avgCycleDays.shortHelp}`}>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-200'>Calidad / ciclo</p>
+                                            <p className='mt-1 text-sm font-black text-[var(--text-primary)]'>
                                                 {formatPercent(lossAnalyticsKpis.unclassifiedPct)} sin clasificar
                                             </p>
-                                            <p className='text-[11px] font-bold text-white/70 mt-1'>
+                                            <p className='text-[11px] font-bold text-[var(--text-secondary)] mt-1'>
                                                 Ciclo prom.: {lossAnalyticsKpis.avgCycleDays == null ? '—' : `${Math.round(lossAnalyticsKpis.avgCycleDays)} días`}
                                             </p>
+                                        </div>
+                                    </div>
+
+                                    {lossPeriodPreset !== 'all' && (
+                                        <div className='mt-4 grid grid-cols-1 xl:grid-cols-3 gap-4'>
+                                            <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4 xl:col-span-2'>
+                                                <div className='flex items-center justify-between gap-3 mb-3'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)]'>Comparativo vs periodo anterior</p>
+                                                    <span className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>
+                                                        Prev: {lossAnalyticsPreviousKpis.lostCount} perdidos
+                                                    </span>
+                                                </div>
+                                                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Cierres perdidos</p>
+                                                        <p className='mt-1 text-sm font-black text-[var(--text-primary)]'>{formatSignedPercent(lossAnalyticsComparison.lostCountPct)}</p>
+                                                    </div>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Monto perdido</p>
+                                                        <p className='mt-1 text-sm font-black text-[var(--text-primary)]'>{formatSignedPercent(lossAnalyticsComparison.totalLostValuePct)}</p>
+                                                    </div>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Ciclo promedio</p>
+                                                        <p className='mt-1 text-sm font-black text-[var(--text-primary)]'>
+                                                            {lossAnalyticsComparison.avgCycleDaysDiff == null
+                                                                ? '—'
+                                                                : `${lossAnalyticsComparison.avgCycleDaysDiff > 0 ? '+' : ''}${Math.round(lossAnalyticsComparison.avgCycleDaysDiff)}d`}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)] mb-3'>Señales accionables</p>
+                                                {lossAnalyticsSignals.length === 0 ? (
+                                                    <p className='text-xs font-semibold text-[var(--text-secondary)]'>Sin señales destacadas con el filtro actual.</p>
+                                                ) : (
+                                                    <div className='space-y-2'>
+                                                        {lossAnalyticsSignals.map((signal, idx) => (
+                                                            <div key={`loss-signal-${idx}`} className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]'>
+                                                                {signal}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className='mt-4 rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
+                                        <div className='px-4 py-3 border-b border-white/10 flex items-center justify-between gap-2'>
+                                            <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Tendencia mensual (filtro actual)</p>
+                                            <span className='text-[10px] font-black uppercase tracking-[0.12em] text-white/40'>Últimos 6 meses</span>
+                                        </div>
+                                        <div className='p-3'>
+                                            {lossAnalyticsMonthlyTrend.length === 0 ? (
+                                                <div className='py-4 text-center text-white/55 font-bold text-sm'>Sin datos para tendencia.</div>
+                                            ) : (
+                                                <div className='space-y-2'>
+                                                    {(() => {
+                                                        const maxCount = Math.max(1, ...lossAnalyticsMonthlyTrend.map((row) => row.lostCount))
+                                                        return lossAnalyticsMonthlyTrend.map((row) => (
+                                                            <div key={row.monthKey} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5'>
+                                                                <div className='flex items-center justify-between gap-3 text-xs font-bold'>
+                                                                    <span className='text-white'>{row.label}</span>
+                                                                    <span className='text-white/70'>{row.lostCount} perdidos · {formatCurrency(row.totalLostValue)}</span>
+                                                                </div>
+                                                                <div className='mt-2 h-2 rounded-full bg-black/30 overflow-hidden'>
+                                                                    <div
+                                                                        className='h-full rounded-full'
+                                                                        style={{
+                                                                            width: `${Math.max(6, (row.lostCount / maxCount) * 100)}%`,
+                                                                            background: 'linear-gradient(90deg, rgba(251,113,133,0.9), rgba(244,63,94,0.75))'
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    })()}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 

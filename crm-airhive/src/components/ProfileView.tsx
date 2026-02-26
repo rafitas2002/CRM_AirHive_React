@@ -14,6 +14,7 @@ import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 import { formatLocalDateOnly } from '@/lib/dateUtils'
+import { getQuoteContributionLevelMeta, getQuoteLikesReceivedLevelMeta, isQuoteAttributedToUser } from '@/lib/quoteBadgeUtils'
 
 const BADGE_GRANT_ALLOWED_ADMINS = [
     'Jesus Gracia',
@@ -75,14 +76,6 @@ type ProfileViewCachePayload = {
     leaderBadgeCount: number
     allIndustries: { id: string, name: string, is_active?: boolean }[]
     catalogs: Record<string, any[]>
-}
-
-function normalizeComparableName(value: unknown) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase()
 }
 
 function getIndustryEvolutionLevels(
@@ -208,6 +201,15 @@ function getDealValueTierShortLabelByKey(key?: string | null) {
     if (value === 'value_5k_10k') return 'Mensualidad 5k'
     if (value === 'value_10k_100k' || value === 'value_10k_plus') return 'Mensualidad 10k'
     return null
+}
+
+function getNormalizedSpecialBadgeDisplayLabel(badge: any) {
+    const badgeType = String(badge?.badge_type || '')
+    if (badgeType === 'deal_value_tier') {
+        return getDealValueTierShortLabelByKey(badge?.badge_key)
+            || (typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial')
+    }
+    return typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
 }
 
 export default function ProfileView({ userId }: ProfileViewProps) {
@@ -387,34 +389,42 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 setDetails(d || {})
                 setBadges(userBadges || [])
 
-                const normalizedFullName = normalizeComparableName(profileRow?.full_name)
                 const profileName = String(profileRow?.full_name || '').trim()
 
                 // Optimized quote fetch: avoid full-table scan in settings profile.
                 const quoteQueries: Array<Promise<any>> = [
-                    (supabase
-                        .from('crm_quotes') as any)
-                        .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
-                        .is('deleted_at', null)
-                        .eq('contributed_by', userId)
-                ]
+                        (supabase
+                            .from('crm_quotes') as any)
+                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote')
+                            .is('deleted_at', null)
+                            .eq('contributed_by', userId)
+                    ]
 
                 if (profileName) {
                     quoteQueries.push(
                         (supabase
                             .from('crm_quotes') as any)
-                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote')
                             .is('deleted_at', null)
                             .eq('contributed_by_name', profileName)
                     )
                     quoteQueries.push(
                         (supabase
                             .from('crm_quotes') as any)
-                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
+                            .select('id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote')
                             .is('deleted_at', null)
                             .eq('quote_author', profileName)
                     )
                 }
+
+                // Fallback broad scan (quotes table is small): catches accent/casing mismatches
+                // like "Jesús" vs "Jesus" and source strings "Air Hive" vs "AirHive".
+                quoteQueries.push(
+                    (supabase
+                        .from('crm_quotes') as any)
+                        .select('id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote')
+                        .is('deleted_at', null)
+                )
 
                 const quoteResponses = await Promise.all(quoteQueries)
                 const quoteMap = new Map<number, any>()
@@ -426,13 +436,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     }
                 }
                 const quoteRows = Array.from(quoteMap.values()) as any[]
-                const matchedQuoteRows = quoteRows.filter((q: any) => {
-                    if (String(q?.contributed_by || '') === String(userId)) return true
-                    if (normalizeComparableName(q?.contributed_by_name) === normalizedFullName) return true
-                    const authorMatches = normalizeComparableName(q?.quote_author) === normalizedFullName
-                    const ownLike = String(q?.quote_source || '').toLowerCase().includes('interna en airhive')
-                    return authorMatches && ownLike
-                })
+                const matchedQuoteRows = quoteRows.filter((q: any) => isQuoteAttributedToUser(q, String(userId || ''), profileName))
             const matchedQuoteIds = matchedQuoteRows
                 .map((q: any) => Number(q?.id))
                 .filter((id: number) => Number.isFinite(id))
@@ -448,22 +452,8 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                 quoteLikesProgress = (likesRows || []).length
             }
 
-            const getContributionLevel = (progress: number) => {
-                if (progress >= 25) return { level: 4, next: null as number | null }
-                if (progress >= 10) return { level: 3, next: 25 }
-                if (progress >= 5) return { level: 2, next: 10 }
-                if (progress >= 1) return { level: 1, next: 5 }
-                return { level: 0, next: 1 }
-            }
-            const getQuoteLikesLevel = (progress: number) => {
-                if (progress >= 50) return { level: 3, next: null as number | null }
-                if (progress >= 25) return { level: 2, next: 50 }
-                if (progress >= 10) return { level: 1, next: 25 }
-                return { level: 0, next: 10 }
-            }
-
-            const contributionLevelMeta = getContributionLevel(quoteContributionProgress)
-            const quoteLikesLevelMeta = getQuoteLikesLevel(quoteLikesProgress)
+            const contributionLevelMeta = getQuoteContributionLevelMeta(quoteContributionProgress)
+            const quoteLikesLevelMeta = getQuoteLikesReceivedLevelMeta(quoteLikesProgress)
             const getThresholdLevelMeta = (progress: number, thresholds: number[]) => {
                 const clean = thresholds.filter((t) => Number.isFinite(t) && t > 0).sort((a, b) => a - b)
                 let level = 0
@@ -923,7 +913,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         <div className='grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2.5'>
                             {summarySpecialBadges.map((badge: any, index: number) => (
                                 (() => {
-                                    const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
+                                    const safeLabel = getNormalizedSpecialBadgeDisplayLabel(badge)
                                     const typeMeta = getSpecialBadgeTypeMeta(
                                         String(badge?.badge_type || 'special'),
                                         safeLabel,
@@ -951,6 +941,8 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                                                     <BadgeMedallion
                                                         icon={Icon}
                                                         centerClassName={typeMeta.containerClass}
+                                                        matchRingClassName={String((typeMeta as any)?.matchRingClassName || '') || undefined}
+                                                        clipCenterFillToCoreInterior={Boolean((typeMeta as any)?.clipCenterFillToCoreInterior)}
                                                         iconClassName={typeMeta.iconClass}
                                                         overlayText={(isSeniorityBadge || isStreakBadge) ? null : badgeOverlayNumber}
                                                         footerBubbleText={
@@ -1277,14 +1269,7 @@ function AllBadgesModal({
                 </div>
 
                 <div className='p-6 overflow-y-auto custom-scrollbar space-y-4 bg-[var(--card-bg)]'>
-                    <div className='flex flex-wrap items-center justify-between gap-3'>
-                        <div className='flex flex-wrap gap-2 text-[11px]'>
-                            {badgeLevels.map((lvl) => (
-                                <span key={lvl.level} className='px-2.5 py-1 rounded-full border font-bold bg-[var(--hover-bg)] border-[var(--card-border)] text-[var(--text-secondary)]'>
-                                    Nivel {lvl.level}: {lvl.min_closures}
-                                </span>
-                            ))}
-                        </div>
+                    <div className='flex flex-wrap items-center justify-end gap-3'>
                         <div className='inline-flex p-1 rounded-xl border bg-[var(--hover-bg)] border-[var(--card-border)] gap-1'>
                             <button
                                 type='button'
@@ -1430,7 +1415,7 @@ function AllBadgesModal({
                                     </div>
                                     <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                             {group.items.map((badge, index) => {
-                                const safeLabel = typeof badge.badge_label === 'string' ? badge.badge_label : 'Badge Especial'
+                                const safeLabel = getNormalizedSpecialBadgeDisplayLabel(badge)
                                 const typeMeta = getSpecialBadgeTypeMeta(
                                     badge.badge_type,
                                     safeLabel,
@@ -1474,6 +1459,8 @@ function AllBadgesModal({
                                                         locked={!unlocked}
                                                         icon={Icon}
                                                         centerClassName={typeMeta.containerClass}
+                                                        matchRingClassName={String((typeMeta as any)?.matchRingClassName || '') || undefined}
+                                                        clipCenterFillToCoreInterior={Boolean((typeMeta as any)?.clipCenterFillToCoreInterior)}
                                                         iconClassName={`${typeMeta.iconClass} ${unlocked ? 'opacity-100' : 'opacity-90'}`}
                                                         overlayText={(isSeniorityBadge || isStreakBadge) ? null : badgeOverlayNumber}
                                                         footerBubbleText={
@@ -1751,7 +1738,7 @@ function IndustryBadgeEvolutionCard({
 }
 
 function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
-    const safeLabel = typeof badge?.badge_label === 'string' ? badge.badge_label : 'Badge especial'
+    const safeLabel = getNormalizedSpecialBadgeDisplayLabel(badge)
     const typeMeta = getSpecialBadgeTypeMeta(
         String(badge?.badge_type || 'special'),
         safeLabel,
@@ -1769,8 +1756,12 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
     const isAllCompanySizesBadge = String(badge?.badge_type || '') === 'all_company_sizes'
     const isDealValueBadge = String(badge?.badge_type || '') === 'deal_value_tier'
     const isMultiIndustryBadge = String(badge?.badge_type || '') === 'multi_industry'
+    const isQuoteContributionBadge = String(badge?.badge_type || '') === 'quote_contribution'
+    const isQuoteLikesBadge = String(badge?.badge_type || '') === 'quote_likes_received'
+    const shouldClipSpecialFillToCoreInterior = Boolean((typeMeta as any)?.clipCenterFillToCoreInterior)
+    const specialMatchRingClassName = String((typeMeta as any)?.matchRingClassName || '') || undefined
     const closureHeaderVisual = isClosureBadge ? getClosureMilestoneBadgeLevelMedallionVisual(Number(badge?.level || 1)) : null
-    const generic8TierHeaderVisual = (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge)
+    const generic8TierHeaderVisual = (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge || isQuoteContributionBadge || isQuoteLikesBadge)
         ? getGenericEightTierBadgeLevelMedallionVisual(
             Number(badge?.level || 1),
             getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
@@ -1785,6 +1776,8 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                         locked={!unlocked}
                         icon={typeMeta.icon}
                         centerClassName={typeMeta.containerClass}
+                        matchRingClassName={specialMatchRingClassName}
+                        clipCenterFillToCoreInterior={shouldClipSpecialFillToCoreInterior}
                         iconClassName={typeMeta.iconClass}
                         overlayText={(isSeniorityBadge || isClosingStreakBadge) ? null : getSpecialBadgeOverlayNumber(badge)}
                         footerBubbleText={(isSeniorityBadge || isClosingStreakBadge) ? String(getSpecialBadgeOverlayNumber(badge) ?? '') : null}
@@ -1813,13 +1806,15 @@ function SpecialBadgeEvolutionCard({ badge }: { badge: any }) {
                 currentProgress={Number(badge?.progress_count || 0)}
                 icon={typeMeta.icon}
                 centerClassName={typeMeta.containerClass}
+                matchRingClassName={specialMatchRingClassName}
+                clipCenterFillToCoreInterior={shouldClipSpecialFillToCoreInterior}
                 iconClassName={typeMeta.iconClass}
                 ringStyle='match'
                 coreBorderColorClassName={String((typeMeta as any)?.coreBorderColorClassName || '') || (shouldUseWhiteCoreBorderForSpecialBadgeType(String(badge?.badge_type || '')) ? '!border-white/90' : '')}
                 getNodeMedallionVisual={
                     isClosureBadge
                         ? (node) => getClosureMilestoneBadgeLevelMedallionVisual(node.level)
-                        : (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge)
+                        : (isCompanySizeBadge || isAllCompanySizesBadge || isDealValueBadge || isMultiIndustryBadge || isClosingStreakBadge || isMeetingCompletedBadge || isLeadRegisteredBadge || isQuoteContributionBadge || isQuoteLikesBadge)
                             ? (node) => getGenericEightTierBadgeLevelMedallionVisual(
                                 node.level,
                                 getSpecialBadgeAccentColor(String(badge?.badge_type || ''), String(badge?.badge_key || ''), String(badge?.badge_label || ''))
@@ -1837,6 +1832,8 @@ function BadgeLevelEvolutionTrack({
     currentProgress,
     icon,
     centerClassName,
+    matchRingClassName,
+    clipCenterFillToCoreInterior = false,
     iconClassName,
     ringStyle = 'match',
     coreBorderColorClassName,
@@ -1848,6 +1845,8 @@ function BadgeLevelEvolutionTrack({
     currentProgress: number
     icon: any
     centerClassName: string
+    matchRingClassName?: string
+    clipCenterFillToCoreInterior?: boolean
     iconClassName: string
     ringStyle?: 'match' | 'gold' | 'bronze' | 'silver' | 'royal' | 'royal_dark' | 'royal_dark_vivid' | 'royal_gold' | 'royal_purple'
     coreBorderColorClassName?: string
@@ -1957,6 +1956,8 @@ function BadgeLevelEvolutionTrack({
                                                 evo
                                                 icon={icon}
                                                 centerClassName={`${centerClassName} ${achieved ? medallionStateClass : ''}`}
+                                                matchRingClassName={matchRingClassName}
+                                                clipCenterFillToCoreInterior={clipCenterFillToCoreInterior}
                                                 iconClassName={iconClassName}
                                                 ringStyle={nodeMedallionVisual?.ringStyle || evoStyle.ringStyle || ringStyle}
                                                 coreBorderColorClassName={effectiveCoreBorderColorClassName}
@@ -2150,16 +2151,25 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
     if (type === 'quote_contribution') {
         return [
             { level: 1, threshold: 1, caption: '1 frase' },
-            { level: 2, threshold: 5, caption: '5 frases' },
-            { level: 3, threshold: 10, caption: '10 frases' },
-            { level: 4, threshold: 25, caption: '25 frases' }
+            { level: 2, threshold: 3, caption: '3 frases' },
+            { level: 3, threshold: 5, caption: '5 frases' },
+            { level: 4, threshold: 8, caption: '8 frases' },
+            { level: 5, threshold: 10, caption: '10 frases' },
+            { level: 6, threshold: 12, caption: '12 frases' },
+            { level: 7, threshold: 15, caption: '15 frases' },
+            { level: 8, threshold: 20, caption: '20 frases' }
         ]
     }
     if (type === 'quote_likes_received') {
         return [
-            { level: 1, threshold: 10, caption: '10 likes' },
-            { level: 2, threshold: 25, caption: '25 likes' },
-            { level: 3, threshold: 50, caption: '50 likes' }
+            { level: 1, threshold: 1, caption: '1 like' },
+            { level: 2, threshold: 5, caption: '5 likes' },
+            { level: 3, threshold: 15, caption: '15 likes' },
+            { level: 4, threshold: 25, caption: '25 likes' },
+            { level: 5, threshold: 50, caption: '50 likes' },
+            { level: 6, threshold: 75, caption: '75 likes' },
+            { level: 7, threshold: 100, caption: '100 likes' },
+            { level: 8, threshold: 200, caption: '200 likes' }
         ]
     }
     if (type === 'closure_milestone') {
@@ -2288,8 +2298,10 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null, badge
             title: shared.title,
             icon: shared.icon,
             containerClass: `${metallicContainer} ${shared.centerGradientClass}`,
+            matchRingClassName: shared.matchRingClassName ? `${metallicContainer} ${shared.matchRingClassName}` : undefined,
             iconClass: shared.iconClassName,
-            coreBorderColorClassName: shared.coreBorderColorClassName
+            coreBorderColorClassName: shared.coreBorderColorClassName,
+            clipCenterFillToCoreInterior: shared.clipCenterFillToCoreInterior
         }
     }
 
@@ -2537,7 +2549,7 @@ function getSpecialDefaultThreshold(badgeType?: string) {
     if (badgeType === 'race_total_trophies') return 10
     if (badgeType === 'race_points_leader') return 1
     if (badgeType === 'quote_contribution') return 1
-    if (badgeType === 'quote_likes_received') return 10
+    if (badgeType === 'quote_likes_received') return 1
     if (badgeType === 'admin_granted') return 1
     if (badgeType === 'badge_leader') return 1
     return 1
@@ -2896,7 +2908,7 @@ function buildSpecialBadgeCatalog(
             badge_label: 'Frases con Likes',
             progress_count: 0,
             level: 0,
-            next_level_threshold: 10
+            next_level_threshold: 1
         },
         {
             id: 'virtual-admin-granted',
@@ -3183,6 +3195,8 @@ function getSpecialBadgeAccentColor(badgeType: string, badgeKey?: string | null,
     if (badgeType === 'multi_industry') return '#d946ef'
     if (badgeType === 'meeting_completed') return '#7c3aed'
     if (badgeType === 'closing_streak') return '#f97316'
+    if (badgeType === 'quote_contribution') return '#2563eb'
+    if (badgeType === 'quote_likes_received') return '#0ea5e9'
     if (badgeType === 'deal_value_tier') {
         const key = String(badgeKey || '')
         if (key === 'value_10k_100k' || key === 'value_10k_plus') return '#7c3aed'

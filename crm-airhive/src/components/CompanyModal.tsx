@@ -4,14 +4,25 @@ import { CSSProperties, useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
-import { getCatalogs } from '@/app/actions/catalogs'
+import { ensureCompanyLocationCatalogItem, getCatalogs } from '@/app/actions/catalogs'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { MONTERREY_MUNICIPALITY_OPTIONS, getLocationBaseForSelector, getSavedLocationCatalogLabels, normalizeLocationLabel, resolveLocationAgainstExistingLabels } from '@/lib/locationUtils'
+import {
+    COMPANY_SIZE_CONFIDENCE_OPTIONS,
+    COMPANY_SIZE_SOURCE_OPTIONS,
+    getCompanySizeGuide,
+    getCompanySizeTierVisuals,
+    normalizeCompanySizeEvidenceText
+} from '@/lib/companySizeUtils'
 
 export type CompanyData = {
     id?: string
     nombre: string
     tamano: number // 1-5
+    tamano_confianza?: string | null
+    tamano_fuente?: string | null
+    tamano_senal_principal?: string | null
     ubicacion: string
     logo_url: string
     industria: string
@@ -49,6 +60,9 @@ export default function CompanyModal({
     const [formData, setFormData] = useState<CompanyData>({
         nombre: '',
         tamano: 1,
+        tamano_confianza: 'media',
+        tamano_fuente: 'inferencia_comercial',
+        tamano_senal_principal: '',
         ubicacion: '',
         logo_url: '',
         industria: '',
@@ -84,6 +98,9 @@ export default function CompanyModal({
             id: raw?.id,
             nombre: String(raw?.nombre || ''),
             tamano: Number(raw?.tamano || 1),
+            tamano_confianza: raw?.tamano_confianza || 'media',
+            tamano_fuente: raw?.tamano_fuente || 'inferencia_comercial',
+            tamano_senal_principal: String(raw?.tamano_senal_principal || ''),
             ubicacion: String(raw?.ubicacion || ''),
             logo_url: String(raw?.logo_url || ''),
             industria: String(raw?.industria || ''),
@@ -102,6 +119,9 @@ export default function CompanyModal({
             setFormData({
                 nombre: '',
                 tamano: 1,
+                tamano_confianza: 'media',
+                tamano_fuente: 'inferencia_comercial',
+                tamano_senal_principal: '',
                 ubicacion: '',
                 logo_url: '',
                 industria: '',
@@ -199,14 +219,15 @@ export default function CompanyModal({
 
     // Location helpers
     const getLocationBase = (loc: string) => {
-        if (!loc) return ''
-        const base = loc.split(', ')[0]
-        const mainCities = ['Monterrey', 'Guadalajara', 'CDMX', 'Querétaro']
-        if (mainCities.includes(base)) return base
-        return 'Otra'
+        return getLocationBaseForSelector(loc)
     }
 
     const handleLocationBaseChange = (base: string) => {
+        const savedLocationOptions = getSavedLocationCatalogLabels((catalogs.company_locations || []) as any[])
+        if (savedLocationOptions.includes(base)) {
+            setFormData({ ...formData, ubicacion: base })
+            return
+        }
         if (base === 'Otra') {
             setFormData({ ...formData, ubicacion: 'Otra' })
         } else if (base === 'Monterrey') {
@@ -247,6 +268,53 @@ export default function CompanyModal({
         e.preventDefault()
         setIsSubmitting(true)
         try {
+            const selfCompanyId = String(formData.id || initialData?.id || '')
+            const catalogLocationLabels = ((catalogs.company_locations || []) as any[])
+                .map((row) => String(row?.name || ''))
+                .filter(Boolean)
+            const localCompanyRows = (companies || []).map((company) => ({
+                id: String(company.id || ''),
+                ubicacion: company.ubicacion || ''
+            }))
+
+            const companyRowsForLocationValidation = localCompanyRows.length > 0
+                ? localCompanyRows
+                : await (async () => {
+                    const { data, error } = await (supabase.from('empresas') as any)
+                        .select('id, ubicacion')
+                        .not('ubicacion', 'is', null)
+                    if (error) {
+                        console.warn('No se pudo cargar ubicaciones para validar duplicados:', error)
+                        return [] as Array<{ id: string, ubicacion: string }>
+                    }
+                    return ((data || []) as any[]).map((row) => ({
+                        id: String(row?.id || ''),
+                        ubicacion: String(row?.ubicacion || '')
+                    }))
+                })()
+
+            const { data: preLeadRows, error: preLeadRowsError } = await (supabase.from('pre_leads') as any)
+                .select('id, ubicacion')
+                .not('ubicacion', 'is', null)
+            if (preLeadRowsError) {
+                console.warn('No se pudo cargar ubicaciones de pre-leads para validar duplicados:', preLeadRowsError)
+            }
+
+            const existingLocationLabels = companyRowsForLocationValidation
+                .filter((row) => !(selfCompanyId && row.id === selfCompanyId))
+                .map((row) => row.ubicacion)
+                .concat(((preLeadRows || []) as any[]).map((row) => String(row?.ubicacion || '')).filter(Boolean))
+                .concat(catalogLocationLabels)
+
+            const locationResolution = resolveLocationAgainstExistingLabels(formData.ubicacion, existingLocationLabels)
+            if (locationResolution.duplicateVariantOf) {
+                alert(
+                    `Ubicación duplicada detectada.\n\n` +
+                    `Ya existe registrada como: "${locationResolution.duplicateVariantOf}".\n` +
+                    `Se guardará usando ese formato para evitar duplicados en filtros.`
+                )
+            }
+
             const fallbackPrimary = (formData.industria_ids || [])[0] || ''
             const primaryIndustryId = formData.industria_id || fallbackPrimary
             const mergedIndustryIds = Array.from(new Set([
@@ -260,11 +328,22 @@ export default function CompanyModal({
 
             await onSave({
                 ...formData,
+                ubicacion: locationResolution.valueToPersist,
+                tamano_confianza: normalizeCompanySizeEvidenceText(formData.tamano_confianza),
+                tamano_fuente: normalizeCompanySizeEvidenceText(formData.tamano_fuente),
+                tamano_senal_principal: normalizeCompanySizeEvidenceText(formData.tamano_senal_principal),
                 industria_id: primaryIndustryId,
                 industria: primaryIndustryName,
                 industria_ids: mergedIndustryIds,
                 industrias: mergedIndustryNames
             })
+
+            if (locationResolution.valueToPersist) {
+                const locationCatalogRes = await ensureCompanyLocationCatalogItem(locationResolution.valueToPersist)
+                if (!locationCatalogRes.success) {
+                    console.warn('No se pudo guardar ubicación en catálogo:', locationCatalogRes.error)
+                }
+            }
             onClose()
         } catch (error) {
             console.error('Error saving company:', error)
@@ -274,6 +353,14 @@ export default function CompanyModal({
     }
 
     if (!isOpen) return null
+
+    const savedLocationOptions = getSavedLocationCatalogLabels((catalogs.company_locations || []) as any[])
+    const companySizeTiers = getCompanySizeTierVisuals((catalogs.company_sizes || []) as any[])
+    const selectedSizeGuide = getCompanySizeGuide(formData.tamano)
+    const normalizedCurrentLocation = normalizeLocationLabel(formData.ubicacion)
+    const locationSelectorValue = normalizedCurrentLocation && savedLocationOptions.includes(normalizedCurrentLocation)
+        ? normalizedCurrentLocation
+        : getLocationBase(formData.ubicacion)
 
     return (
         <div className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
@@ -453,7 +540,7 @@ export default function CompanyModal({
                                     <div className='space-y-1.5'>
                                         <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase'>Ciudad / Estado</label>
                                         <select
-                                            value={getLocationBase(formData.ubicacion)}
+                                            value={locationSelectorValue}
                                             onChange={(e) => handleLocationBaseChange(e.target.value)}
                                             className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                         >
@@ -462,6 +549,15 @@ export default function CompanyModal({
                                             <option value="Guadalajara">Guadalajara</option>
                                             <option value="CDMX">Ciudad de México</option>
                                             <option value="Querétaro">Querétaro</option>
+                                            {savedLocationOptions.length > 0 && (
+                                                <optgroup label="Ubicaciones guardadas">
+                                                    {savedLocationOptions.map((label) => (
+                                                        <option key={label} value={label}>
+                                                            {label}
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
                                             <option value="Otra">Otra (Manual)...</option>
                                         </select>
                                     </div>
@@ -475,14 +571,11 @@ export default function CompanyModal({
                                                 className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                             >
                                                 <option value="">Seleccionar Municipio...</option>
-                                                <option value="San Pedro Garza García">San Pedro</option>
-                                                <option value="Santa Catarina">Santa Catarina</option>
-                                                <option value="Monterrey">Monterrey (Centro)</option>
-                                                <option value="Guadalupe">Guadalupe</option>
-                                                <option value="San Nicolás">San Nicolás</option>
-                                                <option value="Escobedo">Escobedo</option>
-                                                <option value="Apodaca">Apodaca</option>
-                                                <option value="García">García</option>
+                                                {MONTERREY_MUNICIPALITY_OPTIONS.map((municipality) => (
+                                                    <option key={municipality.value} value={municipality.value}>
+                                                        {municipality.label}
+                                                    </option>
+                                                ))}
                                             </select>
                                         </div>
                                     )}
@@ -509,13 +602,7 @@ export default function CompanyModal({
                                     Categoría de Tamaño
                                 </label>
                                 <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
-                                    {[
-                                        { id: 1, name: 'Micro', color: '#10b981' },
-                                        { id: 2, name: 'Pequeña', color: '#3b82f6' },
-                                        { id: 3, name: 'Mediana', color: '#6366f1' },
-                                        { id: 4, name: 'Grande', color: '#f59e0b' },
-                                        { id: 5, name: 'Corporativo', color: '#8b5cf6' }
-                                    ].map((tier) => (
+                                    {companySizeTiers.map((tier) => (
                                         <button
                                             key={tier.id}
                                             type='button'
@@ -552,6 +639,98 @@ export default function CompanyModal({
                                             </span>
                                         </button>
                                     ))}
+                                </div>
+
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4 space-y-3'>
+                                    <div className='flex flex-wrap items-center gap-2'>
+                                        <span className='text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]'>
+                                            Guía anti-subjetividad
+                                        </span>
+                                        <span className='text-[10px] font-bold px-2 py-1 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)]'>
+                                            {selectedSizeGuide.title}
+                                        </span>
+                                    </div>
+                                    <p className='text-xs text-[var(--text-secondary)]'>
+                                        Clasifica por señales observables (estructura, cobertura, complejidad operativa) y no por intuición.
+                                    </p>
+                                    <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
+                                        {selectedSizeGuide.signals.map((signal) => (
+                                            <div key={signal} className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] leading-snug'>
+                                                {signal}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className='rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300'>
+                                        {selectedSizeGuide.warning}
+                                    </div>
+                                </div>
+
+                                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Fuente del Tamaño
+                                        </label>
+                                        <select
+                                            value={formData.tamano_fuente || 'inferencia_comercial'}
+                                            onChange={(e) => setFormData({ ...formData, tamano_fuente: e.target.value })}
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                        >
+                                            {COMPANY_SIZE_SOURCE_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            {COMPANY_SIZE_SOURCE_OPTIONS.find((option) => option.value === (formData.tamano_fuente || 'inferencia_comercial'))?.description}
+                                        </p>
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Confianza
+                                        </label>
+                                        <div className='grid grid-cols-3 gap-2'>
+                                            {COMPANY_SIZE_CONFIDENCE_OPTIONS.map((option) => {
+                                                const selected = (formData.tamano_confianza || 'media') === option.value
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type='button'
+                                                        onClick={() => setFormData({ ...formData, tamano_confianza: option.value })}
+                                                        className={`px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all ${selected
+                                                            ? 'text-white border-transparent shadow-md'
+                                                            : 'border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                                            }`}
+                                                        style={selected ? { backgroundColor: option.color } : undefined}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            {COMPANY_SIZE_CONFIDENCE_OPTIONS.find((option) => option.value === (formData.tamano_confianza || 'media'))?.description}
+                                        </p>
+                                    </div>
+
+                                    <div className='md:col-span-2 space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Señal principal usada
+                                        </label>
+                                        <input
+                                            type='text'
+                                            maxLength={280}
+                                            value={formData.tamano_senal_principal || ''}
+                                            onChange={(e) => setFormData({ ...formData, tamano_senal_principal: e.target.value })}
+                                            placeholder='Ej. 4 sucursales + operación en 3 ciudades + organigrama visible en web'
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                        />
+                                        <div className='flex items-center justify-between text-[11px] text-[var(--text-secondary)]'>
+                                            <span>Documenta la evidencia observable para que otro vendedor clasifique igual.</span>
+                                            <span>{(formData.tamano_senal_principal || '').length}/280</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

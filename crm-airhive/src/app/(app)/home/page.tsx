@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
     LayoutDashboard,
     TrendingUp,
+    TrendingDown,
     Target,
     AlertCircle,
     ChevronRight,
@@ -26,6 +27,10 @@ import MyTasksWidget from '@/components/MyTasksWidget'
 import { rankRaceItems } from '@/lib/raceRanking'
 import { computeAdjustedMonthlyRaceLeadValue, computeSellerForecastRaceReliability } from '@/lib/forecastRaceAdjustments'
 import { getAdminExecutiveDashboardSupportData } from '@/app/actions/dashboard'
+import { getLeadLossExecutiveSummarySupportData, type LeadLossExecutiveSummaryPayload } from '@/app/actions/lossAnalytics'
+import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
+import { useTheme } from '@/lib/ThemeContext'
+import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type ForecastReliabilityMetric = Database['public']['Tables']['seller_forecast_reliability_metrics']['Row']
@@ -109,7 +114,17 @@ function formatUserDisplayName(raw?: string | null) {
     return value
 }
 
+const HOME_EXEC_METRICS = {
+    activeCompanies: getCommercialMetricDefinition('active_companies'),
+    monthlyWonClosures: getCommercialMetricDefinition('monthly_won_closures'),
+    adjustedForecastAmount: getCommercialMetricDefinition('adjusted_forecast_amount'),
+    monthlyConversionRate: getCommercialMetricDefinition('monthly_conversion_rate'),
+    avgCycleDaysWon: getCommercialMetricDefinition('avg_cycle_days_won'),
+    sellersAtRisk7d: getCommercialMetricDefinition('sellers_at_risk_7d')
+} as const
+
 function AdminDashboardView({ displayName }: { displayName: string }) {
+    const { theme } = useTheme()
     const [leads, setLeads] = useState<Lead[]>([])
     const [history, setHistory] = useState<History[]>([])
     const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, ForecastReliabilityMetric>>({})
@@ -117,8 +132,16 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
     const [crmEvents, setCrmEvents] = useState<CrmEventRow[]>([])
     const [activeCompaniesCountSupport, setActiveCompaniesCountSupport] = useState<number | null>(null)
     const [executiveSupportWarning, setExecutiveSupportWarning] = useState<string | null>(null)
+    const [lossExecutiveSummary, setLossExecutiveSummary] = useState<LeadLossExecutiveSummaryPayload | null>(null)
+    const [lossExecutiveWarning, setLossExecutiveWarning] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
+
+    const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
+    const toneChipClassName = 'border shadow-sm [background:var(--tone-chip-bg)] [border-color:var(--tone-chip-border)] [color:var(--tone-chip-text)]'
+    const toneChipHoverButtonClassName = `${toneChipClassName} transition-all cursor-pointer hover:-translate-y-px hover:[background:var(--tone-chip-hover-bg)] hover:[border-color:var(--tone-chip-hover-border)] hover:[color:var(--tone-chip-hover-text)] hover:[box-shadow:0_10px_22px_-14px_var(--tone-shadow)] active:translate-y-0`
+    const tonePanelClassName = 'border [background:var(--tone-panel-bg)] [border-color:var(--tone-panel-border)] [color:var(--tone-panel-text)]'
+    const tonePanelSoftClassName = 'border [background:var(--tone-panel-soft-bg)] [border-color:var(--tone-panel-soft-border)] [color:var(--tone-panel-soft-text)]'
 
     useEffect(() => {
         const fetchData = async () => {
@@ -128,12 +151,14 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     { data: leadData },
                     { data: histData },
                     { data: reliabilityData },
-                    supportDataRes
+                    supportDataRes,
+                    lossExecutiveRes
                 ] = await Promise.all([
                     supabase.from('clientes').select('*'),
                     (supabase.from('lead_history') as any).select('*').eq('field_name', 'probabilidad').order('created_at', { ascending: false }),
                     (supabase.from('seller_forecast_reliability_metrics') as any).select('*'),
-                    getAdminExecutiveDashboardSupportData()
+                    getAdminExecutiveDashboardSupportData(),
+                    getLeadLossExecutiveSummarySupportData('month')
                 ])
 
                 if (leadData) setLeads(leadData)
@@ -167,12 +192,22 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     setActiveCompaniesCountSupport(null)
                     setExecutiveSupportWarning(supportDataRes?.error || 'Sin acceso al soporte ejecutivo (eventos/perfiles)')
                 }
+
+                if (lossExecutiveRes?.success) {
+                    setLossExecutiveSummary(lossExecutiveRes.data)
+                    setLossExecutiveWarning(null)
+                } else {
+                    setLossExecutiveSummary(null)
+                    setLossExecutiveWarning(lossExecutiveRes?.error || 'Sin acceso a analytics de pérdidas')
+                }
             } catch (error: any) {
                 console.error('Error loading admin dashboard:', error)
                 setSellerProfilesById({})
                 setCrmEvents([])
                 setActiveCompaniesCountSupport(null)
                 setExecutiveSupportWarning(error?.message || 'Fallo al cargar señales ejecutivas')
+                setLossExecutiveSummary(null)
+                setLossExecutiveWarning(error?.message || 'Fallo al cargar analytics de pérdidas')
             } finally {
                 setLoading(false)
             }
@@ -532,90 +567,88 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     </div>
 
                     {executiveSupportWarning && (
-                        <div className='rounded-2xl border px-4 py-3 text-xs font-semibold'
-                            style={{
-                                background: 'color-mix(in srgb, #f59e0b 8%, var(--card-bg))',
-                                borderColor: 'color-mix(in srgb, #f59e0b 22%, var(--card-border))',
-                                color: 'var(--text-secondary)'
-                            }}>
+                        <div
+                            className={`rounded-2xl px-4 py-3 text-xs font-semibold ${tonePanelClassName}`}
+                            style={toneVars('amber')}
+                        >
                             Algunas señales ejecutivas (empresas activas / vendedores en riesgo) no están disponibles en esta sesión: {executiveSupportWarning}
                         </div>
                     )}
 
                     <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'>
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.activeCompanies.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Empresas activas</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.activeCompanies.label}</p>
                                 <Building2 size={16} className='text-emerald-400' />
                             </div>
                             <p className='text-3xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
                                 {stats.executive.activeCompaniesCount == null ? '—' : stats.executive.activeCompaniesCount}
                             </p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                Con proyecto implementado real
+                                {HOME_EXEC_METRICS.activeCompanies.uiHint}
                             </p>
                         </div>
 
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.monthlyWonClosures.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Cierres del mes</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.monthlyWonClosures.label}</p>
                                 <Target size={16} className='text-emerald-400' />
                             </div>
                             <p className='text-3xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>{stats.executive.monthlyWonClosuresCount}</p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                Cerrado ganado con fecha real
+                                {HOME_EXEC_METRICS.monthlyWonClosures.uiHint}
                             </p>
                         </div>
 
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.adjustedForecastAmount.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Forecast ajustado</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.adjustedForecastAmount.label}</p>
                                 <Zap size={16} className='text-cyan-300' />
                             </div>
                             <p className='text-3xl font-black tabular-nums truncate' style={{ color: 'var(--text-primary)' }}>
                                 ${stats.executive.adjustedForecastAmount.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                             </p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                Negociación ponderada por confiabilidad
+                                {HOME_EXEC_METRICS.adjustedForecastAmount.uiHint}
                             </p>
                         </div>
 
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.monthlyConversionRate.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Tasa de conversión</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.monthlyConversionRate.label}</p>
                                 <Percent size={16} className='text-blue-300' />
                             </div>
                             <p className='text-3xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
                                 {stats.executive.conversionRate.toFixed(0)}%
                             </p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                Ganados / cerrados del mes
+                                {HOME_EXEC_METRICS.monthlyConversionRate.uiHint}
                             </p>
                         </div>
 
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.avgCycleDaysWon.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Ciclo promedio</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.avgCycleDaysWon.label}</p>
                                 <Clock3 size={16} className='text-amber-300' />
                             </div>
                             <p className='text-3xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
                                 {stats.executive.avgCycleDays > 0 ? `${Math.round(stats.executive.avgCycleDays)}d` : '—'}
                             </p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                De alta a cierre ganado (mes)
+                                {HOME_EXEC_METRICS.avgCycleDaysWon.uiHint}
                             </p>
                         </div>
 
-                        <div className='rounded-[24px] border p-5 shadow-sm' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className='rounded-[24px] border p-5 shadow-sm' title={HOME_EXEC_METRICS.sellersAtRisk7d.shortHelp} style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                             <div className='flex items-center justify-between mb-2'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>Vendedores en riesgo</p>
+                                <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>{HOME_EXEC_METRICS.sellersAtRisk7d.label}</p>
                                 <ShieldAlert size={16} className={(stats.executive.sellersAtRiskCount ?? 0) > 0 ? 'text-rose-300' : 'text-emerald-300'} />
                             </div>
                             <p className='text-3xl font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
                                 {stats.executive.sellersAtRiskCount == null ? '—' : stats.executive.sellersAtRiskCount}
                             </p>
                             <p className='text-[11px] font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                Sin actividad operativa en 7 días
+                                {HOME_EXEC_METRICS.sellersAtRisk7d.uiHint}
                             </p>
                         </div>
                     </div>
@@ -704,7 +737,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                                 <td className='px-6 py-4 text-sm font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
                                                     {row.avgCycleDays == null ? '—' : `${Math.round(row.avgCycleDays)}d`}
                                                 </td>
-                                                <td className='px-6 py-4 text-sm font-black tabular-nums text-cyan-300'>
+                                                <td className='px-6 py-4 text-sm font-black tabular-nums text-cyan-700 dark:text-cyan-300'>
                                                     ${row.forecastAdjusted.toLocaleString('es-MX', { maximumFractionDigits: 0 })}
                                                 </td>
                                             </tr>
@@ -725,36 +758,42 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                 <div>
                                     <h4 className='text-sm font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Señales de Dirección</h4>
                                     <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
-                                        Riesgo operativo y calidad de captura
+                                        Riesgo, calidad y pérdidas
                                     </p>
                                 </div>
-                                <ShieldAlert size={16} className={(stats.executive.sellersAtRiskCount ?? 0) > 0 ? 'text-rose-300' : 'text-emerald-300'} />
+                                <ShieldAlert size={16} className={(stats.executive.sellersAtRiskCount ?? 0) > 0 ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-500 dark:text-emerald-300'} />
                             </div>
 
                             <div className='p-6 space-y-5'>
-                                <div className='rounded-2xl border p-4' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <div className={`rounded-2xl p-4 ${tonePanelSoftClassName}`} style={toneVars('rose')}>
                                     <div className='flex items-center justify-between gap-3 mb-2'>
                                         <p className='text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
                                             Vendedores en riesgo (7d)
                                         </p>
-                                        <span className='text-xs font-black tabular-nums' style={{ color: (stats.executive.sellersAtRiskCount ?? 0) > 0 ? '#fda4af' : '#86efac' }}>
+                                        <span
+                                            className='text-xs font-black tabular-nums [color:var(--tone-chip-text)]'
+                                            style={toneVars((stats.executive.sellersAtRiskCount ?? 0) > 0 ? 'rose' : 'emerald')}
+                                        >
                                             {stats.executive.sellersAtRiskCount == null ? '—' : stats.executive.sellersAtRiskCount}
                                         </span>
                                     </div>
 
                                     {stats.executive.sellersAtRiskCount == null ? (
                                         <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
-                                            Riesgo no disponible en esta sesión (soporte ejecutivo sin acceso).
+                                            Riesgo no disponible en esta sesión.
                                         </p>
                                     ) : stats.executive.sellersAtRisk.length === 0 ? (
                                         <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
-                                            Sin vendedores en riesgo detectados en los últimos 7 días.
+                                            Sin riesgo detectado en 7 días.
                                         </p>
                                     ) : (
                                         <div className='space-y-2'>
                                             {stats.executive.sellersAtRisk.slice(0, 4).map((seller) => (
-                                                <div key={`risk-${seller.sellerId}`} className='flex items-center justify-between gap-3 rounded-xl px-3 py-2 border'
-                                                    style={{ background: 'rgba(15,23,42,0.35)', borderColor: 'rgba(148,163,184,0.12)' }}>
+                                                <div
+                                                    key={`risk-${seller.sellerId}`}
+                                                    className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${tonePanelClassName}`}
+                                                    style={toneVars('rose')}
+                                                >
                                                     <div className='min-w-0'>
                                                         <p className='text-xs font-black truncate' style={{ color: 'var(--text-primary)' }}>{seller.name}</p>
                                                         <p className='text-[10px] font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
@@ -762,7 +801,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                                         </p>
                                                     </div>
                                                     <div className='text-right shrink-0'>
-                                                        <p className='text-xs font-black tabular-nums text-rose-300'>{seller.daysWithoutActivity}d</p>
+                                                            <p className='text-xs font-black tabular-nums [color:var(--tone-chip-text)]'>{seller.daysWithoutActivity}d</p>
                                                         <p className='text-[9px] font-bold uppercase tracking-wider' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
                                                             sin actividad
                                                         </p>
@@ -773,33 +812,105 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                     )}
                                 </div>
 
-                                <div className='rounded-2xl border p-4' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <div className={`rounded-2xl p-4 ${tonePanelSoftClassName}`} style={toneVars('amber')}>
                                     <div className='flex items-center justify-between gap-3 mb-2'>
                                         <p className='text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
                                             Calidad de pipeline
                                         </p>
-                                        <AlertCircle size={14} className='text-amber-300' />
+                                        <AlertCircle size={14} className='text-amber-500 dark:text-amber-300' />
                                     </div>
                                     <p className='text-sm font-semibold leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
-                                        Hay <strong style={{ color: 'var(--text-primary)' }}>{stats.dataWarnings}</strong> leads sin valor estimado.
-                                        Corregirlos puede mejorar la precisión del forecast en aproximadamente <strong style={{ color: 'var(--text-primary)' }}>{auditImpact.toFixed(0)}%</strong>.
+                                        <strong style={{ color: 'var(--text-primary)' }}>{stats.dataWarnings}</strong> leads sin valor estimado.
+                                        Impacto estimado en forecast: <strong style={{ color: 'var(--text-primary)' }}>{auditImpact.toFixed(0)}%</strong>.
                                     </p>
                                     <div className='mt-3 flex flex-wrap gap-2'>
                                         <a
                                             href='/clientes'
-                                            className='px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:brightness-110'
-                                            style={{ background: 'rgba(59,130,246,0.08)', borderColor: 'rgba(59,130,246,0.24)', color: '#93c5fd' }}
+                                            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] ${toneChipHoverButtonClassName}`}
+                                            style={toneVars('blue')}
                                         >
                                             Revisar leads activos
                                         </a>
                                         <a
                                             href='/cierres'
-                                            className='px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:brightness-110'
-                                            style={{ background: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.24)', color: '#86efac' }}
+                                            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] ${toneChipHoverButtonClassName}`}
+                                            style={toneVars('emerald')}
                                         >
                                             Revisar cierres
                                         </a>
                                     </div>
+                                </div>
+
+                                <div className={`rounded-2xl p-4 ${tonePanelSoftClassName}`} style={toneVars('rose')}>
+                                    <div className='flex items-center justify-between gap-3 mb-2'>
+                                        <p className='text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
+                                            Pérdidas (mes)
+                                        </p>
+                                        <TrendingDown size={14} className='text-rose-500 dark:text-rose-300' />
+                                    </div>
+
+                                    {lossExecutiveWarning ? (
+                                        <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                            Pérdidas no disponible: {lossExecutiveWarning}
+                                        </p>
+                                    ) : !lossExecutiveSummary ? (
+                                        <p className='text-xs font-semibold animate-pulse' style={{ color: 'var(--text-secondary)' }}>
+                                            Cargando pérdidas...
+                                        </p>
+                                    ) : (
+                                        <div className='space-y-3'>
+                                            <div className='grid grid-cols-2 gap-2'>
+                                                <div className={`rounded-xl px-3 py-2 ${tonePanelClassName}`} style={toneVars('rose')}>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] [color:var(--tone-panel-text)]'>Perdidos</p>
+                                                    <p className='text-sm font-black text-[var(--text-primary)]'>{lossExecutiveSummary.current.lostCount}</p>
+                                                </div>
+                                                <div className={`rounded-xl px-3 py-2 ${tonePanelClassName}`} style={toneVars('orange')}>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] [color:var(--tone-panel-text)]'>Monto perdido</p>
+                                                    <p className='text-sm font-black text-[var(--text-primary)]'>
+                                                        ${Math.round(lossExecutiveSummary.current.totalLostValue).toLocaleString('es-MX')}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className={`rounded-xl px-3 py-2.5 ${tonePanelSoftClassName}`} style={toneVars('slate')}>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>Top motivos</p>
+                                                {lossExecutiveSummary.topReasons.length === 0 ? (
+                                                    <p className='text-xs font-semibold mt-1' style={{ color: 'var(--text-secondary)' }}>Sin pérdidas en el mes.</p>
+                                                ) : (
+                                                    <div className='mt-1 space-y-1.5'>
+                                                        {lossExecutiveSummary.topReasons.map((reason) => (
+                                                            <div key={`home-loss-reason-${reason.label}`} className='flex items-center justify-between gap-2 text-xs'>
+                                                                <span className='font-bold truncate' style={{ color: 'var(--text-primary)' }}>{reason.label}</span>
+                                                                <span className='font-black shrink-0' style={{ color: 'var(--text-secondary)' }}>{reason.count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className={`rounded-xl px-3 py-2.5 ${tonePanelSoftClassName}`} style={toneVars('slate')}>
+                                                <div className='flex items-center justify-between gap-2'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>Comparativo mes anterior</p>
+                                                    <span className='text-[10px] font-black'
+                                                        style={{ color: (lossExecutiveSummary.delta.totalLostValuePct ?? 0) > 0 ? '#e11d48' : '#15803d' }}>
+                                                        {lossExecutiveSummary.delta.totalLostValuePct == null
+                                                            ? 'n/a'
+                                                            : `${Math.round(lossExecutiveSummary.delta.totalLostValuePct) > 0 ? '+' : ''}${Math.round(lossExecutiveSummary.delta.totalLostValuePct)}%`}
+                                                    </span>
+                                                </div>
+                                                {lossExecutiveSummary.signals.length > 0 && (
+                                                    <p className='mt-1 text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                        {lossExecutiveSummary.signals[0]}
+                                                    </p>
+                                                )}
+                                                {lossExecutiveSummary.topSellers[0] && (
+                                                    <p className='mt-1 text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                        Impacto: <span style={{ color: 'var(--text-primary)' }}>{lossExecutiveSummary.topSellers[0].name}</span> · {lossExecutiveSummary.topSellers[0].count} · ${Math.round(lossExecutiveSummary.topSellers[0].totalValue).toLocaleString('es-MX')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

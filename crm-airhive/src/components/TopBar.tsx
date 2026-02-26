@@ -7,19 +7,22 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, ShieldCheck, type LucideIcon } from 'lucide-react'
+import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, ShieldCheck, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import { useTheme, type Theme } from '@/lib/ThemeContext'
 
 export default function TopBar() {
     const pathname = usePathname()
     const auth = useAuth()
+    const { theme, setTheme } = useTheme()
     const userId = auth.user?.id || null
     const [supabase] = useState(() => createClient())
 
     const isAdmin = auth.profile?.role === 'admin'
     const [quoteNotificationOpen, setQuoteNotificationOpen] = useState(false)
+    const [themeMenuOpen, setThemeMenuOpen] = useState(false)
     const [quotePendingCount, setQuotePendingCount] = useState(0)
     const [quoteNotificationItems, setQuoteNotificationItems] = useState<Array<{
         id: number
@@ -52,6 +55,7 @@ export default function TopBar() {
     const [quoteLikeUnreadCount, setQuoteLikeUnreadCount] = useState(0)
     const [industryCatalog, setIndustryCatalog] = useState<Array<{ id: string; name: string }>>([])
     const quoteNotificationsRef = useRef<HTMLDivElement | null>(null)
+    const themeMenuRef = useRef<HTMLDivElement | null>(null)
     const lastBadgeListSignatureRef = useRef('')
     const lastQuoteListSignatureRef = useRef('')
     const lastQuoteLikeListSignatureRef = useRef('')
@@ -64,6 +68,7 @@ export default function TopBar() {
         () => new Map(industryCatalog.map((row) => [String(row.id), String(row.name)])),
         [industryCatalog]
     )
+    const themeButtonMeta = getTopBarThemeButtonMeta(theme)
 
     useEffect(() => {
         if (!userId) return
@@ -511,10 +516,11 @@ export default function TopBar() {
 
     useEffect(() => {
         const onClickOutside = (event: MouseEvent) => {
-            if (!quoteNotificationsRef.current) return
-            if (!quoteNotificationsRef.current.contains(event.target as Node)) {
-                setQuoteNotificationOpen(false)
-            }
+            const target = event.target as Node
+            const insideNotifications = quoteNotificationsRef.current?.contains(target)
+            const insideThemeMenu = themeMenuRef.current?.contains(target)
+            if (!insideNotifications) setQuoteNotificationOpen(false)
+            if (!insideThemeMenu) setThemeMenuOpen(false)
         }
         document.addEventListener('mousedown', onClickOutside)
         return () => document.removeEventListener('mousedown', onClickOutside)
@@ -771,6 +777,7 @@ export default function TopBar() {
                         <button
                             type='button'
                             onClick={() => {
+                                setThemeMenuOpen(false)
                                 setQuoteNotificationOpen((prev) => {
                                     const next = !prev
                                     if (next) {
@@ -932,6 +939,99 @@ export default function TopBar() {
                         )}
                     </div>
 
+                    <div ref={themeMenuRef} className='relative'>
+                        <button
+                            type='button'
+                            onClick={() => {
+                                setQuoteNotificationOpen(false)
+                                setThemeMenuOpen((prev) => !prev)
+                            }}
+                            className='relative text-white px-2 py-2 group transition-all hover:scale-110 cursor-pointer'
+                            title={`Tema actual: ${themeButtonMeta.label}`}
+                            aria-label={`Cambiar tema. Tema actual: ${themeButtonMeta.label}`}
+                            aria-haspopup='menu'
+                            aria-expanded={themeMenuOpen}
+                        >
+                            <themeButtonMeta.icon size={22} strokeWidth={2.2} className='text-white/90 group-hover:text-white transition-colors' />
+                            <span
+                                className={[
+                                    'absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full border',
+                                    'inline-flex items-center justify-center text-[8px] font-black leading-none',
+                                    theme === 'claro'
+                                        ? 'border-amber-300/60 bg-amber-400/20 text-amber-200'
+                                        : theme === 'gris'
+                                            ? 'border-slate-300/50 bg-slate-300/20 text-slate-100'
+                                            : 'border-blue-300/50 bg-blue-400/20 text-blue-200'
+                                ].join(' ')}
+                                aria-hidden='true'
+                            >
+                                {themeButtonMeta.short}
+                            </span>
+                            <span
+                                className='absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF] transition-all duration-300 ease-out w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
+                            />
+                        </button>
+
+                        {themeMenuOpen && (
+                            <div className='absolute right-0 top-[120%] w-[228px] rounded-2xl border border-white/10 bg-black/95 shadow-2xl z-[120] overflow-hidden'>
+                                <div className='px-4 py-3 border-b border-white/10 flex items-center justify-between'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.16em] text-white/70'>Tema</p>
+                                    <span className='text-[11px] font-black text-blue-300'>{themeButtonMeta.label}</span>
+                                </div>
+                                <div className='p-1.5'>
+                                    {([
+                                        { id: 'claro' as Theme, icon: Sun, short: 'C' },
+                                        { id: 'gris' as Theme, icon: Circle, short: 'G' },
+                                        { id: 'oscuro' as Theme, icon: Moon, short: 'O' }
+                                    ]).map((option) => {
+                                        const Icon = option.icon
+                                        const active = theme === option.id
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type='button'
+                                                onClick={() => {
+                                                    setTheme(option.id)
+                                                    setThemeMenuOpen(false)
+                                                }}
+                                                className={[
+                                                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors cursor-pointer',
+                                                    active ? 'bg-white/8 border border-white/15' : 'hover:bg-white/5 border border-transparent'
+                                                ].join(' ')}
+                                                role='menuitem'
+                                                aria-current={active ? 'true' : undefined}
+                                            >
+                                                <span
+                                                    className={[
+                                                        'h-8 w-8 rounded-lg border inline-flex items-center justify-center shrink-0',
+                                                        option.id === 'claro'
+                                                            ? 'border-amber-300/35 bg-amber-400/10'
+                                                            : option.id === 'gris'
+                                                                ? 'border-slate-300/25 bg-slate-300/10'
+                                                                : 'border-blue-300/25 bg-blue-400/10'
+                                                    ].join(' ')}
+                                                >
+                                                    <Icon
+                                                        size={16}
+                                                        strokeWidth={2.2}
+                                                        className={option.id === 'claro' ? 'text-amber-200' : option.id === 'gris' ? 'text-slate-100' : 'text-blue-200'}
+                                                    />
+                                                </span>
+                                                <div className='min-w-0 flex-1'>
+                                                    <p className='text-sm font-bold text-white'>{getThemeDisplayLabel(option.id)}</p>
+                                                    <p className='text-[11px] text-white/55'>{getTopBarThemeDescription(option.id)}</p>
+                                                </div>
+                                                {active ? <Check size={15} strokeWidth={2.6} className='text-blue-300 shrink-0' /> : (
+                                                    <span className='text-[10px] font-black text-white/45 shrink-0'>{option.short}</span>
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Settings Gear Icon */}
                     <Link
                         href='/settings'
@@ -968,6 +1068,24 @@ export default function TopBar() {
             </div>
         </header>
     )
+}
+
+function getThemeDisplayLabel(theme: Theme): string {
+    if (theme === 'claro') return 'Claro'
+    if (theme === 'gris') return 'Gris'
+    return 'Oscuro'
+}
+
+function getTopBarThemeDescription(theme: Theme): string {
+    if (theme === 'claro') return 'Fondo claro y texto oscuro'
+    if (theme === 'gris') return 'Contraste medio y neutro'
+    return 'Fondo oscuro y texto claro'
+}
+
+function getTopBarThemeButtonMeta(theme: Theme): { icon: LucideIcon; label: string; short: string } {
+    if (theme === 'claro') return { icon: Sun, label: 'Claro', short: 'C' }
+    if (theme === 'gris') return { icon: Circle, label: 'Gris', short: 'G' }
+    return { icon: Moon, label: 'Oscuro', short: 'O' }
 }
 
 function getTopBarSpecialBadgeOverlayNumber(badgeType?: string, badgeKey?: string, badgeLabel?: string) {
@@ -1042,6 +1160,8 @@ function TopBarBadgeNotificationMedallion({
         <BadgeMedallion
             icon={specialSpec?.icon || Sparkles}
             centerClassName={specialSpec?.centerGradientClass || 'bg-gradient-to-br from-[#d946ef] to-[#a21caf]'}
+            matchRingClassName={String(specialSpec?.matchRingClassName || '') || undefined}
+            clipCenterFillToCoreInterior={Boolean(specialSpec?.clipCenterFillToCoreInterior)}
             iconClassName={specialSpec?.iconClassName || 'text-white'}
             overlayText={getTopBarSpecialBadgeOverlayNumber(item.badgeType, item.badgeKey, item.label)}
             ringStyle={specialSpec?.ringStyle || 'match'}

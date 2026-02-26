@@ -639,6 +639,8 @@ export default function GlobalBadgeCelebration() {
                                     <BadgeMedallion
                                 icon={Icon}
                                 centerClassName={containerClass}
+                                matchRingClassName={current.sourceType === 'special' ? (String(popupSpecialSpec?.matchRingClassName || '') || undefined) : undefined}
+                                clipCenterFillToCoreInterior={current.sourceType === 'special' && Boolean(popupSpecialSpec?.clipCenterFillToCoreInterior)}
                                 iconClassName={iconClass}
                                 overlayText={specialBadgeOverlay}
                                 ringStyle={current.sourceType === 'special'
