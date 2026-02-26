@@ -22,15 +22,22 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
     const winRate = activeLeads > 0 ? (closedWon / activeLeads) * 100 : 0
 
     return (
-        <div className='p-8 rounded-3xl border shadow-sm h-full flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+        <div className='p-8 rounded-3xl border shadow-sm h-auto self-start' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
             <div className='mb-6'>
                 <h3 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Embudo de Pipeline</h3>
                 <p className='text-xs font-medium mt-1 uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Distribución por etapa de venta</p>
             </div>
 
-            <div className='flex-1 flex flex-col gap-5'>
-                {data.map((item, index) => {
-                    const widthPercent = Math.max(12, (item.count / maxCount) * 100)
+            <div className='flex flex-col gap-5'>
+                {data.length === 0 ? (
+                    <div className='rounded-2xl border p-4' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                        <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                            No hay etapas disponibles para mostrar el embudo.
+                        </p>
+                    </div>
+                ) : data.map((item, index) => {
+                    // Keep funnel bars proportional, but cap the visual width so they don't feel oversized.
+                    const widthPercent = Math.min(82, Math.max(12, (item.count / maxCount) * 82))
                     const conversion = index > 0 && data[index - 1].count > 0
                         ? (item.count / data[index - 1].count) * 100
                         : null
@@ -79,7 +86,7 @@ export default function PipelineVisualizer({ data }: PipelineVisualizerProps) {
                 })}
             </div>
 
-            <div className='mt-8 pt-4 border-t flex justify-between items-end' style={{ borderColor: 'var(--card-border)' }}>
+            <div className='mt-6 pt-4 border-t flex justify-between items-end' style={{ borderColor: 'var(--card-border)' }}>
                 <div>
                     <label className='text-[8px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Total Leads</label>
                     <p className='text-xl font-black' style={{ color: 'var(--text-primary)' }}>{totalLeads}</p>

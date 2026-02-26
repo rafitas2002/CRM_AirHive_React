@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { normalizeLocationDuplicateKey, normalizeLocationLabel } from '@/lib/locationUtils'
 import { cookies } from 'next/headers'
 
 const CATALOG_TABLES = [
@@ -16,12 +17,19 @@ const CATALOG_TABLES = [
     'work_modalities',
     'cities',
     'countries',
-    'industrias'
+    'industrias',
+    'company_locations',
+    'company_sizes'
 ]
 
 const ADMIN_DELETABLE_TABLES = [
     'industrias'
 ]
+
+const OPTIONAL_CATALOG_TABLES = new Set([
+    'company_locations',
+    'company_sizes'
+])
 
 export async function getCatalogs() {
     try {
@@ -33,15 +41,38 @@ export async function getCatalogs() {
 
         // Parallel fetch for speed
         await Promise.all(CATALOG_TABLES.map(async (table) => {
-            const { data, error } = await supabase
-                .from(table)
-                .select('id, name')
-                .eq('is_active', true)
-                .order('name')
+            const query = (supabase.from(table) as any)
+            let data: any[] | null = null
+            let error: any = null
+
+            if (table === 'company_sizes') {
+                const res = await query
+                    .select('id, name, size_value, code, sort_order')
+                    .eq('is_active', true)
+                    .order('sort_order', { ascending: true })
+                    .order('size_value', { ascending: true })
+                data = res.data || []
+                error = res.error
+            } else {
+                const res = await query
+                    .select('id, name')
+                    .eq('is_active', true)
+                    .order('name')
+                data = res.data || []
+                error = res.error
+            }
 
             if (!error) {
                 results[table] = data || []
             } else {
+                const errorCode = String((error as any)?.code || '')
+                const errorMessage = String((error as any)?.message || '')
+                const isMissingOptionalTable = OPTIONAL_CATALOG_TABLES.has(table)
+                    && (errorCode === '42P01' || errorCode === 'PGRST205' || errorMessage.includes(table))
+                if (isMissingOptionalTable) {
+                    results[table] = []
+                    return
+                }
                 console.error(`Error fetching catalog ${table}:`, error)
                 errors.push(`${table}: ${error.message}`)
                 results[table] = []
@@ -59,10 +90,60 @@ export async function getCatalogs() {
     }
 }
 
+export async function ensureCompanyLocationCatalogItem(locationLabel: string) {
+    try {
+        const canonicalName = normalizeLocationLabel(locationLabel)
+        const duplicateKey = normalizeLocationDuplicateKey(canonicalName)
+
+        if (!canonicalName || !duplicateKey) {
+            return { success: true, skipped: true, data: null }
+        }
+
+        const cookieStore = await cookies()
+        const supabase = createClient(cookieStore)
+        const supabaseAdmin = createAdminClient()
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('No autenticado')
+
+        const { data, error } = await (supabaseAdmin
+            .from('company_locations') as any)
+            .upsert(
+                {
+                    name: canonicalName,
+                    duplicate_key: duplicateKey,
+                    is_active: true
+                },
+                { onConflict: 'duplicate_key' }
+            )
+            .select('id, name')
+            .single()
+
+        if (error) throw error
+
+        return { success: true, data }
+    } catch (error: any) {
+        const code = String(error?.code || '')
+        const message = String(error?.message || '')
+        const missingTable = code === '42P01' || code === 'PGRST205' || /company_locations/i.test(message)
+
+        if (missingTable) {
+            console.warn('Tabla company_locations no disponible. Aplica la migración del catálogo de ubicaciones para persistencia automática.')
+        } else {
+            console.error('Error ensuring company location catalog item:', error)
+        }
+
+        return { success: false, error: message || 'No se pudo guardar la ubicación en catálogo' }
+    }
+}
+
 export async function createCatalogItem(table: string, name: string) {
     try {
         if (!CATALOG_TABLES.includes(table)) {
             throw new Error('Invalid catalog table')
+        }
+        if (table === 'company_sizes') {
+            throw new Error('El catálogo de tamaños de empresa se administra por migración (DB-first) y no permite altas manuales desde esta pantalla')
         }
 
         const cookieStore = await cookies()

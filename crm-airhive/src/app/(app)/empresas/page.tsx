@@ -11,6 +11,7 @@ import ConfirmModal from '@/components/ConfirmModal'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Search, Table as TableIcon, Pencil, Building2 } from 'lucide-react'
+import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
 
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
@@ -24,6 +25,11 @@ export type CompanyWithProjects = CompanyData & {
     source_channel?: string | null
     pre_leads_count?: number | null
     leads_count?: number | null
+    ubicacion_group?: string | null
+    ubicacion_group_key?: string | null
+    ubicacion_municipio?: string | null
+    ubicacion_municipio_key?: string | null
+    ubicacion_is_monterrey_metro?: boolean | null
 }
 
 function parseSupabaseError(error: any, fallback: string) {
@@ -65,6 +71,7 @@ export default function EmpresasPage() {
     const [filterIndustry, setFilterIndustry] = useState('All')
     const [filterSize, setFilterSize] = useState('All')
     const [filterLocation, setFilterLocation] = useState('All')
+    const [filterMonterreyMunicipality, setFilterMonterreyMunicipality] = useState('All')
     const [filterLifecycle, setFilterLifecycle] = useState<'All' | 'lead' | 'pre_lead'>('All')
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
 
@@ -82,6 +89,24 @@ export default function EmpresasPage() {
         }
     }, [auth.loading, auth.loggedIn, router])
 
+    const companyLocationFacetsById = useMemo(() => {
+        const byId = new Map<string, ReturnType<typeof getLocationFilterFacet>>()
+        for (const company of companies) {
+            byId.set(String(company.id ?? ''), getLocationFilterFacetFromStructured(company))
+        }
+        return byId
+    }, [companies])
+
+    const selectedLocationKey = useMemo(
+        () => (filterLocation === 'All' ? '' : normalizeLocationFilterKey(filterLocation)),
+        [filterLocation]
+    )
+
+    const selectedMonterreyMunicipalityKey = useMemo(
+        () => (filterMonterreyMunicipality === 'All' ? '' : normalizeLocationFilterKey(filterMonterreyMunicipality)),
+        [filterMonterreyMunicipality]
+    )
+
     // Filter and Sort Logic
     const filteredCompanies = useMemo(() => {
         let result = companies.filter(company => {
@@ -92,7 +117,18 @@ export default function EmpresasPage() {
             const companyIndustries = company.industrias || (company.industria ? [company.industria] : [])
             const matchesIndustry = filterIndustry === 'All' || companyIndustries.includes(filterIndustry)
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
-            const matchesLocation = filterLocation === 'All' || company.ubicacion?.toLowerCase().includes(filterLocation.toLowerCase())
+            const locationFacet = companyLocationFacetsById.get(String(company.id ?? '')) || getLocationFilterFacetFromStructured(company)
+            const matchesLocationGroup =
+                filterLocation === 'All' ||
+                (!!locationFacet.groupKey && locationFacet.groupKey === selectedLocationKey)
+            const matchesMonterreyMunicipality =
+                filterLocation !== 'Monterrey' ||
+                filterMonterreyMunicipality === 'All' ||
+                (
+                    locationFacet.isMonterreyMetro &&
+                    !!locationFacet.monterreyMunicipalityKey &&
+                    locationFacet.monterreyMunicipalityKey === selectedMonterreyMunicipalityKey
+                )
             const lifecycle = (company.lifecycle_stage || '').toLowerCase()
             const sourceChannel = (company.source_channel || '').toLowerCase()
             const preLeadsCount = Number(company.pre_leads_count || 0)
@@ -106,7 +142,7 @@ export default function EmpresasPage() {
                 (filterLifecycle === 'pre_lead' && isPreLeadCompany) ||
                 (filterLifecycle === 'lead' && !isPreLeadCompany)
 
-            return matchesSearch && matchesIndustry && matchesSize && matchesLocation && matchesLifecycle
+            return matchesSearch && matchesIndustry && matchesSize && matchesLocationGroup && matchesMonterreyMunicipality && matchesLifecycle
         })
 
         // Sorting
@@ -124,7 +160,19 @@ export default function EmpresasPage() {
         })
 
         return result
-    }, [companies, filterSearch, filterIndustry, filterSize, filterLocation, filterLifecycle, sortBy])
+    }, [
+        companies,
+        companyLocationFacetsById,
+        filterSearch,
+        filterIndustry,
+        filterSize,
+        filterLocation,
+        filterMonterreyMunicipality,
+        selectedLocationKey,
+        selectedMonterreyMunicipalityKey,
+        filterLifecycle,
+        sortBy
+    ])
 
     // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
@@ -137,12 +185,34 @@ export default function EmpresasPage() {
     }, [companies])
 
     const uniqueLocations = useMemo(() => {
-        const locations = new Set(companies.map(c => {
-            const city = c.ubicacion?.split(',')[0]?.trim()
-            return city
-        }).filter((l): l is string => !!l))
-        return Array.from(locations).sort()
-    }, [companies])
+        const byKey = new Map<string, string>()
+        for (const facet of companyLocationFacetsById.values()) {
+            if (!facet.groupLabel) continue
+            const key = facet.groupKey || normalizeLocationDuplicateKey(facet.groupLabel)
+            if (!key) continue
+            const label = facet.groupLabel
+            const prev = byKey.get(key)
+            if (!prev || label.length < prev.length || (label.length === prev.length && label.localeCompare(prev, 'es') < 0)) {
+                byKey.set(key, label)
+            }
+        }
+        return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b, 'es'))
+    }, [companyLocationFacetsById])
+
+    const uniqueMonterreyMunicipalities = useMemo(() => {
+        const byKey = new Map<string, string>()
+        for (const facet of companyLocationFacetsById.values()) {
+            if (!facet.isMonterreyMetro || !facet.monterreyMunicipality) continue
+            const key = facet.monterreyMunicipalityKey || normalizeLocationDuplicateKey(facet.monterreyMunicipality)
+            if (!key) continue
+            const prev = byKey.get(key)
+            const label = facet.monterreyMunicipality
+            if (!prev || label.length < prev.length || (label.length === prev.length && label.localeCompare(prev, 'es') < 0)) {
+                byKey.set(key, label)
+            }
+        }
+        return sortMonterreyMunicipalityLabels(Array.from(byKey.values()))
+    }, [companyLocationFacetsById])
 
     const fetchCompanies = async () => {
         setLoading(true)
@@ -346,6 +416,10 @@ export default function EmpresasPage() {
 
     const handleSaveCompany = async (companyData: CompanyData) => {
         const isEditing = !!modalCompanyData
+        const normalizeOptionalText = (value: unknown) => {
+            const normalized = String(value ?? '').trim()
+            return normalized ? normalized : null
+        }
         const basePayload: any = {
             nombre: companyData.nombre,
             tamano: companyData.tamano,
@@ -353,15 +427,27 @@ export default function EmpresasPage() {
             industria: companyData.industria,
             industria_id: companyData.industria_id || null
         }
+        const sizeAssessmentPayload: any = {
+            tamano_fuente: normalizeOptionalText((companyData as any).tamano_fuente),
+            tamano_confianza: normalizeOptionalText((companyData as any).tamano_confianza),
+            tamano_senal_principal: normalizeOptionalText((companyData as any).tamano_senal_principal)
+        }
+        const basePayloadWithSizeAssessment = {
+            ...basePayload,
+            ...sizeAssessmentPayload
+        }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
 
         const getPayloadCandidates = () => {
             const candidates: any[] = []
-            if (websiteValue !== null) {
-                candidates.push({ ...basePayload, website: websiteValue })
-                candidates.push({ ...basePayload, sitio_web: websiteValue })
+            const corePayloadVariants = [basePayloadWithSizeAssessment, basePayload]
+            for (const corePayload of corePayloadVariants) {
+                if (websiteValue !== null) {
+                    candidates.push({ ...corePayload, website: websiteValue })
+                    candidates.push({ ...corePayload, sitio_web: websiteValue })
+                }
+                candidates.push(corePayload)
             }
-            candidates.push(basePayload)
             return candidates
         }
 
@@ -623,7 +709,13 @@ export default function EmpresasPage() {
 
                                     <select
                                         value={filterLocation}
-                                        onChange={(e) => setFilterLocation(e.target.value)}
+                                        onChange={(e) => {
+                                            const nextLocation = e.target.value
+                                            setFilterLocation(nextLocation)
+                                            if (nextLocation !== 'Monterrey') {
+                                                setFilterMonterreyMunicipality('All')
+                                            }
+                                        }}
                                         className='ah-select-control'
                                     >
                                         <option value="All">Ubicación: Todas</option>
@@ -631,6 +723,18 @@ export default function EmpresasPage() {
                                             <option key={loc} value={loc}>{loc}</option>
                                         ))}
                                     </select>
+                                    {filterLocation === 'Monterrey' && (
+                                        <select
+                                            value={filterMonterreyMunicipality}
+                                            onChange={(e) => setFilterMonterreyMunicipality(e.target.value)}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="All">Municipio MTY: Todos</option>
+                                            {uniqueMonterreyMunicipalities.map((municipality) => (
+                                                <option key={municipality} value={municipality}>{municipality}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <select
                                         value={filterLifecycle}
                                         onChange={(e) => setFilterLifecycle(e.target.value as 'All' | 'lead' | 'pre_lead')}

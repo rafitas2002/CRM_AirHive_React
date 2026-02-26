@@ -12,6 +12,8 @@ const BADGE_ISOLATED_RING_EXPERIMENT = true
 interface BadgeMedallionProps {
     icon: LucideIcon
     centerClassName: string
+    matchRingClassName?: string
+    clipCenterFillToCoreInterior?: boolean
     iconClassName?: string
     overlayText?: string | null
     footerBubbleText?: string | null
@@ -130,6 +132,8 @@ const SIZE_MAP: Record<BadgeMedallionSize, {
 export default function BadgeMedallion({
     icon: Icon,
     centerClassName,
+    matchRingClassName,
+    clipCenterFillToCoreInterior = false,
     iconClassName = 'text-white',
     overlayText,
     footerBubbleText,
@@ -202,16 +206,17 @@ export default function BadgeMedallion({
             gloss: 'bg-[radial-gradient(circle_at_28%_16%,rgba(255,255,255,0.88),rgba(255,255,255,0.16)_24%,rgba(168,85,247,0.16)_38%,rgba(59,130,246,0.10)_56%,rgba(17,24,39,0.20)_100%)]'
         }
     } as const
+    const matchRingBaseClass = matchRingClassName || centerClassName
     const ringTone = ringStyle !== 'match' ? ringToneMap[ringStyle] : null
     const outerRingClass = ringTone
         ? ringTone.outer
-        : `${centerClassName} shadow-[0_10px_24px_rgba(15,23,42,0.22),0_4px_10px_rgba(0,0,0,0.24)]`
+        : `${matchRingBaseClass} shadow-[0_10px_24px_rgba(15,23,42,0.22),0_4px_10px_rgba(0,0,0,0.24)]`
     const midRingClass = ringTone
         ? ringTone.mid
-        : `${centerClassName} shadow-[inset_0_1px_0_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(0,0,0,0.22)]`
+        : `${matchRingBaseClass} shadow-[inset_0_1px_0_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(0,0,0,0.22)]`
     const innerRingGlossClass = ringTone
         ? ringTone.gloss
-        : `${centerClassName} bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.75),rgba(255,255,255,0.14)_35%,rgba(15,23,42,0.15)_80%)]`
+        : `${matchRingBaseClass} bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.75),rgba(255,255,255,0.14)_35%,rgba(15,23,42,0.15)_80%)]`
     const bottomNumberText = footerBubbleText || overlayText
     const hasBottomNumber = Boolean(bottomNumberText)
 
@@ -238,7 +243,7 @@ export default function BadgeMedallion({
             ) : null}
 
             <span
-                className={`absolute ${activeCoreInset} rounded-full overflow-hidden ${coreBorderClass} ${defaultCoreBorderToneClass} flex items-center justify-center ${centerClassName} ${coreBorderColorClassName}`.trim()}
+                className={`absolute ${activeCoreInset} rounded-full overflow-hidden ${coreBorderClass} ${defaultCoreBorderToneClass} flex items-center justify-center ${centerClassName} ${clipCenterFillToCoreInterior ? 'bg-clip-padding' : ''} ${coreBorderColorClassName}`.trim()}
                 style={coreBorderStyle}
             >
                 <span className='absolute inset-0 opacity-30 bg-[linear-gradient(140deg,rgba(255,255,255,0.65),transparent_42%,transparent_60%,rgba(255,255,255,0.22))]' />

@@ -28,9 +28,11 @@ export interface SpecialBadgeVisualSpec {
     category: string
     icon: LucideIcon
     centerGradientClass: string
+    matchRingClassName?: string
     iconClassName: string
     ringStyle: SpecialBadgeRingStyle
     coreBorderColorClassName?: string
+    clipCenterFillToCoreInterior?: boolean
 }
 
 export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?: string | null, badgeKey?: string | null): SpecialBadgeVisualSpec | null {
@@ -117,7 +119,16 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
         return { title: 'Ubicación País', category: 'Territorio', icon: MapPin, centerGradientClass, iconClassName: 'text-white', ringStyle: 'match' }
     }
     if (type === 'closure_milestone') {
-        return { title: 'Cierres', category: 'Rendimiento', icon: Building, centerGradientClass: 'bg-gradient-to-br from-[#f97316] to-[#c2410c]', iconClassName: 'text-white', ringStyle: 'match' }
+        return {
+            title: 'Cierres',
+            category: 'Rendimiento',
+            icon: Building,
+            centerGradientClass: 'bg-[conic-gradient(from_45deg,rgba(254,215,170,0.60)_0_25%,transparent_25%_50%,rgba(254,215,170,0.60)_50%_75%,transparent_75%_100%),linear-gradient(135deg,#fb923c_0%,#f97316_40%,#ea580c_74%,#c2410c_100%)] bg-[length:4px_4px,100%_100%] bg-[position:0_0,0_0]',
+            matchRingClassName: 'bg-gradient-to-br from-[#fdba74] via-[#f97316] to-[#c2410c]',
+            iconClassName: 'text-white',
+            ringStyle: 'match',
+            clipCenterFillToCoreInterior: true
+        }
     }
     if (type === 'quote_contribution') {
         return { title: 'Aportación de Frases', category: 'Frases', icon: MessageSquareQuote, centerGradientClass: 'bg-gradient-to-br from-[#2563eb] to-[#1d4ed8]', iconClassName: 'text-white', ringStyle: 'match' }

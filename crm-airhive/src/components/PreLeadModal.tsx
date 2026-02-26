@@ -4,9 +4,17 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
-import { getCatalogs } from '@/app/actions/catalogs'
+import { ensureCompanyLocationCatalogItem, getCatalogs } from '@/app/actions/catalogs'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
+import { MONTERREY_MUNICIPALITY_OPTIONS, getLocationBaseForSelector, getSavedLocationCatalogLabels, normalizeLocationLabel, resolveLocationAgainstExistingLabels } from '@/lib/locationUtils'
+import {
+    COMPANY_SIZE_CONFIDENCE_OPTIONS,
+    COMPANY_SIZE_SOURCE_OPTIONS,
+    getCompanySizeGuide,
+    getCompanySizeTierVisuals,
+    normalizeCompanySizeEvidenceText
+} from '@/lib/companySizeUtils'
 
 interface PreLeadModalProps {
     isOpen: boolean
@@ -36,6 +44,9 @@ export default function PreLeadModal({
         notas: '',
         // New Company Fields
         tamano: 1,
+        tamano_confianza: 'media',
+        tamano_fuente: 'inferencia_comercial',
+        tamano_senal_principal: '',
         industria_id: '',
         industria: '',
         website: '',
@@ -66,6 +77,9 @@ export default function PreLeadModal({
                 giro_empresa: initialData.giro_empresa || '',
                 notas: initialData.notas || '',
                 tamano: initialData.tamano || 1,
+                tamano_confianza: initialData.tamano_confianza || 'media',
+                tamano_fuente: initialData.tamano_fuente || 'inferencia_comercial',
+                tamano_senal_principal: initialData.tamano_senal_principal || '',
                 industria_id: initialData.industria_id || '',
                 industria: initialData.industria || '',
                 website: initialData.website || '',
@@ -81,6 +95,9 @@ export default function PreLeadModal({
                 giro_empresa: '',
                 notas: '',
                 tamano: 1,
+                tamano_confianza: 'media',
+                tamano_fuente: 'inferencia_comercial',
+                tamano_senal_principal: '',
                 industria_id: '',
                 industria: '',
                 website: '',
@@ -151,14 +168,15 @@ export default function PreLeadModal({
 
     // Location helpers
     const getLocationBase = (loc: string) => {
-        if (!loc) return ''
-        const base = loc.split(', ')[0]
-        const mainCities = ['Monterrey', 'Guadalajara', 'CDMX', 'Querétaro']
-        if (mainCities.includes(base)) return base
-        return 'Otra'
+        return getLocationBaseForSelector(loc)
     }
 
     const handleLocationBaseChange = (base: string) => {
+        const savedLocationOptions = getSavedLocationCatalogLabels((catalogs.company_locations || []) as any[])
+        if (savedLocationOptions.includes(base)) {
+            setFormData({ ...formData, ubicacion: base })
+            return
+        }
         if (base === 'Otra') {
             setFormData({ ...formData, ubicacion: 'Otra' })
         } else if (base === 'Monterrey') {
@@ -172,12 +190,58 @@ export default function PreLeadModal({
         e.preventDefault()
         setIsSubmitting(true)
         try {
+            const selfPreLeadId = String((initialData as any)?.id || '')
+            const catalogLocationLabels = ((catalogs.company_locations || []) as any[])
+                .map((row) => String(row?.name || ''))
+                .filter(Boolean)
+            const [{ data: existingPreLeadRows, error: existingPreLeadRowsError }, { data: existingCompanyRows, error: existingCompanyRowsError }] = await Promise.all([
+                (supabase.from('pre_leads') as any)
+                    .select('id, ubicacion')
+                    .not('ubicacion', 'is', null),
+                (supabase.from('empresas') as any)
+                    .select('id, ubicacion')
+                    .not('ubicacion', 'is', null)
+            ])
+
+            if (existingPreLeadRowsError) {
+                console.warn('No se pudo cargar ubicaciones de pre-leads para validar duplicados:', existingPreLeadRowsError)
+            }
+            if (existingCompanyRowsError) {
+                console.warn('No se pudo cargar ubicaciones de empresas para validar duplicados:', existingCompanyRowsError)
+            }
+
+            const existingLocationLabels = ((existingPreLeadRows || []) as any[])
+                .filter((row) => !(selfPreLeadId && String(row?.id || '') === selfPreLeadId))
+                .map((row) => String(row?.ubicacion || ''))
+                .concat(((existingCompanyRows || []) as any[]).map((row) => String(row?.ubicacion || '')).filter(Boolean))
+                .concat(catalogLocationLabels)
+
+            const locationResolution = resolveLocationAgainstExistingLabels(formData.ubicacion, existingLocationLabels)
+            if (locationResolution.duplicateVariantOf) {
+                alert(
+                    `Ubicación duplicada detectada.\n\n` +
+                    `Ya existe registrada como: "${locationResolution.duplicateVariantOf}".\n` +
+                    `Se guardará usando ese formato para evitar duplicados en filtros.`
+                )
+            }
+
             const cleaned = {
                 ...formData,
+                ubicacion: locationResolution.valueToPersist,
+                tamano_confianza: normalizeCompanySizeEvidenceText(formData.tamano_confianza),
+                tamano_fuente: normalizeCompanySizeEvidenceText(formData.tamano_fuente),
+                tamano_senal_principal: normalizeCompanySizeEvidenceText(formData.tamano_senal_principal),
                 correos: formData.correos.filter(c => c.trim() !== ''),
                 telefonos: formData.telefonos.filter(t => t.trim() !== '')
             }
             await onSave(cleaned)
+
+            if (locationResolution.valueToPersist) {
+                const locationCatalogRes = await ensureCompanyLocationCatalogItem(locationResolution.valueToPersist)
+                if (!locationCatalogRes.success) {
+                    console.warn('No se pudo guardar ubicación en catálogo:', locationCatalogRes.error)
+                }
+            }
         } catch (error) {
             console.error('Error in handleSave:', error)
         } finally {
@@ -186,6 +250,14 @@ export default function PreLeadModal({
     }
 
     if (!isOpen) return null
+
+    const savedLocationOptions = getSavedLocationCatalogLabels((catalogs.company_locations || []) as any[])
+    const companySizeTiers = getCompanySizeTierVisuals((catalogs.company_sizes || []) as any[])
+    const selectedSizeGuide = getCompanySizeGuide(formData.tamano)
+    const normalizedCurrentLocation = normalizeLocationLabel(formData.ubicacion)
+    const locationSelectorValue = normalizedCurrentLocation && savedLocationOptions.includes(normalizedCurrentLocation)
+        ? normalizedCurrentLocation
+        : getLocationBase(formData.ubicacion)
 
     return (
         <div className='ah-modal-overlay transition-all animate-in fade-in duration-300'>
@@ -300,7 +372,7 @@ export default function PreLeadModal({
                                     <div className='space-y-1.5'>
                                         <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase'>Ciudad / Estado</label>
                                         <select
-                                            value={getLocationBase(formData.ubicacion)}
+                                            value={locationSelectorValue}
                                             onChange={(e) => handleLocationBaseChange(e.target.value)}
                                             className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                         >
@@ -309,6 +381,15 @@ export default function PreLeadModal({
                                             <option value="Guadalajara">Guadalajara</option>
                                             <option value="CDMX">Ciudad de México</option>
                                             <option value="Querétaro">Querétaro</option>
+                                            {savedLocationOptions.length > 0 && (
+                                                <optgroup label="Ubicaciones guardadas">
+                                                    {savedLocationOptions.map((label) => (
+                                                        <option key={label} value={label}>
+                                                            {label}
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
                                             <option value="Otra">Otra (Manual)...</option>
                                         </select>
                                     </div>
@@ -322,14 +403,11 @@ export default function PreLeadModal({
                                                 className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                             >
                                                 <option value="">Seleccionar Municipio...</option>
-                                                <option value="San Pedro Garza García">San Pedro</option>
-                                                <option value="Santa Catarina">Santa Catarina</option>
-                                                <option value="Monterrey">Monterrey (Centro)</option>
-                                                <option value="Guadalupe">Guadalupe</option>
-                                                <option value="San Nicolás">San Nicolás</option>
-                                                <option value="Escobedo">Escobedo</option>
-                                                <option value="Apodaca">Apodaca</option>
-                                                <option value="García">García</option>
+                                                {MONTERREY_MUNICIPALITY_OPTIONS.map((municipality) => (
+                                                    <option key={municipality.value} value={municipality.value}>
+                                                        {municipality.label}
+                                                    </option>
+                                                ))}
                                             </select>
                                         </div>
                                     )}
@@ -356,13 +434,7 @@ export default function PreLeadModal({
                                     Categoría de Tamaño
                                 </label>
                                 <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
-                                    {[
-                                        { id: 1, name: 'Micro', color: '#10b981' },
-                                        { id: 2, name: 'Pequeña', color: '#3b82f6' },
-                                        { id: 3, name: 'Mediana', color: '#6366f1' },
-                                        { id: 4, name: 'Grande', color: '#f59e0b' },
-                                        { id: 5, name: 'Corporativo', color: '#8b5cf6' }
-                                    ].map((tier) => (
+                                    {companySizeTiers.map((tier) => (
                                         <button
                                             key={tier.id}
                                             type='button'
@@ -391,6 +463,98 @@ export default function PreLeadModal({
                                             </span>
                                         </button>
                                     ))}
+                                </div>
+
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4 space-y-3'>
+                                    <div className='flex flex-wrap items-center gap-2'>
+                                        <span className='text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]'>
+                                            Guía anti-subjetividad
+                                        </span>
+                                        <span className='text-[10px] font-bold px-2 py-1 rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)]'>
+                                            {selectedSizeGuide.title}
+                                        </span>
+                                    </div>
+                                    <p className='text-xs text-[var(--text-secondary)]'>
+                                        Usa señales observables para clasificar. Si dudas, mantén la categoría pero baja la confianza.
+                                    </p>
+                                    <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
+                                        {selectedSizeGuide.signals.map((signal) => (
+                                            <div key={signal} className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-[11px] font-semibold text-[var(--text-primary)] leading-snug'>
+                                                {signal}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className='rounded-xl border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300'>
+                                        {selectedSizeGuide.warning}
+                                    </div>
+                                </div>
+
+                                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Fuente del Tamaño
+                                        </label>
+                                        <select
+                                            value={formData.tamano_fuente || 'inferencia_comercial'}
+                                            onChange={(e) => setFormData({ ...formData, tamano_fuente: e.target.value })}
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                        >
+                                            {COMPANY_SIZE_SOURCE_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            {COMPANY_SIZE_SOURCE_OPTIONS.find((option) => option.value === (formData.tamano_fuente || 'inferencia_comercial'))?.description}
+                                        </p>
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Confianza
+                                        </label>
+                                        <div className='grid grid-cols-3 gap-2'>
+                                            {COMPANY_SIZE_CONFIDENCE_OPTIONS.map((option) => {
+                                                const selected = (formData.tamano_confianza || 'media') === option.value
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type='button'
+                                                        onClick={() => setFormData({ ...formData, tamano_confianza: option.value })}
+                                                        className={`px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all ${selected
+                                                            ? 'text-white border-transparent shadow-md'
+                                                            : 'border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                                            }`}
+                                                        style={selected ? { backgroundColor: option.color } : undefined}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            {COMPANY_SIZE_CONFIDENCE_OPTIONS.find((option) => option.value === (formData.tamano_confianza || 'media'))?.description}
+                                        </p>
+                                    </div>
+
+                                    <div className='md:col-span-2 space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Señal principal usada
+                                        </label>
+                                        <input
+                                            type='text'
+                                            maxLength={280}
+                                            value={formData.tamano_senal_principal || ''}
+                                            onChange={(e) => setFormData({ ...formData, tamano_senal_principal: e.target.value })}
+                                            placeholder='Ej. Opera en 2 ciudades + varias áreas visibles en web + múltiples contactos'
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                        />
+                                        <div className='flex items-center justify-between text-[11px] text-[var(--text-secondary)]'>
+                                            <span>Documenta una evidencia breve para estandarizar el criterio entre vendedores.</span>
+                                            <span>{(formData.tamano_senal_principal || '').length}/280</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

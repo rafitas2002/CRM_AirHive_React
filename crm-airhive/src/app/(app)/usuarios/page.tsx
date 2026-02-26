@@ -4,6 +4,12 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import UsersClient from './UsersClient'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
+import {
+    getQuoteContributionLevelMeta,
+    getQuoteLikesReceivedLevelMeta,
+    isAirHiveOwnQuoteLike,
+    normalizeComparableName
+} from '@/lib/quoteBadgeUtils'
 
 const BADGE_GRANT_ALLOWED_ADMINS = new Set([
     'Jesus Gracia',
@@ -66,6 +72,30 @@ export default async function UsuariosPage() {
         .gt('level', 0)
 
     if (specialBadgesError) console.error('Error fetching special badges:', specialBadgesError)
+
+    const quoteSelectWithOwnFlag = 'id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote, deleted_at'
+    const quoteSelectFallback = 'id, contributed_by, contributed_by_name, quote_author, quote_source, deleted_at'
+    const quoteQueryWithOwnFlag = await (dbClient.from('crm_quotes') as any)
+        .select(quoteSelectWithOwnFlag)
+        .is('deleted_at', null)
+    const quoteRowsResult = quoteQueryWithOwnFlag.error
+        ? await (dbClient.from('crm_quotes') as any)
+            .select(quoteSelectFallback)
+            .is('deleted_at', null)
+        : quoteQueryWithOwnFlag
+    if (quoteRowsResult.error) console.error('Error fetching quotes for derived quote badges:', quoteRowsResult.error)
+
+    const { data: quoteReactionRows, error: quoteReactionRowsError } = await (dbClient.from('crm_quote_reactions') as any)
+        .select('quote_id, reaction_type')
+        .eq('reaction_type', 'like')
+    if (quoteReactionRowsError) {
+        const code = String((quoteReactionRowsError as any)?.code || '')
+        const message = String((quoteReactionRowsError as any)?.message || '')
+        const missingRelation = code === '42P01' || code === 'PGRST205' || /crm_quote_reactions/i.test(message)
+        if (!missingRelation) {
+            console.error('Error fetching quote reactions for derived quote badges:', quoteReactionRowsError)
+        }
+    }
 
     const { data: adminBadgeGrants, error: adminBadgeGrantsError } = await dbClient
         .from('admin_badge_grants')
@@ -143,6 +173,131 @@ export default async function UsuariosPage() {
             unlocked_at: String((row as any)?.unlocked_at || '')
         })
         specialBySeller.set(sellerId, list)
+    }
+
+    const quoteContributionBySeller = new Map<string, number>()
+    const quoteLikesBySeller = new Map<string, number>()
+    const quoteOwnerById = new Map<number, string>()
+    const sellerIdsByNormalizedName = new Map<string, string[]>()
+
+    for (const p of (profiles as any[]) || []) {
+        const sellerId = String((p as any)?.id || '')
+        if (!sellerId) continue
+        const nameKey = normalizeComparableName((p as any)?.full_name)
+        if (!nameKey) continue
+        const list = sellerIdsByNormalizedName.get(nameKey) || []
+        list.push(sellerId)
+        sellerIdsByNormalizedName.set(nameKey, list)
+    }
+
+    for (const row of (quoteRowsResult.data as any[]) || []) {
+        const quoteId = Number((row as any)?.id)
+        if (!Number.isFinite(quoteId)) continue
+
+        let ownerSellerId = String((row as any)?.contributed_by || '')
+        if (!ownerSellerId) {
+            const isOwnQuote = isAirHiveOwnQuoteLike(row as any)
+            if (!isOwnQuote) continue
+
+            const candidateSellerIds = new Set<string>()
+            const authorKey = normalizeComparableName((row as any)?.quote_author)
+            const contributorNameKey = normalizeComparableName((row as any)?.contributed_by_name)
+            for (const key of [authorKey, contributorNameKey]) {
+                if (!key) continue
+                const matches = sellerIdsByNormalizedName.get(key) || []
+                if (matches.length === 1) candidateSellerIds.add(matches[0])
+            }
+            if (candidateSellerIds.size !== 1) continue
+            ownerSellerId = Array.from(candidateSellerIds)[0]
+        }
+
+        quoteOwnerById.set(quoteId, ownerSellerId)
+        quoteContributionBySeller.set(ownerSellerId, (quoteContributionBySeller.get(ownerSellerId) || 0) + 1)
+    }
+
+    for (const row of (quoteReactionRows as any[]) || []) {
+        if (String((row as any)?.reaction_type || '').toLowerCase() !== 'like') continue
+        const quoteId = Number((row as any)?.quote_id)
+        if (!Number.isFinite(quoteId)) continue
+        const ownerSellerId = quoteOwnerById.get(quoteId)
+        if (!ownerSellerId) continue
+        quoteLikesBySeller.set(ownerSellerId, (quoteLikesBySeller.get(ownerSellerId) || 0) + 1)
+    }
+
+    const mergeOrInsertDerivedSpecialBadge = (sellerId: string, derivedBadge: {
+        source: 'special'
+        type: string
+        key: string
+        label: string
+        level: number
+        progress: number
+        updated_at: string
+        unlocked_at: string
+    }) => {
+        const list = specialBySeller.get(sellerId) || []
+        const index = list.findIndex((badge) =>
+            String((badge as any)?.type || '') === derivedBadge.type
+            && String((badge as any)?.key || '') === derivedBadge.key
+        )
+
+        if (index < 0) {
+            list.push(derivedBadge)
+            specialBySeller.set(sellerId, list)
+            return
+        }
+
+        const current = list[index] as any
+        const currentLevel = Number(current?.level || 0)
+        const currentProgress = Number(current?.progress || 0)
+        if (
+            Number(derivedBadge.level || 0) > currentLevel
+            || (Number(derivedBadge.level || 0) === currentLevel && Number(derivedBadge.progress || 0) > currentProgress)
+        ) {
+            list[index] = {
+                ...current,
+                ...derivedBadge
+            }
+            specialBySeller.set(sellerId, list)
+        }
+    }
+
+    const derivedQuoteSellerIds = new Set<string>([
+        ...Array.from(quoteContributionBySeller.keys()),
+        ...Array.from(quoteLikesBySeller.keys())
+    ])
+
+    for (const sellerId of derivedQuoteSellerIds) {
+        const contributionProgress = Number(quoteContributionBySeller.get(sellerId) || 0)
+        const likesProgress = Number(quoteLikesBySeller.get(sellerId) || 0)
+
+        const contributionMeta = getQuoteContributionLevelMeta(contributionProgress)
+        const likesMeta = getQuoteLikesReceivedLevelMeta(likesProgress)
+
+        if (contributionMeta.level > 0) {
+            mergeOrInsertDerivedSpecialBadge(sellerId, {
+                source: 'special',
+                type: 'quote_contribution',
+                key: 'quote_contribution',
+                label: 'Aportación de Frases',
+                level: contributionMeta.level,
+                progress: contributionProgress,
+                updated_at: '',
+                unlocked_at: ''
+            })
+        }
+
+        if (likesMeta.level > 0) {
+            mergeOrInsertDerivedSpecialBadge(sellerId, {
+                source: 'special',
+                type: 'quote_likes_received',
+                key: 'quote_likes_received',
+                label: 'Frases con Likes',
+                level: likesMeta.level,
+                progress: likesProgress,
+                updated_at: '',
+                unlocked_at: ''
+            })
+        }
     }
 
     const employees = ((profiles as any[]) || []).map(p => {

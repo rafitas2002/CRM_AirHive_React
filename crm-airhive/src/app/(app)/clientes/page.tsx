@@ -7,13 +7,38 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
-import { Search, Users, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
+import { Search, Users, Pencil, RotateCw, ListFilter, Clock3, TriangleAlert } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type LeadInsert = Database['public']['Tables']['clientes']['Insert']
 type LeadUpdate = Database['public']['Tables']['clientes']['Update']
+
+type NegotiationAgingRow = {
+    lead_id: number
+    seller_id: string | null
+    seller_username: string | null
+    seller_full_name: string | null
+    empresa_id: string | null
+    empresa: string | null
+    nombre: string | null
+    valor_estimado: number
+    probabilidad: number | null
+    forecast_close_date: string | null
+    negotiation_started_at: string | null
+    aging_days: number
+    pending_tasks_count: number
+    overdue_tasks_count: number
+    has_open_tasks: boolean
+    next_meeting_at: string | null
+    has_future_meeting: boolean
+    last_activity_at: string | null
+    days_since_last_activity: number | null
+    is_stalled: boolean
+    industria: string | null
+    tamano_empresa: number | null
+}
 
 // Helper to normalize lead data for the form (handle nulls)
 const normalizeLead = (lead: Lead) => ({
@@ -120,6 +145,11 @@ export default function LeadsPage() {
 
     // Sorting State
     const [sortBy, setSortBy] = useState('fecha_registro-desc')
+    const [agingRows, setAgingRows] = useState<NegotiationAgingRow[]>([])
+    const [agingLoading, setAgingLoading] = useState(false)
+    const [agingError, setAgingError] = useState<string | null>(null)
+    const [agingOnlyStalled, setAgingOnlyStalled] = useState(false)
+    const [agingMinDays, setAgingMinDays] = useState('0')
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -244,6 +274,31 @@ export default function LeadsPage() {
         return 'Todas'
     }, [pipelineScope])
 
+    const filteredAgingRows = useMemo(() => {
+        const minDays = Math.max(0, Number(agingMinDays || 0))
+        return agingRows
+            .filter((row) => {
+                const matchesSearch = !filterSearch
+                    || String(row.empresa || '').toLowerCase().includes(filterSearch.toLowerCase())
+                    || String(row.nombre || '').toLowerCase().includes(filterSearch.toLowerCase())
+                    || String(row.seller_full_name || row.seller_username || '').toLowerCase().includes(filterSearch.toLowerCase())
+                const matchesOwner = filterOwner === 'All' || String(row.seller_username || '') === filterOwner
+                const matchesStalled = !agingOnlyStalled || !!row.is_stalled
+                const matchesMinDays = Number(row.aging_days || 0) >= minDays
+                return matchesSearch && matchesOwner && matchesStalled && matchesMinDays
+            })
+            .sort((a, b) => {
+                if (a.is_stalled !== b.is_stalled) return a.is_stalled ? -1 : 1
+                if ((b.aging_days || 0) !== (a.aging_days || 0)) return (b.aging_days || 0) - (a.aging_days || 0)
+                return String(a.empresa || '').localeCompare(String(b.empresa || ''), 'es')
+            })
+    }, [agingRows, filterSearch, filterOwner, agingOnlyStalled, agingMinDays])
+
+    const stalledAgingCount = useMemo(
+        () => filteredAgingRows.filter((row) => row.is_stalled).length,
+        [filteredAgingRows]
+    )
+
     const fetchLeads = async () => {
         setLoading(true)
         const { data, error } = await supabase
@@ -283,6 +338,60 @@ export default function LeadsPage() {
         setLoading(false)
     }
 
+    const fetchNegotiationAging = async () => {
+        setAgingLoading(true)
+        setAgingError(null)
+        const { data, error } = await (supabase.from('lead_negotiation_aging_view') as any)
+            .select('*')
+            .order('is_stalled', { ascending: false })
+            .order('aging_days', { ascending: false })
+            .limit(300)
+
+        if (error) {
+            console.warn('Error fetching negotiation aging view:', error)
+            const msg = String(error?.message || '').toLowerCase()
+            const missingView = msg.includes('lead_negotiation_aging_view') || msg.includes('42p01') || msg.includes('does not exist')
+            setAgingError(missingView
+                ? 'Aging de negociaciones no disponible en esta base. Ejecuta la migración 064.'
+                : (error.message || 'No se pudo cargar el aging de negociaciones.'))
+            setAgingRows([])
+            setAgingLoading(false)
+            return
+        }
+
+        const rows = ((data || []) as any[]).map((row) => ({
+            lead_id: Number(row?.lead_id || 0),
+            seller_id: row?.seller_id ? String(row.seller_id) : null,
+            seller_username: row?.seller_username ? String(row.seller_username) : null,
+            seller_full_name: row?.seller_full_name ? String(row.seller_full_name) : null,
+            empresa_id: row?.empresa_id ? String(row.empresa_id) : null,
+            empresa: row?.empresa ? String(row.empresa) : null,
+            nombre: row?.nombre ? String(row.nombre) : null,
+            valor_estimado: row?.valor_estimado == null ? 0 : Number(row.valor_estimado),
+            probabilidad: row?.probabilidad == null ? null : Number(row.probabilidad),
+            forecast_close_date: row?.forecast_close_date ? String(row.forecast_close_date) : null,
+            negotiation_started_at: row?.negotiation_started_at ? String(row.negotiation_started_at) : null,
+            aging_days: row?.aging_days == null ? 0 : Number(row.aging_days),
+            pending_tasks_count: row?.pending_tasks_count == null ? 0 : Number(row.pending_tasks_count),
+            overdue_tasks_count: row?.overdue_tasks_count == null ? 0 : Number(row.overdue_tasks_count),
+            has_open_tasks: !!row?.has_open_tasks,
+            next_meeting_at: row?.next_meeting_at ? String(row.next_meeting_at) : null,
+            has_future_meeting: !!row?.has_future_meeting,
+            last_activity_at: row?.last_activity_at ? String(row.last_activity_at) : null,
+            days_since_last_activity: row?.days_since_last_activity == null ? null : Number(row.days_since_last_activity),
+            is_stalled: !!row?.is_stalled,
+            industria: row?.industria ? String(row.industria) : null,
+            tamano_empresa: row?.tamano_empresa == null ? null : Number(row.tamano_empresa)
+        })) as NegotiationAgingRow[]
+
+        setAgingRows(rows.filter((row) => Number.isFinite(row.lead_id)))
+        setAgingLoading(false)
+    }
+
+    const refreshLeadsAndAging = async () => {
+        await Promise.all([fetchLeads(), fetchNegotiationAging()])
+    }
+
     const fetchCompaniesList = async () => {
         const { data, error } = await supabase
             .from('empresas')
@@ -300,7 +409,7 @@ export default function LeadsPage() {
     }
 
     useEffect(() => {
-        fetchLeads()
+        refreshLeadsAndAging()
         fetchCompaniesList()
         fetchUser()
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -588,6 +697,9 @@ export default function LeadsPage() {
                 notas: leadData.notas,
                 probabilidad: leadData.probabilidad,
                 empresa_id: finalEmpresaId as string,
+                // Preserve original owner on edits; editor and owner are different concepts.
+                owner_id: currentLead.owner_id || null,
+                owner_username: currentLead.owner_username || null,
                 loss_reason_id: (leadData as any).loss_reason_id || null,
                 loss_subreason_id: (leadData as any).loss_subreason_id || null,
                 loss_notes: ((leadData as any).loss_notes || '').trim() || null
@@ -712,7 +824,7 @@ export default function LeadsPage() {
         }
 
         setIsModalOpen(false)
-        await fetchLeads()
+        await refreshLeadsAndAging()
     }
 
 
@@ -832,7 +944,7 @@ export default function LeadsPage() {
                 setSelectedLead(null)
                 setIsDetailViewOpen(false)
             }
-            await fetchLeads()
+            await refreshLeadsAndAging()
         }
         setClientToDelete(null)
         setIsDeleteModalOpen(false)
@@ -848,6 +960,20 @@ export default function LeadsPage() {
         setModalMode('edit')
         setCurrentLead(lead)
         setIsModalOpen(true)
+    }
+
+    const handleAgingRowClick = async (row: NegotiationAgingRow) => {
+        const existing = leads.find((lead) => Number(lead.id) === Number(row.lead_id))
+        if (existing) {
+            handleRowClick(existing)
+            return
+        }
+        const { data, error } = await (supabase.from('clientes') as any)
+            .select('*')
+            .eq('id', row.lead_id)
+            .maybeSingle()
+        if (error || !data) return
+        handleRowClick(data as Lead)
     }
 
     useEffect(() => {
@@ -1039,6 +1165,211 @@ export default function LeadsPage() {
                                 onEmailClick={handleEmailClick}
                                 userEmail={currentUser?.email || undefined}
                             />
+                        )}
+                    </div>
+                </div>
+
+                <div className='rounded-[32px] shadow-xl border overflow-hidden flex flex-col' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                    <div className='px-8 py-6 border-b flex flex-col gap-5' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex flex-col md:flex-row md:items-center justify-between gap-4'>
+                            <div className='flex items-center gap-4'>
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <Clock3 size={22} strokeWidth={2} />
+                                </div>
+                                <div>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Aging de Negociaciones</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>
+                                        Días en negociación y leads atorados (regla: 14+ días, 7+ sin actividad, sin junta futura, sin tareas pendientes)
+                                    </p>
+                                </div>
+                            </div>
+                            <div className='flex items-center gap-3'>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{filteredAgingRows.length}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Negociaciones</span>
+                                        <span className='ah-count-chip-subtitle'>en aging</span>
+                                    </div>
+                                </div>
+                                <div className='ah-count-chip' style={{ borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)' }}>
+                                    <span className='ah-count-chip-number' style={{ color: '#fca5a5' }}>{stalledAgingCount}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Atorados</span>
+                                        <span className='ah-count-chip-subtitle'>detectados</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <button
+                                type='button'
+                                onClick={() => setAgingOnlyStalled((v) => !v)}
+                                className={[
+                                    'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
+                                    agingOnlyStalled
+                                        ? 'bg-rose-500/12 border-rose-400/35 text-rose-200'
+                                        : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
+                                ].join(' ')}
+                            >
+                                Solo atorados
+                            </button>
+                            {['0', '7', '14', '30'].map((days) => {
+                                const active = agingMinDays === days
+                                return (
+                                    <button
+                                        key={days}
+                                        type='button'
+                                        onClick={() => setAgingMinDays(days)}
+                                        className={[
+                                            'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
+                                            active
+                                                ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
+                                                : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
+                                        ].join(' ')}
+                                    >
+                                        {days === '0' ? 'Todos los días' : `${days}+ días`}
+                                    </button>
+                                )
+                            })}
+                            <button
+                                type='button'
+                                onClick={fetchNegotiationAging}
+                                className='ml-auto px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 text-white/75 text-[10px] font-black uppercase tracking-[0.15em] hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer'
+                            >
+                                Actualizar Aging
+                            </button>
+                        </div>
+
+                        {agingError && (
+                            <div className='rounded-2xl border px-4 py-3 text-sm flex items-center gap-3' style={{ borderColor: 'rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.06)', color: 'var(--text-primary)' }}>
+                                <TriangleAlert size={16} className='text-amber-300 shrink-0' />
+                                <span>{agingError}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className='overflow-x-auto custom-scrollbar'>
+                        {agingLoading && agingRows.length === 0 ? (
+                            <div className='w-full py-14 flex flex-col items-center justify-center gap-3'>
+                                <div className='w-8 h-8 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
+                                <p className='text-xs font-bold uppercase tracking-widest text-white/50'>Calculando aging...</p>
+                            </div>
+                        ) : filteredAgingRows.length === 0 ? (
+                            <div className='w-full py-14 text-center text-sm font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                No hay negociaciones que cumplan los filtros de aging.
+                            </div>
+                        ) : (
+                            <table className='min-w-full'>
+                                <thead>
+                                    <tr className='border-b' style={{ borderColor: 'var(--card-border)' }}>
+                                        {['Vendedor', 'Empresa', 'Lead', 'Aging', 'Última actividad', 'Próx. junta', 'Tareas', 'Valor', 'Estado'].map((label) => (
+                                            <th key={label} className='px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)' }}>
+                                                {label}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredAgingRows.map((row) => {
+                                        const lead = leads.find((item) => Number(item.id) === Number(row.lead_id))
+                                        const sellerDisplay = row.seller_full_name || row.seller_username || 'Sin asignar'
+                                        const agingDays = Number(row.aging_days || 0)
+                                        const agingChip = agingDays >= 14
+                                            ? 'bg-rose-500/12 border-rose-400/30 text-rose-200'
+                                            : agingDays >= 7
+                                                ? 'bg-amber-500/12 border-amber-400/30 text-amber-200'
+                                                : 'bg-white/5 border-white/10 text-white/80'
+                                        const statusChip = row.is_stalled
+                                            ? 'bg-rose-500/12 border-rose-400/35 text-rose-200'
+                                            : row.has_future_meeting
+                                                ? 'bg-emerald-500/12 border-emerald-400/35 text-emerald-200'
+                                                : row.has_open_tasks
+                                                    ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
+                                                    : 'bg-white/5 border-white/10 text-white/70'
+                                        const statusText = row.is_stalled
+                                            ? 'Atorado'
+                                            : row.has_future_meeting
+                                                ? 'Con junta'
+                                                : row.has_open_tasks
+                                                    ? 'Con tarea'
+                                                    : 'Sin siguiente acción'
+                                        return (
+                                            <tr
+                                                key={`aging-${row.lead_id}`}
+                                                onClick={() => handleAgingRowClick(row)}
+                                                className='border-b transition-colors cursor-pointer hover:bg-white/5'
+                                                style={{ borderColor: 'var(--card-border)' }}
+                                                title={lead ? 'Abrir detalle del lead' : 'Abrir detalle'}
+                                            >
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{sellerDisplay}</div>
+                                                    {row.industria && (
+                                                        <div className='text-[11px] mt-0.5' style={{ color: 'var(--text-secondary)' }}>{row.industria}</div>
+                                                    )}
+                                                </td>
+                                                <td className='px-4 py-3 align-top text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{row.empresa || '-'}</td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>{row.nombre || '-'}</div>
+                                                    <div className='text-[11px]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Prob. {row.probabilidad == null ? '—' : `${row.probabilidad}%`}
+                                                    </div>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-xl border text-xs font-black ${agingChip}`}>
+                                                        {agingDays} días
+                                                    </div>
+                                                    {row.negotiation_started_at && (
+                                                        <div className='text-[11px] mt-1' style={{ color: 'var(--text-secondary)' }}>
+                                                            Desde {new Date(row.negotiation_started_at).toLocaleDateString('es-MX')}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className='px-4 py-3 align-top text-[12px]' style={{ color: 'var(--text-primary)' }}>
+                                                    {row.last_activity_at
+                                                        ? (
+                                                            <div>
+                                                                <div>{new Date(row.last_activity_at).toLocaleDateString('es-MX')}</div>
+                                                                <div className='text-[11px]' style={{ color: 'var(--text-secondary)' }}>
+                                                                    {row.days_since_last_activity == null ? '—' : `${row.days_since_last_activity} días`}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                        : '—'}
+                                                </td>
+                                                <td className='px-4 py-3 align-top text-[12px]' style={{ color: 'var(--text-primary)' }}>
+                                                    {row.next_meeting_at
+                                                        ? (
+                                                            <div>
+                                                                <div>{new Date(row.next_meeting_at).toLocaleDateString('es-MX')}</div>
+                                                                <div className='text-[11px]' style={{ color: 'var(--text-secondary)' }}>
+                                                                    {new Date(row.next_meeting_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                        : '—'}
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                                                        {row.pending_tasks_count}
+                                                    </div>
+                                                    <div className='text-[11px]' style={{ color: row.overdue_tasks_count > 0 ? '#fca5a5' : 'var(--text-secondary)' }}>
+                                                        {row.overdue_tasks_count > 0 ? `${row.overdue_tasks_count} atrasada(s)` : 'sin atraso'}
+                                                    </div>
+                                                </td>
+                                                <td className='px-4 py-3 align-top text-sm font-black' style={{ color: '#dbeafe' }}>
+                                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(row.valor_estimado || 0))}
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-[0.14em] ${statusChip}`}>
+                                                        {statusText}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
                         )}
                     </div>
                 </div>

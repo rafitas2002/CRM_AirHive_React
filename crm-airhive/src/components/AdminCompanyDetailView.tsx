@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase'
 import { CompanyData } from './CompanyModal'
 import type { Database } from '@/lib/supabase'
@@ -14,6 +14,17 @@ import { FileText, MapPin, Globe, Users2, ClipboardList, Boxes, CalendarClock, C
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
+import { useTheme } from '@/lib/ThemeContext'
+import {
+    buildSemanticToneCssVars,
+    getCompanyNoteTypeToneLane,
+    getLeadStageToneLane,
+    getMeetingStatusToneLane,
+    getProjectStageToneLane,
+    getSemanticTonePalette,
+    getTaskStatusToneLane,
+    type UiToneLane
+} from '@/lib/semanticUiTones'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 type MeetingRow = Database['public']['Tables']['meetings']['Row']
@@ -101,6 +112,7 @@ export default function AdminCompanyDetailView({
     onEditCompany
 }: AdminCompanyDetailViewProps) {
     useBodyScrollLock(isOpen)
+    const { theme } = useTheme()
     const [clients, setClients] = useState<Cliente[]>([])
     const [loadingClients, setLoadingClients] = useState(false)
     const [projectAssignments, setProjectAssignments] = useState<CompanyProjectAssignment360[]>([])
@@ -946,23 +958,17 @@ export default function AdminCompanyDetailView({
         return s || 'Sin etapa'
     }
 
-    const getProjectStageChipClass = (stage?: string | null) => {
-        const s = String(stage || '')
-        if (s === 'implemented_real') return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
-        if (s === 'in_negotiation' || s === 'forecasted') return 'border-amber-400/25 bg-amber-500/10 text-amber-200'
-        if (s === 'prospection_same_close') return 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200'
-        if (s === 'future_lead_opportunity') return 'border-blue-400/25 bg-blue-500/10 text-blue-200'
-        return 'border-white/10 bg-white/5 text-white/60'
-    }
+    const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
+    const projectStageToneVars = (stage?: string | null) => toneVars(getProjectStageToneLane(stage))
+    const leadStageToneVars = (stage?: string | null) => toneVars(getLeadStageToneLane(stage))
+    const meetingStatusToneVars = (status?: string | null) => toneVars(getMeetingStatusToneLane(status))
+    const taskStatusToneVars = (status?: string | null) => toneVars(getTaskStatusToneLane(status))
+    const noteTypeToneVars = (noteType?: string | null) => toneVars(getCompanyNoteTypeToneLane(noteType))
 
-    const getLeadStageChipClass = (stage?: string | null) => {
-        const s = String(stage || '').toLowerCase()
-        if (s === 'cerrado ganado') return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
-        if (s === 'cerrado perdido') return 'border-rose-400/25 bg-rose-500/10 text-rose-200'
-        if (s === 'negociación' || s === 'negociacion') return 'border-amber-400/25 bg-amber-500/10 text-amber-200'
-        if (s === 'prospección' || s === 'prospeccion') return 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-200'
-        return 'border-blue-400/25 bg-blue-500/10 text-blue-200'
-    }
+    const toneChipClassName = 'border shadow-sm [background:var(--tone-chip-bg)] [border-color:var(--tone-chip-border)] [color:var(--tone-chip-text)]'
+    const toneChipHoverButtonClassName = `${toneChipClassName} transition-all cursor-pointer hover:-translate-y-px hover:[background:var(--tone-chip-hover-bg)] hover:[border-color:var(--tone-chip-hover-border)] hover:[color:var(--tone-chip-hover-text)] hover:[box-shadow:0_10px_22px_-14px_var(--tone-shadow)] active:translate-y-0 active:scale-[0.99]`
+    const tonePanelClassName = 'border [background:var(--tone-panel-bg)] [border-color:var(--tone-panel-border)] [color:var(--tone-panel-text)]'
+    const tonePanelSoftClassName = 'border [background:var(--tone-panel-soft-bg)] [border-color:var(--tone-panel-soft-border)] [color:var(--tone-panel-soft-text)]'
 
     if (!isOpen) return null
 
@@ -980,7 +986,10 @@ export default function AdminCompanyDetailView({
                 </div>
 
                 <div className='flex items-center gap-3'>
-                    <span className='px-4 py-1.5 rounded-full bg-blue-500/20 text-blue-100 text-xs font-bold border border-blue-500/30 uppercase tracking-widest'>
+                    <span
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest ${toneChipClassName}`}
+                        style={toneVars('blue')}
+                    >
                         Empresa Certificada
                     </span>
                     <button
@@ -1009,7 +1018,8 @@ export default function AdminCompanyDetailView({
                                     <button
                                         type='button'
                                         onClick={() => onEditCompany(company)}
-                                        className='h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-white/75 inline-flex items-center justify-center transition-all cursor-pointer hover:border-amber-400/35 hover:bg-amber-500/12 hover:text-amber-200'
+                                        className='h-9 w-9 rounded-xl border bg-[var(--card-bg)] text-[var(--text-primary)] shadow-sm inline-flex items-center justify-center transition-all cursor-pointer hover:-translate-y-px hover:[border-color:var(--tone-chip-hover-border)] hover:[background:var(--tone-chip-hover-bg)] hover:[color:var(--tone-chip-hover-text)] hover:[box-shadow:0_10px_22px_-14px_var(--tone-shadow)]'
+                                        style={{ ...toneVars('amber'), borderColor: 'var(--card-border)' }}
                                         aria-label='Editar empresa'
                                         title='Editar empresa'
                                     >
@@ -1027,7 +1037,8 @@ export default function AdminCompanyDetailView({
                                             {companyBadgeIndustries.map((industry) => (
                                                 <span
                                                     key={`chip-${industry.id}`}
-                                                    className='px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${toneChipClassName}`}
+                                                    style={toneVars('blue')}
                                                 >
                                                     {industry.name}
                                                 </span>
@@ -1135,7 +1146,10 @@ export default function AdminCompanyDetailView({
                                     </div>
                                 </div>
                                 {workspaceWarning && (
-                                    <span className='px-3 py-1 rounded-lg border border-amber-400/25 bg-amber-500/10 text-amber-200 text-[10px] font-black uppercase tracking-[0.14em]'>
+                                    <span
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-[0.14em] ${toneChipClassName}`}
+                                        style={toneVars('amber')}
+                                    >
                                         Carga parcial
                                     </span>
                                 )}
@@ -1144,25 +1158,29 @@ export default function AdminCompanyDetailView({
                             <div className='mt-4 flex flex-wrap gap-2'>
                                 <button
                                     onClick={() => setIsQuickLeadModalOpen(true)}
-                                    className='h-10 px-4 rounded-2xl border border-blue-400/25 bg-blue-500/10 text-blue-100 text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:bg-blue-500/15 hover:border-blue-400/35 transition-all cursor-pointer'
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('blue')}
                                 >
                                     <Plus size={13} /> Nuevo Lead
                                 </button>
                                 <button
                                     onClick={handleOpenQuickMeeting}
-                                    className='h-10 px-4 rounded-2xl border border-violet-400/25 bg-violet-500/10 text-violet-100 text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:bg-violet-500/15 hover:border-violet-400/35 transition-all cursor-pointer'
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('violet')}
                                 >
                                     <CalendarPlus size={13} /> Nueva Junta
                                 </button>
                                 <button
                                     onClick={() => setIsQuickTaskModalOpen(true)}
-                                    className='h-10 px-4 rounded-2xl border border-cyan-400/25 bg-cyan-500/10 text-cyan-100 text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:bg-cyan-500/15 hover:border-cyan-400/35 transition-all cursor-pointer'
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('cyan')}
                                 >
                                     <ListTodo size={13} /> Nueva Tarea
                                 </button>
                                 <button
                                     onClick={handleOpenQuickProjectModal}
-                                    className='h-10 px-4 rounded-2xl border border-amber-400/25 bg-amber-500/10 text-amber-100 text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:bg-amber-500/15 hover:border-amber-400/35 transition-all cursor-pointer'
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('amber')}
                                 >
                                     <FolderPlus size={13} /> Agregar Proyecto
                                 </button>
@@ -1171,60 +1189,72 @@ export default function AdminCompanyDetailView({
                                         setQuickActionError(null)
                                         setIsQuickNoteModalOpen(true)
                                     }}
-                                    className='h-10 px-4 rounded-2xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-100 text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 hover:bg-emerald-500/15 hover:border-emerald-400/35 transition-all cursor-pointer'
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('emerald')}
                                 >
                                     <StickyNote size={13} /> Nueva Nota
                                 </button>
                             </div>
 
                             {quickActionError && (
-                                <div className='mt-3 rounded-2xl border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-200'>
+                                <div
+                                    className={`mt-3 rounded-2xl px-4 py-3 text-xs font-bold ${tonePanelClassName}`}
+                                    style={toneVars('rose')}
+                                >
                                     {quickActionError}
                                 </div>
                             )}
 
                             <div className='mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'>
-                                <div className='rounded-2xl border border-white/10 bg-black/20 p-4'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/60'>Leads</p>
-                                    <p className='mt-1 text-2xl font-black text-white'>{companyStats.totalLeads}</p>
-                                    <p className='text-xs font-bold text-white/65'>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Leads</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{companyStats.totalLeads}</p>
+                                    <p className='text-xs font-bold text-[var(--text-secondary)]'>
                                         {companyStats.prospectionLeads} prospección · {companyStats.negotiationLeads} negociación
                                     </p>
                                 </div>
-                                <div className='rounded-2xl border border-white/10 bg-black/20 p-4'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/60'>Cierres</p>
-                                    <p className='mt-1 text-2xl font-black text-white'>{companyStats.wonLeads}</p>
-                                    <p className='text-xs font-bold text-white/65'>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Cierres</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{companyStats.wonLeads}</p>
+                                    <p className='text-xs font-bold text-[var(--text-secondary)]'>
                                         {companyStats.lostLeads} perdidos
                                     </p>
                                 </div>
-                                <div className='rounded-2xl border border-white/10 bg-black/20 p-4'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/60'>Proyectos</p>
-                                    <p className='mt-1 text-2xl font-black text-white'>{companyStats.implementedProjects}</p>
-                                    <p className='text-xs font-bold text-white/65'>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Proyectos</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{companyStats.implementedProjects}</p>
+                                    <p className='text-xs font-bold text-[var(--text-secondary)]'>
                                         {companyStats.totalProjects} asignaciones totales
                                     </p>
                                 </div>
-                                <div className='rounded-2xl border border-white/10 bg-black/20 p-4'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/60'>Agenda</p>
-                                    <p className='mt-1 text-2xl font-black text-white'>{companyStats.pendingTasks}</p>
-                                    <p className='text-xs font-bold text-white/65'>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Agenda</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{companyStats.pendingTasks}</p>
+                                    <p className='text-xs font-bold text-[var(--text-secondary)]'>
                                         tareas pendientes · {companyStats.completedMeetings} juntas completadas
                                     </p>
                                 </div>
                             </div>
 
                             {companyStats.nextScheduledMeeting && (
-                                <div className='mt-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3'>
-                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-blue-200'>Próxima junta asociada</p>
-                                    <p className='text-sm font-black text-white mt-1'>
+                                <div
+                                    className={`mt-4 rounded-2xl px-4 py-3 ${tonePanelClassName}`}
+                                    style={toneVars('blue')}
+                                >
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] [color:var(--tone-panel-text)]'>Próxima junta asociada</p>
+                                    <p className='text-sm font-black text-[var(--text-primary)] mt-1'>
                                         {String((companyStats.nextScheduledMeeting as any)?.title || 'Junta')} · {formatDateTime(String((companyStats.nextScheduledMeeting as any)?.start_time || ''))}
                                     </p>
                                 </div>
                             )}
 
                             {workspaceWarning && (
-                                <p className='mt-3 text-xs font-bold text-amber-200/85'>{workspaceWarning}</p>
+                                <div
+                                    className={`mt-3 rounded-xl px-3 py-2 text-xs font-bold ${tonePanelSoftClassName}`}
+                                    style={toneVars('amber')}
+                                >
+                                    {workspaceWarning}
+                                </div>
                             )}
                         </div>
 
@@ -1278,11 +1308,10 @@ export default function AdminCompanyDetailView({
                                                             {client.contacto || '-'}
                                                         </td>
                                                         <td className='px-8 py-5'>
-                                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${client.etapa === 'Cerrado Ganado' ? 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20' :
-                                                                client.etapa === 'Cerrado Perdido' ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' :
-                                                                    client.etapa === 'Negociación' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                                                                        'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                                                                }`}>
+                                                            <span
+                                                                className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase ${toneChipClassName}`}
+                                                                style={leadStageToneVars(client.etapa)}
+                                                            >
                                                                 {client.etapa}
                                                             </span>
                                                         </td>
@@ -1306,7 +1335,7 @@ export default function AdminCompanyDetailView({
                             <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                                 <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-3'>
                                     <div className='flex items-center gap-2'>
-                                        <Boxes size={16} className='text-amber-300' />
+                                        <Boxes size={16} className='text-amber-500 dark:text-amber-300' />
                                         <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                             Proyectos por empresa
                                         </h3>
@@ -1323,51 +1352,58 @@ export default function AdminCompanyDetailView({
                                             ['prospection_same_close', projectsByStage.prospection_same_close?.length || 0],
                                             ['future_lead_opportunity', projectsByStage.future_lead_opportunity?.length || 0]
                                         ] as Array<[string, number]>).map(([stage, count]) => (
-                                            <span key={stage} className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${getProjectStageChipClass(stage)}`}>
+                                            <span
+                                                key={stage}
+                                                className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                style={projectStageToneVars(stage)}
+                                            >
                                                 {getProjectStageLabel(stage)} <span className='opacity-80'>{count}</span>
                                             </span>
                                         ))}
                                     </div>
 
                                     {loadingWorkspaceExtras ? (
-                                        <div className='py-10 text-center text-white/60 animate-pulse font-bold'>Cargando proyectos...</div>
+                                        <div className='py-10 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando proyectos...</div>
                                     ) : projectAssignments.length === 0 ? (
-                                        <div className='py-10 text-center text-white/60 font-bold'>No hay proyectos asignados a esta empresa.</div>
+                                        <div className='py-10 text-center text-[var(--text-secondary)] font-bold'>No hay proyectos asignados a esta empresa.</div>
                                     ) : (
                                         <div className='space-y-3'>
                                             {projectAssignments.map((row) => {
                                                 const sourceLead = row.source_lead_id != null ? leadById.get(Number(row.source_lead_id)) : null
                                                 return (
-                                                    <div key={row.id} className='rounded-2xl border border-white/10 bg-black/15 p-4'>
+                                                    <div key={row.id} className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
                                                         <div className='flex items-start justify-between gap-3'>
                                                             <div className='min-w-0'>
-                                                                <p className='text-sm font-black text-white truncate'>{row.projectName}</p>
-                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/55'>
+                                                                <p className='text-sm font-black text-[var(--text-primary)] truncate'>{row.projectName}</p>
+                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
                                                                     {sourceLead?.nombre ? `Lead origen: ${sourceLead.nombre}` : (sourceLead?.empresa || 'Sin lead origen')}
                                                                 </p>
                                                             </div>
-                                                            <span className={`shrink-0 rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${getProjectStageChipClass(row.assignment_stage)}`}>
+                                                            <span
+                                                                className={`shrink-0 rounded-xl px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                                style={projectStageToneVars(row.assignment_stage)}
+                                                            >
                                                                 {getProjectStageLabel(row.assignment_stage)}
                                                             </span>
                                                         </div>
 
                                                         <div className='mt-3 grid grid-cols-2 gap-3 text-xs'>
-                                                            <div className='rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
-                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/55'>Mensualidad</p>
-                                                                <p className='font-black text-white'>
+                                                            <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Mensualidad</p>
+                                                                <p className='font-black text-[var(--text-primary)]'>
                                                                     {formatCurrency(row.mensualidad_pactada_usd ?? row.projectMonthlyReal)}
                                                                 </p>
                                                             </div>
-                                                            <div className='rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
-                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/55'>Implementación</p>
-                                                                <p className='font-black text-white'>
+                                                            <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Implementación</p>
+                                                                <p className='font-black text-[var(--text-primary)]'>
                                                                     {formatCurrency(row.implementacion_pactada_usd ?? row.projectImplementationReal)}
                                                                 </p>
                                                             </div>
                                                         </div>
 
                                                         {row.notes && (
-                                                            <p className='mt-3 text-xs font-medium text-white/70 line-clamp-2'>{row.notes}</p>
+                                                            <p className='mt-3 text-xs font-medium text-[var(--text-secondary)] line-clamp-2'>{row.notes}</p>
                                                         )}
                                                     </div>
                                                 )
@@ -1381,7 +1417,7 @@ export default function AdminCompanyDetailView({
                                 <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                                     <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-3'>
                                         <div className='flex items-center gap-2'>
-                                            <CalendarClock size={16} className='text-violet-300' />
+                                            <CalendarClock size={16} className='text-violet-500 dark:text-violet-300' />
                                             <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                                 Juntas asociadas
                                             </h3>
@@ -1392,36 +1428,33 @@ export default function AdminCompanyDetailView({
                                     </div>
                                     <div className='p-4 max-h-[260px] overflow-y-auto custom-scrollbar'>
                                         {loadingWorkspaceExtras ? (
-                                            <div className='py-8 text-center text-white/60 animate-pulse font-bold'>Cargando juntas...</div>
+                                            <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando juntas...</div>
                                         ) : meetings.length === 0 ? (
-                                            <div className='py-8 text-center text-white/60 font-bold'>Sin juntas registradas para esta empresa.</div>
+                                            <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin juntas registradas para esta empresa.</div>
                                         ) : (
                                             <div className='space-y-2'>
                                                 {meetings.slice(0, 12).map((meeting) => {
                                                     const linkedLead = leadById.get(Number((meeting as any).lead_id || 0))
                                                     const responsibleName = getLeadResponsibleName(linkedLead)
                                                     const meetingStatus = String((meeting as any)?.status || (meeting as any)?.meeting_status || 'scheduled')
-                                                    const isCompleted = meetingStatus.toLowerCase() === 'completed'
-                                                    const isCancelled = meetingStatus.toLowerCase() === 'cancelled'
                                                     return (
-                                                        <div key={String((meeting as any).id)} className='rounded-xl border border-white/10 bg-black/15 px-3 py-2.5'>
+                                                        <div key={String((meeting as any).id)} className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2.5'>
                                                             <div className='flex items-start justify-between gap-2'>
                                                                 <div className='min-w-0'>
-                                                                    <p className='text-sm font-black text-white truncate'>
+                                                                    <p className='text-sm font-black text-[var(--text-primary)] truncate'>
                                                                         {String((meeting as any)?.title || 'Junta')}
                                                                     </p>
-                                                                    <p className='text-[11px] font-bold text-white/60 truncate'>
+                                                                    <p className='text-[11px] font-bold text-[var(--text-secondary)] truncate'>
                                                                         {linkedLead?.nombre || linkedLead?.empresa || 'Lead'} · {formatDateTime(String((meeting as any)?.start_time || ''))}
                                                                     </p>
-                                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-white/40 truncate mt-1'>
+                                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]/80 truncate mt-1'>
                                                                         Responsable · {responsibleName}
                                                                     </p>
                                                                 </div>
-                                                                <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
-                                                                    isCompleted ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
-                                                                        : isCancelled ? 'border-rose-400/25 bg-rose-500/10 text-rose-200'
-                                                                            : 'border-blue-400/25 bg-blue-500/10 text-blue-200'
-                                                                }`}>
+                                                                <span
+                                                                    className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                                    style={meetingStatusToneVars(meetingStatus)}
+                                                                >
                                                                     {meetingStatus}
                                                                 </span>
                                                             </div>
@@ -1436,7 +1469,7 @@ export default function AdminCompanyDetailView({
                                 <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                                     <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-3'>
                                         <div className='flex items-center gap-2'>
-                                            <CheckSquare size={16} className='text-blue-300' />
+                                            <CheckSquare size={16} className='text-blue-500 dark:text-blue-300' />
                                             <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                                 Tareas asociadas
                                             </h3>
@@ -1447,9 +1480,9 @@ export default function AdminCompanyDetailView({
                                     </div>
                                     <div className='p-4 max-h-[260px] overflow-y-auto custom-scrollbar'>
                                         {loadingWorkspaceExtras ? (
-                                            <div className='py-8 text-center text-white/60 animate-pulse font-bold'>Cargando tareas...</div>
+                                            <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando tareas...</div>
                                         ) : tasks.length === 0 ? (
-                                            <div className='py-8 text-center text-white/60 font-bold'>Sin tareas registradas para esta empresa.</div>
+                                            <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin tareas registradas para esta empresa.</div>
                                         ) : (
                                             <div className='space-y-2'>
                                                 {tasks.slice(0, 12).map((task) => {
@@ -1457,22 +1490,23 @@ export default function AdminCompanyDetailView({
                                                     const responsibleName = getLeadResponsibleName(linkedLead)
                                                     const isCompleted = String((task as any)?.estado || '').toLowerCase() === 'completada'
                                                     return (
-                                                        <div key={String((task as any).id)} className='rounded-xl border border-white/10 bg-black/15 px-3 py-2.5'>
+                                                        <div key={String((task as any).id)} className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2.5'>
                                                             <div className='flex items-start justify-between gap-2'>
                                                                 <div className='min-w-0'>
-                                                                    <p className={`text-sm font-black truncate ${isCompleted ? 'text-white/55 line-through' : 'text-white'}`}>
+                                                                    <p className={`text-sm font-black truncate ${isCompleted ? 'text-[var(--text-secondary)] line-through' : 'text-[var(--text-primary)]'}`}>
                                                                         {String((task as any)?.titulo || 'Tarea')}
                                                                     </p>
-                                                                    <p className='text-[11px] font-bold text-white/60 truncate'>
+                                                                    <p className='text-[11px] font-bold text-[var(--text-secondary)] truncate'>
                                                                         {linkedLead?.nombre || linkedLead?.empresa || 'Lead'} · vence {formatDateOnly(String((task as any)?.fecha_vencimiento || ''))}
                                                                     </p>
-                                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-white/40 truncate mt-1'>
+                                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]/80 truncate mt-1'>
                                                                         Responsable · {responsibleName}
                                                                     </p>
                                                                 </div>
-                                                                <span className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
-                                                                    isCompleted ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200' : 'border-amber-400/25 bg-amber-500/10 text-amber-200'
-                                                                }`}>
+                                                                <span
+                                                                    className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                                    style={taskStatusToneVars(String((task as any)?.estado || 'pendiente'))}
+                                                                >
                                                                     {String((task as any)?.estado || 'pendiente')}
                                                                 </span>
                                                             </div>
@@ -1488,42 +1522,45 @@ export default function AdminCompanyDetailView({
 
                         <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                             <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center gap-2'>
-                                <ShieldCheck size={16} className='text-cyan-300' />
+                                <ShieldCheck size={16} className='text-cyan-500 dark:text-cyan-300' />
                                 <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                     Historial de cierres de la empresa
                                 </h3>
                             </div>
                             <div className='p-4'>
                                 {recentWonOrLostLeads.length === 0 ? (
-                                    <div className='py-8 text-center text-white/60 font-bold'>Aún no hay cierres ganados/perdidos registrados para esta empresa.</div>
+                                    <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Aún no hay cierres ganados/perdidos registrados para esta empresa.</div>
                                 ) : (
                                     <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                                         {recentWonOrLostLeads.map((lead) => {
                                             const responsibleName = getLeadResponsibleName(lead)
                                             return (
-                                            <div key={lead.id} className='rounded-2xl border border-white/10 bg-black/15 p-4'>
+                                            <div key={lead.id} className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
                                                 <div className='flex items-start justify-between gap-2'>
                                                     <div className='min-w-0'>
-                                                        <p className='text-sm font-black text-white truncate'>{lead.nombre || lead.empresa || 'Lead'}</p>
-                                                        <p className='text-[11px] font-bold text-white/60 truncate'>
+                                                        <p className='text-sm font-black text-[var(--text-primary)] truncate'>{lead.nombre || lead.empresa || 'Lead'}</p>
+                                                        <p className='text-[11px] font-bold text-[var(--text-secondary)] truncate'>
                                                             {formatDateOnly(String((lead as any)?.closed_at_real || lead.created_at || ''))}
                                                         </p>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-white/40 truncate mt-1'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]/80 truncate mt-1'>
                                                             Responsable · {responsibleName}
                                                         </p>
                                                     </div>
-                                                    <span className={`shrink-0 rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${getLeadStageChipClass(lead.etapa)}`}>
+                                                    <span
+                                                        className={`shrink-0 rounded-xl px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                        style={leadStageToneVars(lead.etapa)}
+                                                    >
                                                         {lead.etapa || 'N/A'}
                                                     </span>
                                                 </div>
                                                 <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
-                                                    <div className='rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/55'>Mensualidad</p>
-                                                        <p className='font-black text-white'>{formatCurrency((lead as any)?.valor_real_cierre ?? lead.valor_estimado)}</p>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Mensualidad</p>
+                                                        <p className='font-black text-[var(--text-primary)]'>{formatCurrency((lead as any)?.valor_real_cierre ?? lead.valor_estimado)}</p>
                                                     </div>
-                                                    <div className='rounded-xl border border-white/10 bg-white/5 px-3 py-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-white/55'>Implementación</p>
-                                                        <p className='font-black text-white'>{formatCurrency((lead as any)?.valor_implementacion_real_cierre ?? (lead as any)?.valor_implementacion_estimado ?? 0)}</p>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Implementación</p>
+                                                        <p className='font-black text-[var(--text-primary)]'>{formatCurrency((lead as any)?.valor_implementacion_real_cierre ?? (lead as any)?.valor_implementacion_estimado ?? 0)}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1536,7 +1573,7 @@ export default function AdminCompanyDetailView({
                         <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                             <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-2'>
                                 <div className='flex items-center gap-2'>
-                                    <StickyNote size={16} className='text-emerald-300' />
+                                    <StickyNote size={16} className='text-emerald-500 dark:text-emerald-300' />
                                     <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                         Notas de empresa
                                     </h3>
@@ -1547,22 +1584,25 @@ export default function AdminCompanyDetailView({
                             </div>
                             <div className='p-4 max-h-[280px] overflow-y-auto custom-scrollbar'>
                                 {loadingWorkspaceExtras ? (
-                                    <div className='py-8 text-center text-white/60 animate-pulse font-bold'>Cargando notas...</div>
+                                    <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando notas...</div>
                                 ) : companyNotes.length === 0 ? (
-                                    <div className='py-8 text-center text-white/60 font-bold'>Sin notas registradas para esta empresa.</div>
+                                    <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin notas registradas para esta empresa.</div>
                                 ) : (
                                     <div className='space-y-2'>
                                         {companyNotes.slice(0, 20).map((note) => (
-                                            <div key={note.id} className='rounded-xl border border-white/10 bg-black/15 px-3 py-3'>
+                                            <div key={note.id} className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-3'>
                                                 <div className='flex items-center justify-between gap-2 mb-2'>
-                                                    <span className='rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200'>
+                                                    <span
+                                                        className={`rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                        style={noteTypeToneVars(note.note_type)}
+                                                    >
                                                         {note.note_type || 'nota'}
                                                     </span>
-                                                    <span className='text-[10px] font-bold text-white/55'>
+                                                    <span className='text-[10px] font-bold text-[var(--text-secondary)]'>
                                                         {formatDateTime(note.created_at)}
                                                     </span>
                                                 </div>
-                                                <p className='text-sm font-medium text-white/85 whitespace-pre-wrap break-words'>{note.note_text}</p>
+                                                <p className='text-sm font-medium text-[var(--text-primary)] whitespace-pre-wrap break-words'>{note.note_text}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -1751,7 +1791,10 @@ export default function AdminCompanyDetailView({
                             </div>
 
                             {quickActionError && (
-                                <div className='rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200'>
+                                <div
+                                    className={`rounded-xl px-3 py-2 text-xs font-bold ${tonePanelClassName}`}
+                                    style={toneVars('rose')}
+                                >
                                     {quickActionError}
                                 </div>
                             )}
@@ -1766,7 +1809,8 @@ export default function AdminCompanyDetailView({
                             <button
                                 onClick={handleSaveQuickProjectAssignment}
                                 disabled={quickProjectSaving}
-                                className='h-10 px-4 rounded-xl border border-amber-400/30 bg-amber-500/15 text-amber-100 text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer disabled:opacity-60'
+                                className={`h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] disabled:opacity-60 ${toneChipHoverButtonClassName}`}
+                                style={toneVars('amber')}
                             >
                                 {quickProjectSaving ? 'Guardando...' : 'Guardar Proyecto'}
                             </button>
@@ -1813,7 +1857,10 @@ export default function AdminCompanyDetailView({
                                 />
                             </div>
                             {quickActionError && (
-                                <div className='rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200'>
+                                <div
+                                    className={`rounded-xl px-3 py-2 text-xs font-bold ${tonePanelClassName}`}
+                                    style={toneVars('rose')}
+                                >
                                     {quickActionError}
                                 </div>
                             )}
@@ -1828,7 +1875,8 @@ export default function AdminCompanyDetailView({
                             <button
                                 onClick={handleQuickNoteSave}
                                 disabled={quickNoteSaving}
-                                className='h-10 px-4 rounded-xl border border-emerald-400/30 bg-emerald-500/15 text-emerald-100 text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer disabled:opacity-60'
+                                className={`h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] disabled:opacity-60 ${toneChipHoverButtonClassName}`}
+                                style={toneVars('emerald')}
                             >
                                 {quickNoteSaving ? 'Guardando...' : 'Guardar Nota'}
                             </button>

@@ -11,6 +11,7 @@ import ConfirmModal from '@/components/ConfirmModal'
 import { Search, Target, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { useAuth } from '@/lib/auth'
+import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
 
 export default function PreLeadsPage() {
     const auth = useAuth()
@@ -41,6 +42,7 @@ export default function PreLeadsPage() {
     const [vendedorFilter, setVendedorFilter] = useState('All')
     const [industryFilter, setIndustryFilter] = useState('All')
     const [locationFilter, setLocationFilter] = useState('All')
+    const [monterreyMunicipalityFilter, setMonterreyMunicipalityFilter] = useState('All')
     const [sortBy, setSortBy] = useState('recent')
 
     // Email Composer State
@@ -51,6 +53,9 @@ export default function PreLeadsPage() {
     const [preLeadColumns, setPreLeadColumns] = useState<Record<string, boolean>>({
         industria_id: true,
         tamano: true,
+        tamano_fuente: true,
+        tamano_confianza: true,
+        tamano_senal_principal: true,
         website: true,
         logo_url: true,
         empresa_id: true,
@@ -76,7 +81,18 @@ export default function PreLeadsPage() {
     }
 
     const detectPreLeadColumns = async () => {
-        const candidates = ['industria_id', 'tamano', 'website', 'logo_url', 'empresa_id', 'created_by', 'updated_by']
+        const candidates = [
+            'industria_id',
+            'tamano',
+            'tamano_fuente',
+            'tamano_confianza',
+            'tamano_senal_principal',
+            'website',
+            'logo_url',
+            'empresa_id',
+            'created_by',
+            'updated_by'
+        ]
         const result: Record<string, boolean> = {}
 
         for (const column of candidates) {
@@ -108,13 +124,9 @@ export default function PreLeadsPage() {
         const richAttempt = await (supabase.from('empresas') as any).update(updatePayload).eq('id', companyId)
         if (!richAttempt.error) return
 
-        const fallbackAttempt = await (supabase.from('empresas') as any).update({
-            owner_id: auth.user.id
-        }).eq('id', companyId)
-
-        if (fallbackAttempt.error) {
-            console.warn('[PreLeads] Could not update company lead stage metadata:', fallbackAttempt.error.message)
-        }
+        // No reassignment fallback: changing owner_id here can incorrectly move company ownership
+        // to the admin/editor who is converting or editing records.
+        console.warn('[PreLeads] Could not update company lead stage metadata (legacy schema fallback skipped to preserve owner):', richAttempt.error?.message)
     }
 
     const fetchPreLeads = async () => {
@@ -222,6 +234,9 @@ export default function PreLeadsPage() {
                         industria: data.industria,
                         industria_id: data.industria_id,
                         tamano: data.tamano,
+                        tamano_fuente: data.tamano_fuente,
+                        tamano_confianza: data.tamano_confianza,
+                        tamano_senal_principal: data.tamano_senal_principal,
                         website: data.website,
                         logo_url: data.logo_url
                     },
@@ -254,6 +269,9 @@ export default function PreLeadsPage() {
                         industria: data.industria,
                         industria_id: data.industria_id,
                         tamano: data.tamano,
+                        tamano_fuente: data.tamano_fuente,
+                        tamano_confianza: data.tamano_confianza,
+                        tamano_senal_principal: data.tamano_senal_principal,
                         website: data.website,
                         logo_url: data.logo_url
                     },
@@ -264,6 +282,13 @@ export default function PreLeadsPage() {
 
             // Step 2: Save pre-lead with empresa_id
             const table = supabase.from('pre_leads') as any
+            const shouldPreserveOriginalSeller = modalMode === 'edit' && !!currentPreLead
+            const preservedSellerId = shouldPreserveOriginalSeller
+                ? (currentPreLead?.vendedor_id || null)
+                : (auth.user?.id || null)
+            const preservedSellerName = shouldPreserveOriginalSeller
+                ? (currentPreLead?.vendedor_name || null)
+                : (auth.profile?.full_name || auth.username || null)
             const preLeadData: Record<string, any> = {
                 nombre_empresa: data.nombre_empresa,
                 nombre_contacto: data.nombre_contacto,
@@ -272,12 +297,15 @@ export default function PreLeadsPage() {
                 ubicacion: data.ubicacion,
                 notas: data.notas,
                 giro_empresa: data.industria || data.giro_empresa || 'Sin clasificar',
-                vendedor_id: auth.user?.id,
-                vendedor_name: auth.profile?.full_name || auth.username,
+                vendedor_id: preservedSellerId,
+                vendedor_name: preservedSellerName,
                 empresa_id: companyResult.id
             }
             if (preLeadColumns.industria_id) preLeadData.industria_id = data.industria_id || null
             if (preLeadColumns.tamano) preLeadData.tamano = data.tamano || 1
+            if (preLeadColumns.tamano_fuente) preLeadData.tamano_fuente = data.tamano_fuente || null
+            if (preLeadColumns.tamano_confianza) preLeadData.tamano_confianza = data.tamano_confianza || null
+            if (preLeadColumns.tamano_senal_principal) preLeadData.tamano_senal_principal = data.tamano_senal_principal || null
             if (preLeadColumns.website) preLeadData.website = data.website || null
             if (preLeadColumns.logo_url) preLeadData.logo_url = data.logo_url || null
             if (!preLeadColumns.empresa_id) delete preLeadData.empresa_id
@@ -295,6 +323,8 @@ export default function PreLeadsPage() {
                     metadata: {
                         industria_id: preLeadData.industria_id || null,
                         tamano: preLeadData.tamano || null,
+                        tamano_fuente: preLeadData.tamano_fuente || null,
+                        tamano_confianza: preLeadData.tamano_confianza || null,
                         empresa_id: preLeadData.empresa_id || null,
                         created_by: auth.user.id,
                         created_at: new Date().toISOString()
@@ -315,6 +345,8 @@ export default function PreLeadsPage() {
                     metadata: {
                         industria_id: preLeadData.industria_id || null,
                         tamano: preLeadData.tamano || null,
+                        tamano_fuente: preLeadData.tamano_fuente || null,
+                        tamano_confianza: preLeadData.tamano_confianza || null,
                         empresa_id: preLeadData.empresa_id || null,
                         updated_by: auth.user.id,
                         updated_at: new Date().toISOString()
@@ -375,8 +407,10 @@ export default function PreLeadsPage() {
 
             const leadInsertPayload: Record<string, any> = {
                 ...data,
-                owner_id: auth.user?.id,
-                owner_username: auth.profile?.full_name || auth.username,
+                owner_id: clientModalMode === 'convert' ? (sourcePreLead?.vendedor_id || auth.user?.id) : auth.user?.id,
+                owner_username: clientModalMode === 'convert'
+                    ? (sourcePreLead?.vendedor_name || auth.profile?.full_name || auth.username)
+                    : (auth.profile?.full_name || auth.username),
                 ...traceability
             }
             if (leadColumns.created_by) leadInsertPayload.created_by = auth.user.id
@@ -460,6 +494,24 @@ export default function PreLeadsPage() {
         }
     }
 
+    const preLeadLocationFacetsById = useMemo(() => {
+        const byId = new Map<string, ReturnType<typeof getLocationFilterFacet>>()
+        for (const preLead of preLeads) {
+            byId.set(String(preLead?.id ?? ''), getLocationFilterFacetFromStructured(preLead))
+        }
+        return byId
+    }, [preLeads])
+
+    const selectedLocationKey = useMemo(
+        () => (locationFilter === 'All' ? '' : normalizeLocationFilterKey(locationFilter)),
+        [locationFilter]
+    )
+
+    const selectedMonterreyMunicipalityKey = useMemo(
+        () => (monterreyMunicipalityFilter === 'All' ? '' : normalizeLocationFilterKey(monterreyMunicipalityFilter)),
+        [monterreyMunicipalityFilter]
+    )
+
     const filteredPreLeads = useMemo(() => {
         let result = preLeads.filter(pl => {
             const matchesSearch = !search ||
@@ -469,9 +521,20 @@ export default function PreLeadsPage() {
 
             const matchesVendedor = vendedorFilter === 'All' || pl.vendedor_name === vendedorFilter
             const matchesIndustry = industryFilter === 'All' || pl.giro_empresa === industryFilter
-            const matchesLocation = locationFilter === 'All' || pl.ubicacion === locationFilter
+            const locationFacet = preLeadLocationFacetsById.get(String(pl?.id ?? '')) || getLocationFilterFacetFromStructured(pl)
+            const matchesLocationGroup =
+                locationFilter === 'All' ||
+                (!!locationFacet.groupKey && locationFacet.groupKey === selectedLocationKey)
+            const matchesMonterreyMunicipality =
+                locationFilter !== 'Monterrey' ||
+                monterreyMunicipalityFilter === 'All' ||
+                (
+                    locationFacet.isMonterreyMetro &&
+                    !!locationFacet.monterreyMunicipalityKey &&
+                    locationFacet.monterreyMunicipalityKey === selectedMonterreyMunicipalityKey
+                )
 
-            return matchesSearch && matchesVendedor && matchesIndustry && matchesLocation
+            return matchesSearch && matchesVendedor && matchesIndustry && matchesLocationGroup && matchesMonterreyMunicipality
         })
 
         if (sortBy === 'recent') {
@@ -481,7 +544,18 @@ export default function PreLeadsPage() {
         }
 
         return result
-    }, [preLeads, search, vendedorFilter, industryFilter, locationFilter, sortBy])
+    }, [
+        preLeads,
+        preLeadLocationFacetsById,
+        search,
+        vendedorFilter,
+        industryFilter,
+        locationFilter,
+        monterreyMunicipalityFilter,
+        selectedLocationKey,
+        selectedMonterreyMunicipalityKey,
+        sortBy
+    ])
 
     const uniqueVendedores = useMemo(() => {
         const vends = new Set(preLeads.map(pl => pl.vendedor_name).filter(v => !!v))
@@ -494,9 +568,34 @@ export default function PreLeadsPage() {
     }, [preLeads])
 
     const uniqueLocations = useMemo(() => {
-        const locations = new Set(preLeads.map(pl => pl.ubicacion).filter(l => !!l))
-        return Array.from(locations).sort()
-    }, [preLeads])
+        const byKey = new Map<string, string>()
+        for (const facet of preLeadLocationFacetsById.values()) {
+            if (!facet.groupLabel) continue
+            const key = facet.groupKey || normalizeLocationDuplicateKey(facet.groupLabel)
+            if (!key) continue
+            const label = facet.groupLabel
+            const prev = byKey.get(key)
+            if (!prev || label.length < prev.length || (label.length === prev.length && label.localeCompare(prev, 'es') < 0)) {
+                byKey.set(key, label)
+            }
+        }
+        return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b, 'es'))
+    }, [preLeadLocationFacetsById])
+
+    const uniqueMonterreyMunicipalities = useMemo(() => {
+        const byKey = new Map<string, string>()
+        for (const facet of preLeadLocationFacetsById.values()) {
+            if (!facet.isMonterreyMetro || !facet.monterreyMunicipality) continue
+            const key = facet.monterreyMunicipalityKey || normalizeLocationDuplicateKey(facet.monterreyMunicipality)
+            if (!key) continue
+            const label = facet.monterreyMunicipality
+            const prev = byKey.get(key)
+            if (!prev || label.length < prev.length || (label.length === prev.length && label.localeCompare(prev, 'es') < 0)) {
+                byKey.set(key, label)
+            }
+        }
+        return sortMonterreyMunicipalityLabels(Array.from(byKey.values()))
+    }, [preLeadLocationFacetsById])
 
     if (auth.loading && !auth.loggedIn) {
         return (
@@ -600,44 +699,6 @@ export default function PreLeadsPage() {
                                         className='ah-search-input'
                                     />
                                 </div>
-                                        <select
-                                            value={vendedorFilter}
-                                            onChange={(e) => setVendedorFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Vendedor: Todos</option>
-                                            {uniqueVendedores.map(v => (
-                                                <option key={v as string} value={v as string}>{v as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={industryFilter}
-                                            onChange={(e) => setIndustryFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Industria: Todas</option>
-                                            {uniqueIndustries.map(ind => (
-                                                <option key={ind as string} value={ind as string}>{ind as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={locationFilter}
-                                            onChange={(e) => setLocationFilter(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="All">Ubicación: Todas</option>
-                                            {uniqueLocations.map(loc => (
-                                                <option key={loc as string} value={loc as string}>{loc as string}</option>
-                                            ))}
-                                        </select>
-                                        <select
-                                            value={sortBy}
-                                            onChange={(e) => setSortBy(e.target.value)}
-                                            className='ah-select-control'
-                                        >
-                                            <option value="recent">Orden: Reciente</option>
-                                            <option value="name">Orden: Alfabético</option>
-                                        </select>
 
                                 <select
                                     value={vendedorFilter}
@@ -661,7 +722,13 @@ export default function PreLeadsPage() {
                                 </select>
                                 <select
                                     value={locationFilter}
-                                    onChange={(e) => setLocationFilter(e.target.value)}
+                                    onChange={(e) => {
+                                        const nextLocation = e.target.value
+                                        setLocationFilter(nextLocation)
+                                        if (nextLocation !== 'Monterrey') {
+                                            setMonterreyMunicipalityFilter('All')
+                                        }
+                                    }}
                                     className='ah-select-control'
                                 >
                                     <option value="All">Ubicación: Todas</option>
@@ -669,6 +736,18 @@ export default function PreLeadsPage() {
                                         <option key={loc as string} value={loc as string}>{loc as string}</option>
                                     ))}
                                 </select>
+                                {locationFilter === 'Monterrey' && (
+                                    <select
+                                        value={monterreyMunicipalityFilter}
+                                        onChange={(e) => setMonterreyMunicipalityFilter(e.target.value)}
+                                        className='ah-select-control'
+                                    >
+                                        <option value="All">Municipio MTY: Todos</option>
+                                        {uniqueMonterreyMunicipalities.map((municipality) => (
+                                            <option key={municipality} value={municipality}>{municipality}</option>
+                                        ))}
+                                    </select>
+                                )}
                                 <select
                                     value={sortBy}
                                     onChange={(e) => setSortBy(e.target.value)}
@@ -678,13 +757,14 @@ export default function PreLeadsPage() {
                                     <option value="name">Orden: Nombre</option>
                                 </select>
 
-                                {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || sortBy !== 'recent') && (
+                                {(search || vendedorFilter !== 'All' || industryFilter !== 'All' || locationFilter !== 'All' || monterreyMunicipalityFilter !== 'All' || sortBy !== 'recent') && (
                                     <button
                                         onClick={() => {
                                             setSearch('')
                                             setVendedorFilter('All')
                                             setIndustryFilter('All')
                                             setLocationFilter('All')
+                                            setMonterreyMunicipalityFilter('All')
                                             setSortBy('recent')
                                         }}
                                         className='ah-reset-filter-btn group'

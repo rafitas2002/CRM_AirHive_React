@@ -39,6 +39,9 @@ export async function createCompanyFromPreLead(
         industria?: string
         industria_id?: string
         tamano?: number
+        tamano_fuente?: string | null
+        tamano_confianza?: string | null
+        tamano_senal_principal?: string | null
         website?: string
         logo_url?: string
     },
@@ -52,6 +55,9 @@ export async function createCompanyFromPreLead(
         industria: preLead.industria || 'Sin clasificar',
         industria_id: preLead.industria_id || null,
         tamano: preLead.tamano || 1,
+        tamano_fuente: preLead.tamano_fuente || null,
+        tamano_confianza: preLead.tamano_confianza || null,
+        tamano_senal_principal: preLead.tamano_senal_principal || null,
         website: preLead.website || null,
         logo_url: preLead.logo_url || null,
         source_channel: 'pre_lead',
@@ -77,6 +83,9 @@ export async function createCompanyFromPreLead(
             delete v.leads_count
             delete v.first_pre_lead_at
             delete v.last_pre_lead_at
+            delete v.tamano_fuente
+            delete v.tamano_confianza
+            delete v.tamano_senal_principal
             return v
         })(),
         // Legacy minimal fallback
@@ -113,6 +122,9 @@ export async function findOrCreateCompany(
         industria?: string
         industria_id?: string
         tamano?: number
+        tamano_fuente?: string | null
+        tamano_confianza?: string | null
+        tamano_senal_principal?: string | null
         website?: string
         logo_url?: string
     },
