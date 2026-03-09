@@ -31,6 +31,11 @@ export async function confirmMeeting(
 ): Promise<{ success: boolean; snapshotCreated: boolean; snapshotId?: string }> {
     try {
         console.log('🚀 Starting confirmMeeting:', { meetingId, wasHeld, userId })
+        const toFiniteNumber = (value: any): number | null => {
+            if (value === null || value === undefined || value === '') return null
+            const parsed = Number(value)
+            return Number.isFinite(parsed) ? parsed : null
+        }
         const notes = String(payload.notes || '').trim()
         const notHeldReasonId = wasHeld ? null : String(payload.notHeldReasonId || '').trim()
         const notHeldReasonCustom = wasHeld ? null : String(payload.notHeldReasonCustom || '').trim()
@@ -159,15 +164,21 @@ export async function confirmMeeting(
             console.log('⚠️ Frozen probability missing, fetching current lead probability as fallback')
             const { data: clientData, error: clientError } = await supabase
                 .from('clientes')
-                .select('probabilidad, valor_estimado, valor_implementacion_estimado, forecast_close_date')
+                .select('*')
                 .eq('id', meeting.lead_id)
                 .single()
 
             if (!clientError && clientData) {
                 frozenProbability = (clientData as any).probabilidad
-                forecastValueAmount = Number((clientData as any).valor_estimado || 0)
-                forecastImplementationAmount = Number((clientData as any).valor_implementacion_estimado || 0)
-                forecastCloseDate = (clientData as any).forecast_close_date || null
+                forecastValueAmount = toFiniteNumber((clientData as any).value_forecast_estimated)
+                    ?? toFiniteNumber((clientData as any).valor_estimado)
+                    ?? 0
+                forecastImplementationAmount = toFiniteNumber((clientData as any).implementation_forecast_estimated)
+                    ?? toFiniteNumber((clientData as any).valor_implementacion_estimado)
+                    ?? 0
+                forecastCloseDate = (clientData as any).close_date_forecast_estimated
+                    || (clientData as any).forecast_close_date
+                    || null
             } else {
                 console.warn('⚠️ Could not fetch client probability for fallback:', clientError)
                 frozenProbability = 50 // Default fallback
@@ -177,14 +188,26 @@ export async function confirmMeeting(
         if (wasHeld && (forecastValueAmount === null || forecastImplementationAmount === null || forecastCloseDate === null)) {
             const { data: leadForecastData } = await (supabase
                 .from('clientes') as any)
-                .select('valor_estimado, valor_implementacion_estimado, forecast_close_date')
+                .select('*')
                 .eq('id', meeting.lead_id)
                 .maybeSingle()
 
             if (leadForecastData) {
-                if (forecastValueAmount === null) forecastValueAmount = Number((leadForecastData as any).valor_estimado || 0)
-                if (forecastImplementationAmount === null) forecastImplementationAmount = Number((leadForecastData as any).valor_implementacion_estimado || 0)
-                if (forecastCloseDate === null) forecastCloseDate = (leadForecastData as any).forecast_close_date || null
+                if (forecastValueAmount === null) {
+                    forecastValueAmount = toFiniteNumber((leadForecastData as any).value_forecast_estimated)
+                        ?? toFiniteNumber((leadForecastData as any).valor_estimado)
+                        ?? 0
+                }
+                if (forecastImplementationAmount === null) {
+                    forecastImplementationAmount = toFiniteNumber((leadForecastData as any).implementation_forecast_estimated)
+                        ?? toFiniteNumber((leadForecastData as any).valor_implementacion_estimado)
+                        ?? 0
+                }
+                if (forecastCloseDate === null) {
+                    forecastCloseDate = (leadForecastData as any).close_date_forecast_estimated
+                        || (leadForecastData as any).forecast_close_date
+                        || null
+                }
             }
         }
 
@@ -212,6 +235,7 @@ export async function confirmMeeting(
                     .maybeSingle()
 
                 const snapshotNumber = lastSnapshot ? lastSnapshot.snapshot_number + 1 : 1
+                const captureTimestamp = new Date().toISOString()
 
                 const { data: snapshot, error: snapshotError } = await (supabase
                     .from('forecast_snapshots') as any)
@@ -224,7 +248,7 @@ export async function confirmMeeting(
                         forecast_value_amount: forecastValueAmount,
                         forecast_implementation_amount: forecastImplementationAmount,
                         forecast_close_date: forecastCloseDate,
-                        snapshot_timestamp: meeting.start_time,
+                        snapshot_timestamp: captureTimestamp,
                         source: 'meeting_confirmed_held'
                     })
                     .select()

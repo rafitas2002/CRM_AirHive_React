@@ -1148,6 +1148,11 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     const rawFeaturedBadges = (Array.isArray(user?.badgeShowcase?.featuredBadges) ? user.badgeShowcase.featuredBadges : []) as ShowcaseBadge[]
                     const seniorityBadge = rawFeaturedBadges.find((badge) => isTenureBadge(badge)) || null
                     const featuredBadges = getEffectiveFeaturedBadges(user)
+                    const totalAccumulatedBadges = (() => {
+                        const allBadges = Array.isArray(user?.badgeShowcase?.allBadges) ? user.badgeShowcase.allBadges.length : 0
+                        const adminBadges = Array.isArray(user?.badgeShowcase?.adminDistinctions) ? user.badgeShowcase.adminDistinctions.length : 0
+                        return Math.max(0, Number(allBadges) + Number(adminBadges))
+                    })()
                     const canEditOwnShowcase = String(user?.id || '') === currentUserId
                     const jobPositionNames = getUserJobPositionIds(user).map(id => resolve('job_positions', id)).filter(Boolean)
                     const areaItems = areaIds
@@ -1235,7 +1240,7 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                                     >
                                         <div className='flex items-center justify-between gap-2 mb-2'>
                                             <p className='text-[9px] font-black uppercase tracking-[0.16em] opacity-70' style={{ color: 'var(--text-secondary)' }}>
-                                                Badges destacados
+                                                Badges destacados · {totalAccumulatedBadges} acumulados
                                             </p>
                                             <div className='flex items-center gap-1.5'>
                                                 <span className='text-[9px] font-black opacity-60' style={{ color: 'var(--text-secondary)' }}>

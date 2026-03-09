@@ -204,7 +204,7 @@ export default function PreLeadModal({
             ])
 
             if (existingPreLeadRowsError) {
-                console.warn('No se pudo cargar ubicaciones de pre-leads para validar duplicados:', existingPreLeadRowsError)
+                console.warn('No se pudo cargar ubicaciones de suspects para validar duplicados:', existingPreLeadRowsError)
             }
             if (existingCompanyRowsError) {
                 console.warn('No se pudo cargar ubicaciones de empresas para validar duplicados:', existingCompanyRowsError)
@@ -268,7 +268,7 @@ export default function PreLeadModal({
                 {/* Header - Unified Blue */}
                 <div className='ah-modal-header'>
                     <h2 className='ah-modal-title'>
-                        {mode === 'create' ? 'Nuevo Pre-Lead' : 'Editar Pre-Lead'}
+                        {mode === 'create' ? 'Nuevo Suspect' : 'Editar Suspect'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -279,10 +279,10 @@ export default function PreLeadModal({
                 </div>
 
                 {/* Form */}
-                <form id="pre-lead-form" onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
+                <form id="suspect-form" onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
                     <div className='ah-required-note' role='note'>
                         <span className='ah-required-note-dot' aria-hidden='true' />
-                        Campos obligatorios: marcados con * y resaltados en rojo
+                        Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                     </div>
 
                     {/* 🏢 Sección de Empresa */}
@@ -671,7 +671,7 @@ export default function PreLeadModal({
                         Cancelar
                     </button>
                     <button
-                        form="pre-lead-form"
+                        form="suspect-form"
                         type="submit"
                         className='px-8 py-2 bg-[#0A1635] text-white rounded-xl font-bold hover:bg-[#152955] transition-all transform active:scale-95 shadow-lg flex items-center gap-2'
                         disabled={isSubmitting || uploadingLogo}
@@ -682,7 +682,7 @@ export default function PreLeadModal({
                                 <span>Guardando...</span>
                             </>
                         ) : (
-                            <span>{mode === 'create' ? 'Registrar Pre-Lead' : 'Guardar Cambios'}</span>
+                            <span>{mode === 'create' ? 'Registrar Suspect' : 'Guardar Cambios'}</span>
                         )}
                     </button>
                 </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RotateCcw } from 'lucide-react'
 
 type DateValue = string | null | undefined
@@ -114,13 +114,15 @@ function CalendarGrid({
     selectedDate,
     onSelectDate,
     min,
-    max
+    max,
+    compact = false
 }: {
     visibleMonth: Date
     selectedDate: Date | null
     onSelectDate: (date: Date) => void
     min?: string
     max?: string
+    compact?: boolean
 }) {
     const today = new Date()
     const todayKey = formatDateOnly(today)
@@ -161,7 +163,7 @@ function CalendarGrid({
                             disabled={disabled}
                             onClick={() => onSelectDate(date)}
                             className={[
-                                'h-11 rounded-xl text-sm font-black transition-all cursor-pointer border',
+                                compact ? 'h-10 rounded-xl text-sm font-black transition-all cursor-pointer border' : 'h-11 rounded-xl text-sm font-black transition-all cursor-pointer border',
                                 'focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30',
                                 disabled ? 'opacity-35 cursor-not-allowed' : 'hover:scale-[1.02]',
                                 isSelected
@@ -190,6 +192,8 @@ function PickerShell({
     setOpen,
     disabled,
     triggerClassName,
+    panelClassName,
+    panelStyle,
     triggerContent,
     children
 }: {
@@ -197,6 +201,8 @@ function PickerShell({
     setOpen: (v: boolean) => void
     disabled?: boolean
     triggerClassName?: string
+    panelClassName?: string
+    panelStyle?: CSSProperties
     triggerContent: React.ReactNode
     children: React.ReactNode
 }) {
@@ -217,13 +223,14 @@ function PickerShell({
             {open && !disabled && (
                 <div
                     ref={panelRef}
-                    className='absolute left-0 right-auto top-full z-[220] mt-2 w-full min-w-[17rem] max-w-full rounded-2xl border shadow-2xl p-4'
+                    className={`absolute top-full z-[220] mt-2 rounded-2xl border shadow-2xl p-4 ${panelClassName || 'left-0 right-auto w-full min-w-[17rem] max-w-full'}`}
                     style={{
                         background: 'color-mix(in srgb, var(--card-bg) 88%, var(--background))',
                         borderColor: 'var(--card-border)',
                         boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
-                        maxHeight: 'min(34rem, calc(100dvh - 220px))',
-                        overflowY: 'auto'
+                        maxHeight: 'min(46rem, calc(100dvh - 120px))',
+                        overflowY: 'auto',
+                        ...panelStyle
                     }}
                 >
                     {children}
@@ -302,6 +309,7 @@ export function FriendlyDatePicker({
     onChange,
     disabled,
     className,
+    panelClassName,
     min,
     max,
     yearStart,
@@ -331,6 +339,7 @@ export function FriendlyDatePicker({
             setOpen={setOpen}
             disabled={disabled}
             triggerClassName={className}
+            panelClassName={panelClassName}
             triggerContent={
                 <div className='w-full flex items-center justify-between gap-3'>
                     <span className={selectedDate ? '' : 'opacity-60'}>{display}</span>
@@ -398,6 +407,7 @@ export function FriendlyDateTimePicker({
     onChange,
     disabled,
     className,
+    panelClassName,
     min,
     max,
     yearStart,
@@ -467,6 +477,7 @@ export function FriendlyDateTimePicker({
             setOpen={setOpen}
             disabled={disabled}
             triggerClassName={className}
+            panelClassName={panelClassName || 'left-0 right-auto w-full min-w-[17rem] max-w-full sm:w-[min(44rem,calc(100vw-5rem))] sm:min-w-[39rem]'}
             triggerContent={
                 <div className='w-full flex items-center justify-between gap-3'>
                     <span className={selectedDateTime ? '' : 'opacity-60'}>{display}</span>
@@ -477,96 +488,101 @@ export function FriendlyDateTimePicker({
                 </div>
             }
         >
-            <DatePanelHeader visibleMonth={visibleMonth} setVisibleMonth={setVisibleMonth} yearStart={yStart} yearEnd={yEnd} />
-
-            <CalendarGrid
-                visibleMonth={visibleMonth}
-                selectedDate={draftDate}
-                min={min ? min.slice(0, 10) : undefined}
-                max={max ? max.slice(0, 10) : undefined}
-                onSelectDate={(date) => {
-                    const next = draftDate ? new Date(draftDate) : new Date(roundedNow)
-                    next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate())
-                    setDraftDate(next)
-                }}
-            />
-
-            <div className='mt-4 grid grid-cols-2 gap-3'>
+            <div className='grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_15.75rem] gap-4 items-start'>
                 <div>
-                    <label className='block text-[10px] font-black uppercase tracking-wider mb-1 text-[var(--text-secondary)]/70'>Hora</label>
-                    <select
-                        value={pad2(currentDraft.getHours())}
-                        onChange={(e) => setDraftHour(Number(e.target.value))}
-                        className='w-full h-11 rounded-xl border px-3 font-bold cursor-pointer'
-                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                    >
-                        {Array.from({ length: 24 }).map((_, h) => (
-                            <option key={h} value={pad2(h)}>{pad2(h)}</option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className='block text-[10px] font-black uppercase tracking-wider mb-1 text-[var(--text-secondary)]/70'>Minutos</label>
-                    <select
-                        value={pad2(currentDraft.getMinutes() - (currentDraft.getMinutes() % minuteStep))}
-                        onChange={(e) => setDraftMinute(Number(e.target.value))}
-                        className='w-full h-11 rounded-xl border px-3 font-bold cursor-pointer'
-                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                    >
-                        {minuteOptions.map((m) => (
-                            <option key={m} value={pad2(m)}>{pad2(m)}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
+                    <DatePanelHeader visibleMonth={visibleMonth} setVisibleMonth={setVisibleMonth} yearStart={yStart} yearEnd={yEnd} />
 
-            <div className='mt-3 flex flex-wrap gap-2'>
-                {['09:00', '11:00', '13:00', '16:00', '18:00'].map((time) => (
-                    <button
-                        key={time}
-                        type='button'
-                        onClick={() => {
-                            const [h, m] = time.split(':').map(Number)
+                    <CalendarGrid
+                        visibleMonth={visibleMonth}
+                        selectedDate={draftDate}
+                        min={min ? min.slice(0, 10) : undefined}
+                        max={max ? max.slice(0, 10) : undefined}
+                        compact
+                        onSelectDate={(date) => {
                             const next = draftDate ? new Date(draftDate) : new Date(roundedNow)
-                            next.setHours(h, m, 0, 0)
+                            next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate())
                             setDraftDate(next)
                         }}
-                        className='px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider cursor-pointer hover:border-blue-500 transition-colors'
-                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                    >
-                        {time}
-                    </button>
-                ))}
-            </div>
+                    />
+                </div>
 
-            <div className='mt-4 flex items-center justify-between gap-2'>
-                <button
-                    type='button'
-                    onClick={() => {
-                        setDraftDate(new Date(roundedNow))
-                        setVisibleMonth(new Date(roundedNow.getFullYear(), roundedNow.getMonth(), 1))
-                    }}
-                    className='px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider cursor-pointer hover:border-blue-500 transition-colors'
-                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                >
-                    Ahora
-                </button>
-                <div className='flex items-center gap-2'>
-                    <button
-                        type='button'
-                        onClick={() => setOpen(false)}
-                        className='px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider cursor-pointer'
-                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
-                    >
-                        Cerrar
-                    </button>
-                    <button
-                        type='button'
-                        onClick={commitDraft}
-                        className='px-3 py-2 rounded-xl bg-[#2048FF] text-white text-xs font-black uppercase tracking-wider cursor-pointer'
-                    >
-                        Confirmar
-                    </button>
+                <div className='space-y-3 sm:pt-0.5'>
+                    <div>
+                        <label className='block text-[10px] font-black uppercase tracking-wider mb-1 text-[var(--text-secondary)]/70'>Hora</label>
+                        <select
+                            value={pad2(currentDraft.getHours())}
+                            onChange={(e) => setDraftHour(Number(e.target.value))}
+                            className='w-full h-11 rounded-xl border px-3 font-bold cursor-pointer'
+                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                        >
+                            {Array.from({ length: 24 }).map((_, h) => (
+                                <option key={h} value={pad2(h)}>{pad2(h)}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className='block text-[10px] font-black uppercase tracking-wider mb-1 text-[var(--text-secondary)]/70'>Minutos</label>
+                        <select
+                            value={pad2(currentDraft.getMinutes() - (currentDraft.getMinutes() % minuteStep))}
+                            onChange={(e) => setDraftMinute(Number(e.target.value))}
+                            className='w-full h-11 rounded-xl border px-3 font-bold cursor-pointer'
+                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                        >
+                            {minuteOptions.map((m) => (
+                                <option key={m} value={pad2(m)}>{pad2(m)}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className='grid grid-cols-2 sm:grid-cols-1 gap-2'>
+                        {['09:00', '11:00', '13:00', '16:00', '18:00'].map((time) => (
+                            <button
+                                key={time}
+                                type='button'
+                                onClick={() => {
+                                    const [h, m] = time.split(':').map(Number)
+                                    const next = draftDate ? new Date(draftDate) : new Date(roundedNow)
+                                    next.setHours(h, m, 0, 0)
+                                    setDraftDate(next)
+                                }}
+                                className='px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider cursor-pointer hover:border-blue-500 transition-colors'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            >
+                                {time}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className='flex items-center justify-between gap-2 pt-1'>
+                        <button
+                            type='button'
+                            onClick={() => {
+                                setDraftDate(new Date(roundedNow))
+                                setVisibleMonth(new Date(roundedNow.getFullYear(), roundedNow.getMonth(), 1))
+                            }}
+                            className='px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider cursor-pointer hover:border-blue-500 transition-colors'
+                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                        >
+                            Ahora
+                        </button>
+                        <div className='flex items-center gap-2'>
+                            <button
+                                type='button'
+                                onClick={() => setOpen(false)}
+                                className='px-3 py-2 rounded-xl border text-xs font-black uppercase tracking-wider cursor-pointer'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
+                            >
+                                Cerrar
+                            </button>
+                            <button
+                                type='button'
+                                onClick={commitDraft}
+                                className='px-3 py-2 rounded-xl bg-[#2048FF] text-white text-xs font-black uppercase tracking-wider cursor-pointer'
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </PickerShell>

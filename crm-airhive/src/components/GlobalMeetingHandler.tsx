@@ -12,7 +12,8 @@ import {
 import { freezeMeetingProbability } from '@/lib/meetingsService'
 import { syncGoogleEventsAction } from '@/app/actions/google-calendar'
 import MeetingConfirmationModal from './MeetingConfirmationModal'
-import { Bell, X, Calendar, Clock } from 'lucide-react'
+import LeadForecastUpdateModal, { type LeadForecastDraft } from './LeadForecastUpdateModal'
+import { Bell, X, Calendar, Clock, TrendingUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 export default function GlobalMeetingHandler() {
@@ -22,6 +23,16 @@ export default function GlobalMeetingHandler() {
     const [activeAlerts, setActiveAlerts] = useState<any[]>([])
     const [showConfirmationModal, setShowConfirmationModal] = useState(false)
     const [selectedMeeting, setSelectedMeeting] = useState<any>(null)
+    const [postConfirmationForecastPrompt, setPostConfirmationForecastPrompt] = useState<{
+        leadId: number
+        leadLabel: string
+        companyLabel: string
+    } | null>(null)
+    const [openingForecastEditor, setOpeningForecastEditor] = useState(false)
+    const [forecastLeadDraft, setForecastLeadDraft] = useState<LeadForecastDraft | null>(null)
+    const [showForecastUpdateModal, setShowForecastUpdateModal] = useState(false)
+    const [forecastSaving, setForecastSaving] = useState(false)
+    const [forecastSaveError, setForecastSaveError] = useState<string | null>(null)
     const [supabase] = useState(() => createClient())
 
     // Ref to track meetings currently being processed to avoid duplicate modals/saves
@@ -221,10 +232,20 @@ export default function GlobalMeetingHandler() {
             )
 
             if (result.success) {
+                const confirmedLeadId = Number(selectedMeeting.lead_id || 0)
+                const companyLabel = String(selectedMeeting?.clientes?.empresa || selectedMeeting?.empresa || 'Empresa')
+                const leadLabel = String(selectedMeeting?.clientes?.nombre || selectedMeeting?.title || `Lead ${confirmedLeadId}`)
                 setShowConfirmationModal(false)
                 setSelectedMeeting(null)
                 // Remove from local list to avoid re-triggering before next checkUpdates
                 setPendingConfirmations(prev => prev.filter(p => p.id !== meetingId))
+                if (payload.wasHeld && Number.isFinite(confirmedLeadId) && confirmedLeadId > 0) {
+                    setPostConfirmationForecastPrompt({
+                        leadId: confirmedLeadId,
+                        leadLabel,
+                        companyLabel
+                    })
+                }
                 console.log('✅ Confirmation successful')
             }
         } catch (error: any) {
@@ -233,6 +254,118 @@ export default function GlobalMeetingHandler() {
             // Keep modal open so notes aren't lost
         } finally {
             processingMeetings.current.delete(meetingId)
+        }
+    }
+
+    const openForecastEditor = async () => {
+        if (!postConfirmationForecastPrompt) return
+        setOpeningForecastEditor(true)
+        setForecastSaveError(null)
+        try {
+            const { data: leadData, error: leadError } = await (supabase.from('clientes') as any)
+                .select('id, nombre, empresa, probabilidad, valor_estimado, valor_implementacion_estimado, forecast_close_date')
+                .eq('id', postConfirmationForecastPrompt.leadId)
+                .maybeSingle()
+
+            if (leadError || !leadData) {
+                throw new Error(leadError?.message || 'No se pudo cargar el lead para editar pronóstico.')
+            }
+
+            setForecastLeadDraft({
+                id: Number(leadData.id),
+                nombre: String(leadData.nombre || ''),
+                empresa: String(leadData.empresa || postConfirmationForecastPrompt.companyLabel || ''),
+                probabilidad: Number(leadData.probabilidad || 0),
+                valorEstimado: leadData.valor_estimado == null ? null : Number(leadData.valor_estimado),
+                valorImplementacionEstimado: leadData.valor_implementacion_estimado == null ? null : Number(leadData.valor_implementacion_estimado),
+                forecastCloseDate: leadData.forecast_close_date ? String(leadData.forecast_close_date) : null
+            })
+            setPostConfirmationForecastPrompt(null)
+            setShowForecastUpdateModal(true)
+        } catch (error: any) {
+            console.error('Error opening forecast editor:', error)
+            alert(error?.message || 'No se pudo abrir el popup de pronóstico.')
+        } finally {
+            setOpeningForecastEditor(false)
+        }
+    }
+
+    const handleSaveForecastUpdate = async (payload: {
+        probabilidad: number
+        valorEstimado: number | null
+        valorImplementacionEstimado: number | null
+        forecastCloseDate: string | null
+    }) => {
+        if (!forecastLeadDraft || !userId) {
+            throw new Error('No hay lead seleccionado para actualizar pronóstico.')
+        }
+
+        const leadId = Number(forecastLeadDraft.id)
+        const normalizedForecastDate = String(payload.forecastCloseDate || '').trim() || null
+        const normalizedMonthlyForecast = payload.valorEstimado == null ? null : Number(payload.valorEstimado)
+        const normalizedImplementationForecast = payload.valorImplementacionEstimado == null ? null : Number(payload.valorImplementacionEstimado)
+        const normalizedProbability = Math.max(0, Math.min(100, Math.round(Number(payload.probabilidad) || 0)))
+
+        setForecastSaveError(null)
+        setForecastSaving(true)
+        try {
+            const { data: currentLead, error: currentLeadError } = await (supabase.from('clientes') as any)
+                .select('probabilidad, valor_estimado, valor_implementacion_estimado, forecast_close_date')
+                .eq('id', leadId)
+                .maybeSingle()
+
+            if (currentLeadError || !currentLead) {
+                throw new Error(currentLeadError?.message || 'No se encontró el lead para guardar el pronóstico.')
+            }
+
+            const { error: updateError } = await (supabase.from('clientes') as any)
+                .update({
+                    probabilidad: normalizedProbability,
+                    valor_estimado: normalizedMonthlyForecast,
+                    valor_implementacion_estimado: normalizedImplementationForecast,
+                    forecast_close_date: normalizedForecastDate
+                })
+                .eq('id', leadId)
+
+            if (updateError) {
+                throw new Error(updateError.message || 'No se pudo actualizar el pronóstico.')
+            }
+
+            const historyEntries: any[] = []
+            const addHistoryIfChanged = (fieldName: string, oldValue: unknown, newValue: unknown) => {
+                const normalizedOld = oldValue == null ? null : String(oldValue)
+                const normalizedNew = newValue == null ? null : String(newValue)
+                if (normalizedOld === normalizedNew) return
+                historyEntries.push({
+                    lead_id: leadId,
+                    field_name: fieldName,
+                    old_value: normalizedOld,
+                    new_value: normalizedNew,
+                    changed_by: userId
+                })
+            }
+
+            addHistoryIfChanged('probabilidad', currentLead.probabilidad, normalizedProbability)
+            addHistoryIfChanged('valor_estimado', currentLead.valor_estimado, normalizedMonthlyForecast)
+            addHistoryIfChanged('valor_implementacion_estimado', currentLead.valor_implementacion_estimado, normalizedImplementationForecast)
+            addHistoryIfChanged('forecast_close_date', currentLead.forecast_close_date, normalizedForecastDate)
+
+            if (historyEntries.length > 0) {
+                const { error: historyError } = await (supabase.from('lead_history') as any).insert(historyEntries)
+                if (historyError) {
+                    console.warn('Forecast updated but lead history insert failed:', historyError)
+                }
+            }
+
+            setShowForecastUpdateModal(false)
+            setForecastLeadDraft(null)
+            await checkUpdates()
+        } catch (error: any) {
+            const message = error?.message || 'No se pudo guardar el pronóstico.'
+            setForecastSaveError(message)
+            throw error
+        } finally {
+            setForecastSaving(false)
         }
     }
 
@@ -260,6 +393,71 @@ export default function GlobalMeetingHandler() {
                     }}
                 />
             )}
+
+            {postConfirmationForecastPrompt && (
+                <div className='ah-modal-overlay z-[210]' style={{ alignItems: 'center', padding: '16px' }}>
+                    <div className='ah-modal-panel w-full max-w-lg'>
+                        <div className='ah-modal-header'>
+                            <div>
+                                <h2 className='ah-modal-title text-lg inline-flex items-center gap-2'>
+                                    <TrendingUp size={18} /> ¿Actualizar pronósticos?
+                                </h2>
+                                <p className='ah-modal-subtitle'>
+                                    {postConfirmationForecastPrompt.leadLabel} · {postConfirmationForecastPrompt.companyLabel}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setPostConfirmationForecastPrompt(null)}
+                                className='ah-modal-close'
+                                aria-label='Cerrar popup de actualización de pronóstico'
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className='p-5 space-y-3'>
+                            <p className='text-sm font-bold text-[var(--text-primary)]'>
+                                La junta quedó confirmada. ¿Quieres abrir ahora el popup para actualizar el pronóstico del lead?
+                            </p>
+                            <p className='text-xs font-medium text-[var(--text-secondary)]'>
+                                Esto te permite ajustar probabilidad, mensualidad, implementación y fecha estimada de cierre.
+                            </p>
+                        </div>
+                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end gap-2'>
+                            <button
+                                type='button'
+                                onClick={() => setPostConfirmationForecastPrompt(null)}
+                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                            >
+                                Cerrar
+                            </button>
+                            <button
+                                type='button'
+                                onClick={openForecastEditor}
+                                disabled={openingForecastEditor}
+                                className='h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] text-white disabled:opacity-60 cursor-pointer'
+                                style={{
+                                    background: 'color-mix(in srgb, #16a34a 90%, var(--card-bg))'
+                                }}
+                            >
+                                {openingForecastEditor ? 'Abriendo...' : 'Confirmar y actualizar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <LeadForecastUpdateModal
+                isOpen={showForecastUpdateModal}
+                lead={forecastLeadDraft}
+                onClose={() => {
+                    setShowForecastUpdateModal(false)
+                    setForecastLeadDraft(null)
+                    setForecastSaveError(null)
+                }}
+                onSave={handleSaveForecastUpdate}
+                saving={forecastSaving}
+                error={forecastSaveError}
+            />
 
             <div className='fixed bottom-6 right-6 z-[60] flex flex-col gap-3 max-w-sm w-full'>
                 {activeAlerts.map(alert => (

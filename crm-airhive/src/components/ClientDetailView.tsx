@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import MeetingModal from './MeetingModal'
 import MeetingsList from './MeetingsList'
@@ -10,7 +10,8 @@ import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable 
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { BarChart3, Building2, CalendarDays, Camera, CheckSquare, Mail, MessageCircle, PencilLine, Plus, User, NotebookPen, Link2 } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, CalendarDays, Camera, CheckSquare, ChevronDown, ChevronUp, Mail, MessageCircle, Minus, PencilLine, Plus, User, NotebookPen, Link2, X } from 'lucide-react'
+import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
 type ClientData = {
     id: number
@@ -45,6 +46,20 @@ type ClientData = {
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
+type SnapshotTrend = 'up' | 'down' | 'flat' | 'na'
+type SnapshotComparisonRow = {
+    snapshot: Snapshot
+    previous: Snapshot | null
+    deltaProbability: number | null
+    deltaProbabilityPct: number | null
+    deltaMonthly: number | null
+    deltaMonthlyPct: number | null
+    deltaImplementation: number | null
+    deltaImplementationPct: number | null
+    deltaTotal: number | null
+    deltaTotalPct: number | null
+    deltaCloseDateDays: number | null
+}
 
 type CompanyData = {
     id: string
@@ -89,11 +104,13 @@ export default function ClientDetailView({
     const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+    const [isSnapshotsModalOpen, setIsSnapshotsModalOpen] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
     const [taskKey, setTaskKey] = useState(0)
     const [lossReasonLabel, setLossReasonLabel] = useState<string | null>(null)
     const [lossSubreasonLabel, setLossSubreasonLabel] = useState<string | null>(null)
+    const [isMeetingsPanelExpanded, setIsMeetingsPanelExpanded] = useState(false)
 
     useEffect(() => {
         if (client?.empresa_id) {
@@ -107,7 +124,245 @@ export default function ClientDetailView({
             fetchCurrentUser()
             fetchLossLabels(client)
         }
+        setIsMeetingsPanelExpanded(false)
+        setIsSnapshotsModalOpen(false)
     }, [client])
+
+    const sortedSnapshots = useMemo(
+        () => [...snapshots].sort((a, b) => {
+            const aTime = new Date(String(a.snapshot_timestamp || a.created_at || '')).getTime()
+            const bTime = new Date(String(b.snapshot_timestamp || b.created_at || '')).getTime()
+            return bTime - aTime
+        }),
+        [snapshots]
+    )
+
+    const parseSnapshotComparableDate = (value?: string | null) => {
+        const normalized = String(value || '').trim()
+        if (!normalized) return Number.NaN
+        const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized)
+        if (dateOnly) {
+            const parsedDate = new Date(
+                Number(dateOnly[1]),
+                Number(dateOnly[2]) - 1,
+                Number(dateOnly[3]),
+                12,
+                0,
+                0,
+                0
+            )
+            return Number.isFinite(parsedDate.getTime()) ? parsedDate.getTime() : Number.NaN
+        }
+        const parsed = new Date(normalized).getTime()
+        return Number.isFinite(parsed) ? parsed : Number.NaN
+    }
+
+    const calculatePctDelta = (current: number, previous: number) => {
+        if (!Number.isFinite(current) || !Number.isFinite(previous)) return null
+        if (Math.abs(previous) < 0.00001) {
+            return Math.abs(current) < 0.00001 ? 0 : null
+        }
+        return ((current - previous) / Math.abs(previous)) * 100
+    }
+
+    const snapshotComparisons = useMemo<SnapshotComparisonRow[]>(() => {
+        return sortedSnapshots.map((snapshot, index) => {
+            const previous = sortedSnapshots[index + 1] || null
+            const currentProbability = Number(snapshot.probability || 0)
+            const currentMonthly = Number(snapshot.forecast_value_amount || 0)
+            const currentImplementation = Number(snapshot.forecast_implementation_amount || 0)
+            const currentTotal = currentMonthly + currentImplementation
+
+            if (!previous) {
+                return {
+                    snapshot,
+                    previous: null,
+                    deltaProbability: null,
+                    deltaProbabilityPct: null,
+                    deltaMonthly: null,
+                    deltaMonthlyPct: null,
+                    deltaImplementation: null,
+                    deltaImplementationPct: null,
+                    deltaTotal: null,
+                    deltaTotalPct: null,
+                    deltaCloseDateDays: null
+                }
+            }
+
+            const previousProbability = Number(previous.probability || 0)
+            const previousMonthly = Number(previous.forecast_value_amount || 0)
+            const previousImplementation = Number(previous.forecast_implementation_amount || 0)
+            const previousTotal = previousMonthly + previousImplementation
+            const currentCloseDateTs = parseSnapshotComparableDate(snapshot.forecast_close_date)
+            const previousCloseDateTs = parseSnapshotComparableDate(previous.forecast_close_date)
+            const closeDateDeltaDays = Number.isFinite(currentCloseDateTs) && Number.isFinite(previousCloseDateTs)
+                ? Math.round((Number(currentCloseDateTs) - Number(previousCloseDateTs)) / (1000 * 60 * 60 * 24))
+                : null
+
+            return {
+                snapshot,
+                previous,
+                deltaProbability: currentProbability - previousProbability,
+                deltaProbabilityPct: calculatePctDelta(currentProbability, previousProbability),
+                deltaMonthly: currentMonthly - previousMonthly,
+                deltaMonthlyPct: calculatePctDelta(currentMonthly, previousMonthly),
+                deltaImplementation: currentImplementation - previousImplementation,
+                deltaImplementationPct: calculatePctDelta(currentImplementation, previousImplementation),
+                deltaTotal: currentTotal - previousTotal,
+                deltaTotalPct: calculatePctDelta(currentTotal, previousTotal),
+                deltaCloseDateDays: closeDateDeltaDays
+            }
+        })
+    }, [sortedSnapshots])
+
+    const snapshotComparisonById = useMemo(() => {
+        const map = new Map<string, SnapshotComparisonRow>()
+        snapshotComparisons.forEach((row) => {
+            map.set(String(row.snapshot.id), row)
+        })
+        return map
+    }, [snapshotComparisons])
+
+    const snapshotGroupsByCaptureDate = useMemo(() => {
+        const map = new Map<string, Snapshot[]>()
+
+        sortedSnapshots.forEach((snapshot) => {
+            const ts = new Date(String(snapshot.snapshot_timestamp || snapshot.created_at || ''))
+            const key = Number.isFinite(ts.getTime())
+                ? `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}-${String(ts.getDate()).padStart(2, '0')}`
+                : 'sin-fecha'
+            const current = map.get(key) || []
+            current.push(snapshot)
+            map.set(key, current)
+        })
+
+        return Array.from(map.entries()).map(([key, items]) => ({
+            key,
+            label: key === 'sin-fecha'
+                ? 'Fecha de captura no disponible'
+                : new Date(`${key}T12:00:00`).toLocaleDateString('es-MX', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                }),
+            items
+        }))
+    }, [sortedSnapshots])
+
+    const companyPrimaryIndustryBadgeVisual = useMemo(() => {
+        if (!company) return null
+
+        const primaryIndustryName = String(
+            company.industria
+            || (Array.isArray(company.industrias) ? company.industrias[0] : '')
+            || ''
+        ).trim()
+
+        if (!primaryIndustryName) return null
+
+        const normalizedName = primaryIndustryName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '')
+
+        const industryId = String(company.industria_id || `virtual-industry-${normalizedName || 'generic'}`)
+        const visualMap = buildIndustryBadgeVisualMap([{ id: industryId, name: primaryIndustryName }])
+        return getIndustryBadgeVisualFromMap(industryId, visualMap, primaryIndustryName)
+    }, [company])
+    const formatSnapshotDateTime = (value?: string | null) => {
+        if (!value) return 'Sin fecha de captura'
+        const dt = new Date(value)
+        if (!Number.isFinite(dt.getTime())) return 'Sin fecha de captura'
+        return dt.toLocaleString('es-MX', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+    }
+
+    const formatSnapshotDateOnly = (value?: string | null) => {
+        if (!value) return 'Sin fecha pronosticada'
+        const dt = new Date(value)
+        if (!Number.isFinite(dt.getTime())) return 'Sin fecha pronosticada'
+        return dt.toLocaleDateString('es-MX', {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit'
+        })
+    }
+
+    const formatSnapshotCurrency = (value?: number | null) => {
+        if (value == null || Number.isNaN(Number(value))) return 'Sin dato'
+        return `$${Number(value).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    }
+
+    const formatSignedPercent = (value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return 'N/D'
+        const rounded = Number(value.toFixed(1))
+        const sign = rounded > 0 ? '+' : ''
+        return `${sign}${rounded.toFixed(1)}%`
+    }
+
+    const formatSignedPointsWithPercent = (points: number | null | undefined, pct: number | null | undefined) => {
+        if (points == null || !Number.isFinite(points)) return 'Sin referencia'
+        const rounded = Math.round(points)
+        const sign = rounded > 0 ? '+' : ''
+        const pctText = formatSignedPercent(pct)
+        if (pctText === 'N/D') return `${sign}${rounded} pts`
+        return `${sign}${rounded} pts (${pctText})`
+    }
+
+    const formatSignedCurrencyWithPercent = (amount: number | null | undefined, pct: number | null | undefined) => {
+        if (amount == null || !Number.isFinite(amount)) return 'Sin referencia'
+        const absAmount = `$${Math.abs(amount).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        const amountSign = amount > 0 ? '+' : amount < 0 ? '-' : ''
+        const pctText = formatSignedPercent(pct)
+        if (pctText === 'N/D') return `${amountSign}${absAmount}`
+        return `${amountSign}${absAmount} (${pctText})`
+    }
+
+    const formatCloseDateShift = (value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return 'Sin referencia'
+        if (value === 0) return 'Sin cambio'
+        const absDays = Math.abs(Math.round(value))
+        const dayWord = absDays === 1 ? 'día' : 'días'
+        if (value > 0) return `+${absDays} ${dayWord} (más tarde)`
+        return `-${absDays} ${dayWord} (más temprano)`
+    }
+
+    const getSnapshotDeltaTrend = (delta: number | null | undefined): SnapshotTrend => {
+        if (delta == null || !Number.isFinite(delta)) return 'na'
+        if (Math.abs(delta) < 0.00001) return 'flat'
+        return delta > 0 ? 'up' : 'down'
+    }
+
+    const getSnapshotDeltaColor = (trend: SnapshotTrend, mode: 'value' | 'closeDate' = 'value') => {
+        if (trend === 'na' || trend === 'flat') return 'var(--text-secondary)'
+        if (mode === 'closeDate') {
+            return trend === 'down' ? 'color-mix(in srgb, #10b981 72%, var(--text-primary))' : 'color-mix(in srgb, #f97316 72%, var(--text-primary))'
+        }
+        return trend === 'up'
+            ? 'color-mix(in srgb, #2563eb 72%, var(--text-primary))'
+            : 'color-mix(in srgb, #f97316 72%, var(--text-primary))'
+    }
+
+    const renderSnapshotTrendIcon = (trend: SnapshotTrend) => {
+        if (trend === 'up') return <ArrowUpRight size={12} strokeWidth={2.5} />
+        if (trend === 'down') return <ArrowDownRight size={12} strokeWidth={2.5} />
+        return <Minus size={12} strokeWidth={2.5} />
+    }
+
+    const getSnapshotSourceLabel = (source?: string | null) => {
+        const normalized = String(source || '').toLowerCase()
+        if (normalized === 'meeting_confirmed_held') return 'Captura por junta confirmada'
+        if (normalized === 'meeting_start_snapshot') return 'Captura al iniciar junta'
+        return 'Captura de pronóstico'
+    }
 
     const fetchCompany = async (id: string) => {
         setLoadingCompany(true)
@@ -464,21 +719,35 @@ export default function ClientDetailView({
                                 <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
                                     <CalendarDays size={14} style={{ color: 'var(--input-focus)' }} /> Juntas Agendadas
                                 </h2>
-                                <button
-                                    onClick={() => setIsMeetingModalOpen(true)}
-                                    className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
-                                    style={{ background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))', color: 'var(--input-focus)' }}
-                                >
-                                    <Plus size={18} />
-                                </button>
+                                <div className='flex items-center gap-2'>
+                                    <button
+                                        type='button'
+                                        onClick={() => setIsMeetingsPanelExpanded((prev) => !prev)}
+                                        className='h-10 px-3 rounded-2xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1.5 cursor-pointer'
+                                    >
+                                        {isMeetingsPanelExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                        {isMeetingsPanelExpanded ? 'Ocultar' : 'Mostrar'}
+                                    </button>
+                                    <button
+                                        onClick={() => setIsMeetingModalOpen(true)}
+                                        className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
+                                        style={{ background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))', color: 'var(--input-focus)' }}
+                                    >
+                                        <Plus size={18} />
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className='flex-1 min-h-[300px]'>
-                                <MeetingsList
-                                    leadId={client.id}
-                                    onRefresh={fetchMeetingsData}
-                                />
-                            </div>
+                            {isMeetingsPanelExpanded ? (
+                                <div className='flex-1 min-h-[300px]'>
+                                    <MeetingsList
+                                        leadId={client.id}
+                                        onRefresh={fetchMeetingsData}
+                                    />
+                                </div>
+                            ) : (
+                                <div className='flex-1 min-h-[12px]' />
+                            )}
                         </div>
 
                         <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)] flex flex-col'>
@@ -527,8 +796,20 @@ export default function ClientDetailView({
                                                 <Building2 size={36} style={{ color: 'var(--input-focus)' }} />
                                             )}
                                         </div>
-                                        <div className='space-y-1'>
-                                            <h3 className='text-xl font-black text-[var(--text-primary)] leading-tight tracking-tight'>{company.nombre}</h3>
+                                        <div className='space-y-1 min-w-0 flex-1'>
+                                            <div className='flex items-center justify-between gap-3'>
+                                                <h3 className='text-xl font-black text-[var(--text-primary)] leading-tight tracking-tight truncate'>{company.nombre}</h3>
+                                                {companyPrimaryIndustryBadgeVisual ? (
+                                                    <span
+                                                        className='w-10 h-10 rounded-2xl border-2 border-[var(--card-border)] shadow-sm flex items-center justify-center shrink-0'
+                                                        style={{ background: 'color-mix(in srgb, var(--input-focus) 32%, var(--hover-bg))' }}
+                                                        title={`Badge industria: ${company.industria || 'Industria'}`}
+                                                        aria-hidden='true'
+                                                    >
+                                                        <companyPrimaryIndustryBadgeVisual.icon size={15} className='text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]' />
+                                                    </span>
+                                                ) : null}
+                                            </div>
                                             <p className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>{company.industria}</p>
                                             {!!company.industrias?.length && (
                                                 <div className='flex flex-wrap gap-1.5'>
@@ -629,16 +910,31 @@ export default function ClientDetailView({
                         {/* Snapshots Columnar */}
                         {snapshots.length > 0 && (
                             <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
-                                <h2 className='text-xs font-black text-[var(--text-secondary)] mb-6 uppercase tracking-[0.3em] border-b border-[var(--card-border)] pb-4 flex items-center gap-2'>
-                                    <Camera size={14} style={{ color: 'var(--input-focus)' }} /> Snapshots
-                                </h2>
+                                <div className='mb-6 border-b border-[var(--card-border)] pb-4 flex items-center justify-between gap-3'>
+                                    <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
+                                        <Camera size={14} style={{ color: 'var(--input-focus)' }} /> Snapshots
+                                    </h2>
+                                    <button
+                                        type='button'
+                                        onClick={() => setIsSnapshotsModalOpen(true)}
+                                        className='px-3 py-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors cursor-pointer'
+                                    >
+                                        Abrir Popup
+                                    </button>
+                                </div>
                                 <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
-                                    {snapshots.map((snapshot) => (
+                                    {sortedSnapshots.slice(0, 3).map((snapshot) => (
                                         <div key={snapshot.id} className='flex justify-between items-center p-4 bg-[var(--hover-bg)] rounded-3xl border border-[var(--card-border)] group hover:border-blue-100 hover:bg-[var(--card-bg)] transition-all'>
                                             <div className='space-y-1'>
                                                 <p className='text-[10px] font-black text-[var(--text-primary)] uppercase tracking-widest group-hover:text-blue-600 transition-colors'>Corte #{snapshot.snapshot_number}</p>
                                                 <p className='text-[9px] font-bold text-[var(--text-secondary)] uppercase'>
-                                                    {new Date(snapshot.snapshot_timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                                                    {formatSnapshotDateTime(snapshot.snapshot_timestamp || snapshot.created_at)}
+                                                </p>
+                                                <p className='text-[9px] font-bold text-[var(--text-secondary)]'>
+                                                    Mensualidad: {formatSnapshotCurrency(snapshot.forecast_value_amount)}
+                                                </p>
+                                                <p className='text-[9px] font-bold text-[var(--text-secondary)]'>
+                                                    Implementación: {formatSnapshotCurrency(snapshot.forecast_implementation_amount)}
                                                 </p>
                                             </div>
                                             <div className='h-10 w-10 bg-[var(--card-bg)] rounded-2xl flex items-center justify-center border border-[var(--card-border)] shadow-sm'>
@@ -649,6 +945,11 @@ export default function ClientDetailView({
                                         </div>
                                     ))}
                                 </div>
+                                {sortedSnapshots.length > 3 && (
+                                    <p className='mt-4 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>
+                                        Mostrando 3 de {sortedSnapshots.length} capturas · abre el popup para ver todo
+                                    </p>
+                                )}
                             </div>
                         )}
                     </div>
@@ -680,6 +981,164 @@ export default function ClientDetailView({
                 leadId={client.id}
                 mode='create'
             />
+
+            {isSnapshotsModalOpen && (
+                <div className='ah-modal-overlay z-[210]'>
+                    <div className='ah-modal-panel w-full max-w-5xl'>
+                        <div className='ah-modal-header'>
+                            <div>
+                                <h3 className='ah-modal-title text-lg flex items-center gap-2'>
+                                    <Camera size={16} /> Snapshots de Pronóstico
+                                </h3>
+                                <p className='ah-modal-subtitle'>
+                                    {client.nombre || client.empresa || 'Lead'} · {sortedSnapshots.length} captura(s)
+                                </p>
+                            </div>
+                            <button
+                                className='ah-modal-close cursor-pointer'
+                                onClick={() => setIsSnapshotsModalOpen(false)}
+                                aria-label='Cerrar snapshots'
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className='p-5 overflow-y-auto custom-scrollbar space-y-5'>
+                            <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-4 py-3'>
+                                <p className='text-xs font-black text-[var(--text-primary)]'>
+                                    Cada captura incluye: probabilidad de cierre, monto pronosticado mensual, monto pronosticado de implementación y fecha pronosticada de cierre.
+                                </p>
+                            </div>
+
+                            {snapshotGroupsByCaptureDate.length === 0 ? (
+                                <div className='py-10 text-center text-[var(--text-secondary)] font-bold rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)]'>
+                                    Aún no hay snapshots registrados para este lead.
+                                </div>
+                            ) : (
+                                <div className='space-y-6'>
+                                    {snapshotGroupsByCaptureDate.map((group) => (
+                                        <div key={group.key} className='space-y-3'>
+                                            <p className='text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]'>
+                                                {group.label}
+                                            </p>
+                                            <div className='space-y-3'>
+                                                {group.items.map((snapshot) => (
+                                                    (() => {
+                                                        const comparison = snapshotComparisonById.get(String(snapshot.id))
+                                                        const hasPrevious = Boolean(comparison?.previous)
+                                                        const totalForecast = Number(snapshot.forecast_value_amount || 0) + Number(snapshot.forecast_implementation_amount || 0)
+                                                        const probabilityTrend = getSnapshotDeltaTrend(comparison?.deltaProbability)
+                                                        const monthlyTrend = getSnapshotDeltaTrend(comparison?.deltaMonthly)
+                                                        const implementationTrend = getSnapshotDeltaTrend(comparison?.deltaImplementation)
+                                                        const closeDateTrend = getSnapshotDeltaTrend(comparison?.deltaCloseDateDays)
+                                                        const totalTrend = getSnapshotDeltaTrend(comparison?.deltaTotal)
+
+                                                        return (
+                                                            <div key={snapshot.id} className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                                                <div className='flex items-start justify-between gap-3'>
+                                                                    <div className='min-w-0'>
+                                                                        <p className='text-sm font-black text-[var(--text-primary)] truncate'>
+                                                                            Corte #{snapshot.snapshot_number}
+                                                                        </p>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)] mt-1'>
+                                                                            {getSnapshotSourceLabel(snapshot.source)}
+                                                                        </p>
+                                                                        <p className='text-xs font-bold text-[var(--text-secondary)] mt-1'>
+                                                                            Fecha de captura: {formatSnapshotDateTime(snapshot.snapshot_timestamp || snapshot.created_at)}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className='shrink-0 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-black text-[var(--text-primary)]'>
+                                                                        {snapshot.probability}%
+                                                                    </span>
+                                                                </div>
+
+                                                                {hasPrevious ? (
+                                                                    <p className='mt-3 text-[10px] font-black uppercase tracking-[0.13em] text-[var(--text-secondary)]'>
+                                                                        Comparado vs corte #{comparison?.previous?.snapshot_number} · {formatSnapshotDateTime(comparison?.previous?.snapshot_timestamp || comparison?.previous?.created_at)}
+                                                                    </p>
+                                                                ) : (
+                                                                    <p className='mt-3 text-[10px] font-black uppercase tracking-[0.13em] text-[var(--text-secondary)]'>
+                                                                        Snapshot base (sin referencia previa)
+                                                                    </p>
+                                                                )}
+
+                                                                <div className='mt-2 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 text-xs'>
+                                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Probabilidad</p>
+                                                                        <p className='font-black text-[var(--text-primary)]'>{snapshot.probability}%</p>
+                                                                        {hasPrevious && (
+                                                                            <p className='mt-1 text-[10px] font-black inline-flex items-center gap-1.5' style={{ color: getSnapshotDeltaColor(probabilityTrend) }}>
+                                                                                {renderSnapshotTrendIcon(probabilityTrend)}
+                                                                                <span>{formatSignedPointsWithPercent(comparison?.deltaProbability, comparison?.deltaProbabilityPct)}</span>
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Forecast Mensualidad</p>
+                                                                        <p className='font-black text-[var(--text-primary)]'>{formatSnapshotCurrency(snapshot.forecast_value_amount)}</p>
+                                                                        {hasPrevious && (
+                                                                            <p className='mt-1 text-[10px] font-black inline-flex items-center gap-1.5' style={{ color: getSnapshotDeltaColor(monthlyTrend) }}>
+                                                                                {renderSnapshotTrendIcon(monthlyTrend)}
+                                                                                <span>{formatSignedCurrencyWithPercent(comparison?.deltaMonthly, comparison?.deltaMonthlyPct)}</span>
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Forecast Implementación</p>
+                                                                        <p className='font-black text-[var(--text-primary)]'>{formatSnapshotCurrency(snapshot.forecast_implementation_amount)}</p>
+                                                                        {hasPrevious && (
+                                                                            <p className='mt-1 text-[10px] font-black inline-flex items-center gap-1.5' style={{ color: getSnapshotDeltaColor(implementationTrend) }}>
+                                                                                {renderSnapshotTrendIcon(implementationTrend)}
+                                                                                <span>{formatSignedCurrencyWithPercent(comparison?.deltaImplementation, comparison?.deltaImplementationPct)}</span>
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Fecha Cierre Forecast</p>
+                                                                        <p className='font-black text-[var(--text-primary)]'>{formatSnapshotDateOnly(snapshot.forecast_close_date)}</p>
+                                                                        {hasPrevious && (
+                                                                            <p className='mt-1 text-[10px] font-black inline-flex items-center gap-1.5' style={{ color: getSnapshotDeltaColor(closeDateTrend, 'closeDate') }}>
+                                                                                {renderSnapshotTrendIcon(closeDateTrend)}
+                                                                                <span>{formatCloseDateShift(comparison?.deltaCloseDateDays)}</span>
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {hasPrevious && (
+                                                                    <div
+                                                                        className='mt-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 flex flex-wrap items-center justify-between gap-2'
+                                                                    >
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>Total Forecast</p>
+                                                                        <p className='text-xs font-black text-[var(--text-primary)]'>{formatSnapshotCurrency(totalForecast)}</p>
+                                                                        <p className='text-[10px] font-black inline-flex items-center gap-1.5' style={{ color: getSnapshotDeltaColor(totalTrend) }}>
+                                                                            {renderSnapshotTrendIcon(totalTrend)}
+                                                                            <span>{formatSignedCurrencyWithPercent(comparison?.deltaTotal, comparison?.deltaTotalPct)}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )
+                                                    })()
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end'>
+                            <button
+                                onClick={() => setIsSnapshotsModalOpen(false)}
+                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

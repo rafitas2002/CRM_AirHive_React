@@ -22,6 +22,28 @@ export const metadata = {
     title: 'Equipo - CRM Air Hive'
 }
 
+const CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS = [1, 5, 10, 15, 20, 30, 40, 50] as const
+
+function getThresholdLevelMetaFromList(progress: number, thresholds: readonly number[]) {
+    const safeProgress = Math.max(0, Number(progress || 0))
+    let level = 0
+    let next: number | null = thresholds[0] ?? null
+    thresholds.forEach((threshold, index) => {
+        if (safeProgress >= threshold) {
+            level = index + 1
+            next = thresholds[index + 1] ?? null
+        }
+    })
+    return { level, next }
+}
+
+function normalizeSpecialBadgeKey(badgeType: string, badgeKey: string) {
+    const type = String(badgeType || '')
+    const key = String(badgeKey || '').trim()
+    if (type === 'closure_milestone') return 'closure_milestone'
+    return key
+}
+
 export default async function UsuariosPage() {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)
@@ -72,6 +94,12 @@ export default async function UsuariosPage() {
         .gt('level', 0)
 
     if (specialBadgesError) console.error('Error fetching special badges:', specialBadgesError)
+
+    const { data: badgeClosures, error: badgeClosuresError } = await dbClient
+        .from('seller_badge_closures')
+        .select('seller_id')
+
+    if (badgeClosuresError) console.error('Error fetching badge closures:', badgeClosuresError)
 
     const quoteSelectWithOwnFlag = 'id, contributed_by, contributed_by_name, quote_author, quote_source, is_own_quote, deleted_at'
     const quoteSelectFallback = 'id, contributed_by, contributed_by_name, quote_author, quote_source, deleted_at'
@@ -161,11 +189,13 @@ export default async function UsuariosPage() {
     for (const row of (specialBadges as any[]) || []) {
         const sellerId = String((row as any)?.seller_id || '')
         if (!sellerId) continue
+        const badgeType = String((row as any)?.badge_type || 'special')
+        const badgeKey = normalizeSpecialBadgeKey(badgeType, String((row as any)?.badge_key || ''))
         const list = specialBySeller.get(sellerId) || []
         list.push({
             source: 'special',
-            type: String((row as any)?.badge_type || 'special'),
-            key: String((row as any)?.badge_key || ''),
+            type: badgeType,
+            key: badgeKey,
             label: String((row as any)?.badge_label || 'Badge especial'),
             level: Number((row as any)?.level || 0),
             progress: Number((row as any)?.progress_count || 0),
@@ -173,6 +203,13 @@ export default async function UsuariosPage() {
             unlocked_at: String((row as any)?.unlocked_at || '')
         })
         specialBySeller.set(sellerId, list)
+    }
+
+    const closureCountBySeller = new Map<string, number>()
+    for (const row of (badgeClosures as any[]) || []) {
+        const sellerId = String((row as any)?.seller_id || '')
+        if (!sellerId) continue
+        closureCountBySeller.set(sellerId, (closureCountBySeller.get(sellerId) || 0) + 1)
     }
 
     const quoteContributionBySeller = new Map<string, number>()
@@ -235,13 +272,21 @@ export default async function UsuariosPage() {
         unlocked_at: string
     }) => {
         const list = specialBySeller.get(sellerId) || []
+        const normalizedDerivedKey = normalizeSpecialBadgeKey(derivedBadge.type, derivedBadge.key)
         const index = list.findIndex((badge) =>
             String((badge as any)?.type || '') === derivedBadge.type
-            && String((badge as any)?.key || '') === derivedBadge.key
+            && normalizeSpecialBadgeKey(
+                String((badge as any)?.type || ''),
+                String((badge as any)?.key || '')
+            ) === normalizedDerivedKey
         )
+        const nextBadge = {
+            ...derivedBadge,
+            key: normalizedDerivedKey
+        }
 
         if (index < 0) {
-            list.push(derivedBadge)
+            list.push(nextBadge)
             specialBySeller.set(sellerId, list)
             return
         }
@@ -250,12 +295,12 @@ export default async function UsuariosPage() {
         const currentLevel = Number(current?.level || 0)
         const currentProgress = Number(current?.progress || 0)
         if (
-            Number(derivedBadge.level || 0) > currentLevel
-            || (Number(derivedBadge.level || 0) === currentLevel && Number(derivedBadge.progress || 0) > currentProgress)
+            Number(nextBadge.level || 0) > currentLevel
+            || (Number(nextBadge.level || 0) === currentLevel && Number(nextBadge.progress || 0) > currentProgress)
         ) {
             list[index] = {
                 ...current,
-                ...derivedBadge
+                ...nextBadge
             }
             specialBySeller.set(sellerId, list)
         }
@@ -294,6 +339,25 @@ export default async function UsuariosPage() {
                 label: 'Frases con Likes',
                 level: likesMeta.level,
                 progress: likesProgress,
+                updated_at: '',
+                unlocked_at: ''
+            })
+        }
+    }
+
+    for (const p of (profiles as any[]) || []) {
+        const sellerId = String((p as any)?.id || '')
+        if (!sellerId) continue
+        const closureProgress = Math.max(0, Number(closureCountBySeller.get(sellerId) || 0))
+        const closureMeta = getThresholdLevelMetaFromList(closureProgress, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
+        if (closureMeta.level > 0) {
+            mergeOrInsertDerivedSpecialBadge(sellerId, {
+                source: 'special',
+                type: 'closure_milestone',
+                key: 'closure_milestone',
+                label: 'Cierres de Empresas',
+                level: closureMeta.level,
+                progress: closureProgress,
                 updated_at: '',
                 unlocked_at: ''
             })

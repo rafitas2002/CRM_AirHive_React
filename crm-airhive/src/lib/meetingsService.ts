@@ -292,6 +292,12 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
 
     // Get next snapshot number
     const snapshotNumber = await getNextSnapshotNumber(leadId)
+    const captureTimestamp = new Date().toISOString()
+    const forecastValueAmount = Number((lead as any).value_forecast_estimated ?? (lead as any).valor_estimado ?? 0)
+    const forecastImplementationAmount = Number((lead as any).implementation_forecast_estimated ?? (lead as any).valor_implementacion_estimado ?? 0)
+    const forecastCloseDate = (lead as any).close_date_forecast_estimated
+        || (lead as any).forecast_close_date
+        || null
 
     // Create snapshot
     const snapshotData: SnapshotInsert = {
@@ -300,10 +306,10 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         meeting_id: meetingId,
         snapshot_number: snapshotNumber,
         probability: lead.probabilidad || 50,
-        forecast_value_amount: Number((lead as any).valor_estimado || 0),
-        forecast_implementation_amount: Number((lead as any).valor_implementacion_estimado || 0),
-        forecast_close_date: (lead as any).forecast_close_date || null,
-        snapshot_timestamp: meeting.start_time,
+        forecast_value_amount: forecastValueAmount,
+        forecast_implementation_amount: forecastImplementationAmount,
+        forecast_close_date: forecastCloseDate,
+        snapshot_timestamp: captureTimestamp,
         source: 'meeting_start_snapshot'
     }
 
@@ -323,7 +329,7 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         .from('clientes') as any)
         .update({
             probability_locked: true,
-            last_snapshot_at: meeting.start_time,
+            last_snapshot_at: captureTimestamp,
             next_meeting_id: null // Clear this as this meeting just started/snapshotted
         })
         .eq('id', leadId)
@@ -337,9 +343,9 @@ export async function captureSnapshot(leadId: number, meetingId: string): Promis
         metadata: {
             lead_id: leadId,
             probability: lead.probabilidad,
-            forecast_value_amount: Number((lead as any).valor_estimado || 0),
-            forecast_implementation_amount: Number((lead as any).valor_implementacion_estimado || 0),
-            forecast_close_date: (lead as any).forecast_close_date || null,
+            forecast_value_amount: forecastValueAmount,
+            forecast_implementation_amount: forecastImplementationAmount,
+            forecast_close_date: forecastCloseDate,
             snapshot_number: snapshotNumber
         }
     })

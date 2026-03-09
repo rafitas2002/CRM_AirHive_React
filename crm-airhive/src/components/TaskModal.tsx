@@ -230,10 +230,10 @@ export default function TaskModal({
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className='p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0'>
+                <form id='task-form' onSubmit={handleSubmit} className='p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0'>
                     <div className='ah-required-note' role='note'>
                         <span className='ah-required-note-dot' aria-hidden='true' />
-                        Campos obligatorios: marcados con * y resaltados en rojo
+                        Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                     </div>
 
                     {!leadId && (
@@ -242,12 +242,12 @@ export default function TaskModal({
                             <select
                                 required
                                 disabled={mode === 'edit' && !isModificationMode}
-                                value={formData.lead_id}
+                                value={formData.lead_id || ''}
                                 onChange={(e) => setFormData({ ...formData, lead_id: Number(e.target.value) })}
                                 className={`w-full px-4 py-3 border border-[var(--input-border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF]/20 focus:border-[#2048FF] font-bold text-[var(--text-primary)] text-sm
                                     ${mode === 'edit' && !isModificationMode ? 'bg-[var(--hover-bg)] opacity-70 cursor-not-allowed hidden-arrow' : 'bg-[var(--input-bg)]'}`}
                             >
-                                <option value={0}>Selecciona un cliente...</option>
+                                <option value=''>Selecciona un cliente...</option>
                                 {leads.map(l => (
                                     <option key={l.id} value={l.id}>{l.nombre} - {l.empresa}</option>
                                 ))}
@@ -461,8 +461,8 @@ export default function TaskModal({
                                 {mode === 'create' ? 'Cancelar' : 'Cancelar Edición'}
                             </button>
                             <button
-                                onClick={handleSubmit}
                                 type="submit"
+                                form='task-form'
                                 className='flex-[2] py-3 px-4 bg-[#2048FF] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95'
                             >
                                 {mode === 'create' ? 'Agendar Tarea' : 'Guardar Cambios'}

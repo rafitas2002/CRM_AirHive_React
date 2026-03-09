@@ -11,6 +11,28 @@ const BADGE_GRANT_ALLOWED_ADMINS = new Set([
     'Alberto Castro'
 ])
 
+const CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS = [1, 5, 10, 15, 20, 30, 40, 50] as const
+
+function getThresholdLevelMetaFromList(progress: number, thresholds: readonly number[]) {
+    const safeProgress = Math.max(0, Number(progress || 0))
+    let level = 0
+    let next: number | null = thresholds[0] ?? null
+    thresholds.forEach((threshold, index) => {
+        if (safeProgress >= threshold) {
+            level = index + 1
+            next = thresholds[index + 1] ?? null
+        }
+    })
+    return { level, next }
+}
+
+function normalizeSpecialBadgeKey(type: string, key: string) {
+    const safeType = String(type || '')
+    const safeKey = String(key || '').trim()
+    if (safeType === 'closure_milestone') return 'closure_milestone'
+    return safeKey
+}
+
 export async function grantAdminBadgeToSeller(sellerId: string) {
     try {
         if (!sellerId) return { success: false, error: 'Usuario objetivo inválido' }
@@ -149,7 +171,7 @@ export async function getUserPublicBadgesSummary(targetUserId: string) {
             // Fallback to session client if service role is unavailable.
         }
 
-        const [{ data: industryBadges }, { data: specialBadges }] = await Promise.all([
+        const [{ data: industryBadges }, { data: specialBadges }, { count: closureCount }] = await Promise.all([
             (dbClient
                 .from('seller_industry_badges')
                 .select('industria_id, closures_count, level, industrias(name)')
@@ -159,8 +181,55 @@ export async function getUserPublicBadgesSummary(targetUserId: string) {
                 .from('seller_special_badges')
                 .select('badge_type, badge_key, badge_label, progress_count, level')
                 .eq('seller_id', targetUserId)
-                .gt('level', 0) as any)
+                .gt('level', 0) as any),
+            (dbClient
+                .from('seller_badge_closures')
+                .select('lead_id', { count: 'exact', head: true })
+                .eq('seller_id', targetUserId) as any)
         ])
+
+        const mergedSpecialByKey = new Map<string, {
+            type: string
+            key: string
+            label: string
+            level: number
+            progress: number
+        }>()
+
+        for (const row of (specialBadges || [])) {
+            const type = String((row as any)?.badge_type || 'special')
+            const key = normalizeSpecialBadgeKey(type, String((row as any)?.badge_key || ''))
+            const normalized = {
+                type,
+                key,
+                label: String((row as any)?.badge_label || 'Badge especial'),
+                level: Number((row as any)?.level || 0),
+                progress: Number((row as any)?.progress_count || 0)
+            }
+            const identity = `${normalized.type}::${normalized.key}`
+            const prev = mergedSpecialByKey.get(identity)
+            if (!prev || normalized.level >= prev.level) mergedSpecialByKey.set(identity, normalized)
+        }
+
+        const closureProgress = Math.max(0, Number(closureCount || 0))
+        const closureMeta = getThresholdLevelMetaFromList(closureProgress, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
+        if (closureMeta.level > 0) {
+            const closureIdentity = 'closure_milestone::closure_milestone'
+            const prevClosure = mergedSpecialByKey.get(closureIdentity)
+            if (
+                !prevClosure
+                || closureMeta.level > prevClosure.level
+                || (closureMeta.level === prevClosure.level && closureProgress > prevClosure.progress)
+            ) {
+                mergedSpecialByKey.set(closureIdentity, {
+                    type: 'closure_milestone',
+                    key: 'closure_milestone',
+                    label: 'Cierres de Empresas',
+                    level: closureMeta.level,
+                    progress: closureProgress
+                })
+            }
+        }
 
         return {
             success: true,
@@ -173,13 +242,7 @@ export async function getUserPublicBadgesSummary(targetUserId: string) {
                         level: Number(row?.level || 0),
                         progress: Number(row?.closures_count || 0)
                     })),
-                    special: (specialBadges || []).map((row: any) => ({
-                        type: String(row?.badge_type || 'special'),
-                        key: String(row?.badge_key || ''),
-                        label: String(row?.badge_label || 'Badge especial'),
-                        level: Number(row?.level || 0),
-                        progress: Number(row?.progress_count || 0)
-                    }))
+                    special: Array.from(mergedSpecialByKey.values())
                 }
             }
         }

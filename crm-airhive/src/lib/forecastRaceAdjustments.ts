@@ -5,6 +5,9 @@ type ReliabilityMetricsLike = {
     value_reliability_score?: number | null
     value_reliability_samples?: number | null
     value_bias_pct_signed?: number | null
+    implementation_reliability_score?: number | null
+    implementation_reliability_samples?: number | null
+    implementation_bias_pct_signed?: number | null
     close_date_reliability_score?: number | null
     close_date_reliability_samples?: number | null
     close_date_bias_days_signed?: number | null
@@ -60,15 +63,88 @@ function computeMonthAlignmentFactor(adjustedCloseDate: Date | null, targetMonth
 }
 
 export function computeSellerForecastRaceReliability(metrics?: ReliabilityMetricsLike | null) {
-    if (!metrics) return 70
+    const fallback = 40
+    if (!metrics) return fallback
 
-    const scores = [
-        clamp(toFiniteNumber(metrics.probability_reliability_score, 70), 0, 100),
-        clamp(toFiniteNumber(metrics.value_reliability_score, 70), 0, 100),
-        clamp(toFiniteNumber(metrics.close_date_reliability_score, 70), 0, 100)
+    // Race reliability must blend:
+    // 1) close probability reliability
+    // 2) monthly forecast reliability (monthly forecast vs real monthly close value)
+    const probabilityScore = clamp(toFiniteNumber(metrics.probability_reliability_score, fallback), 0, 100)
+    const monthlyScore = clamp(toFiniteNumber(metrics.value_reliability_score, fallback), 0, 100)
+    const probabilitySamples = Math.max(0, toFiniteNumber(metrics.probability_reliability_samples, 0))
+    const monthlySamples = Math.max(0, toFiniteNumber(metrics.value_reliability_samples, 0))
+
+    const probabilityWeight = probabilitySamples > 0 ? (1 + Math.log1p(probabilitySamples)) : 0
+    const monthlyWeight = monthlySamples > 0 ? (1 + Math.log1p(monthlySamples)) : 0
+    const totalWeight = probabilityWeight + monthlyWeight
+
+    if (totalWeight <= 0) return fallback
+    return clamp(
+        ((probabilityScore * probabilityWeight) + (monthlyScore * monthlyWeight)) / totalWeight,
+        0,
+        100
+    )
+}
+
+export function computeSellerMonthlyForecastReliability(
+    metrics?: ReliabilityMetricsLike | null,
+    options?: { fallback?: number }
+) {
+    const fallback = clamp(toFiniteNumber(options?.fallback, 0), 0, 100)
+    if (!metrics) return fallback
+    return clamp(toFiniteNumber(metrics.value_reliability_score, fallback), 0, 100)
+}
+
+export function computeSellerOverallForecastReliability(
+    metrics?: ReliabilityMetricsLike | null,
+    options?: { fallback?: number }
+) {
+    const fallback = clamp(toFiniteNumber(options?.fallback, 0), 0, 100)
+    if (!metrics) return fallback
+
+    const scoreSpecs = [
+        {
+            score: clamp(toFiniteNumber(metrics.probability_reliability_score, fallback), 0, 100),
+            samples: Math.max(0, toFiniteNumber(metrics.probability_reliability_samples, 0))
+        },
+        {
+            score: clamp(toFiniteNumber(metrics.value_reliability_score, fallback), 0, 100),
+            samples: Math.max(0, toFiniteNumber(metrics.value_reliability_samples, 0))
+        },
+        {
+            score: clamp(toFiniteNumber(metrics.implementation_reliability_score, fallback), 0, 100),
+            samples: Math.max(0, toFiniteNumber(metrics.implementation_reliability_samples, 0))
+        },
+        {
+            score: clamp(toFiniteNumber(metrics.close_date_reliability_score, fallback), 0, 100),
+            samples: Math.max(0, toFiniteNumber(metrics.close_date_reliability_samples, 0))
+        }
     ]
 
-    return average(scores)
+    const weighted = scoreSpecs
+        .filter((spec) => spec.samples > 0)
+        .reduce(
+            (acc, spec) => ({
+                weightedSum: acc.weightedSum + (spec.score * spec.samples),
+                totalSamples: acc.totalSamples + spec.samples
+            }),
+            { weightedSum: 0, totalSamples: 0 }
+        )
+
+    if (weighted.totalSamples <= 0) return fallback
+    return clamp(weighted.weightedSum / weighted.totalSamples, 0, 100)
+}
+
+export function computeSellerOverallForecastSampleCount(metrics?: ReliabilityMetricsLike | null) {
+    if (!metrics) return 0
+    const values = [
+        toFiniteNumber(metrics.probability_reliability_samples, 0),
+        toFiniteNumber(metrics.value_reliability_samples, 0),
+        toFiniteNumber(metrics.implementation_reliability_samples, 0),
+        toFiniteNumber(metrics.close_date_reliability_samples, 0)
+    ].map((n) => Math.max(0, Math.round(n)))
+
+    return Math.max(...values, 0)
 }
 
 export function computeAdjustedMonthlyRaceLeadValue(
@@ -110,4 +186,3 @@ export function computeAdjustedMonthlyRaceLeadValue(
 
     return (adjustedProbability / 100) * adjustedMonthlyValue * monthAlignmentFactor * confidenceBlend
 }
-

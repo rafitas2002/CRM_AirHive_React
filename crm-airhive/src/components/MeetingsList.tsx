@@ -20,6 +20,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     const [meetings, setMeetings] = useState<Meeting[]>([])
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
     const [loading, setLoading] = useState(true)
+    const [showSnapshots, setShowSnapshots] = useState(false)
 
     // Modal State
     const [confirmConfig, setConfirmConfig] = useState<{
@@ -38,6 +39,10 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
     useEffect(() => {
         fetchData()
+    }, [leadId])
+
+    useEffect(() => {
+        setShowSnapshots(false)
     }, [leadId])
 
     const fetchData = async () => {
@@ -172,6 +177,17 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
 
     return (
         <div className='space-y-3'>
+            {snapshots.length > 0 && (
+                <div className='flex justify-end'>
+                    <button
+                        type='button'
+                        onClick={() => setShowSnapshots((prev) => !prev)}
+                        className='px-3 py-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors cursor-pointer'
+                    >
+                        {showSnapshots ? 'Ocultar snapshots' : 'Mostrar snapshots'}
+                    </button>
+                </div>
+            )}
             {meetings.filter(m => m.status !== 'cancelled').map((meeting) => {
                 const snapshot = getSnapshotForMeeting(meeting.id)
                 const startTime = new Date(meeting.start_time)
@@ -267,7 +283,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                 </div>
 
                                 {/* Snapshot Info */}
-                                {snapshot && (
+                                {snapshot && showSnapshots && (
                                     <div className='mt-3 p-3 bg-purple-50 border border-purple-200 rounded-xl'>
                                         <div className='flex justify-between items-center mb-1'>
                                             <p className='text-[10px] font-black text-purple-900 uppercase tracking-widest inline-flex items-center gap-1'>

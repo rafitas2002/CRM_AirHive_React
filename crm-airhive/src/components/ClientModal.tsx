@@ -42,6 +42,7 @@ export type ClientData = {
     loss_recorded_by?: string | null
     prospect_role_catalog_id?: string | null
     prospect_role_custom?: string | null
+    prospect_role_exact_title?: string | null
     prospect_age_exact?: number | null
     prospect_age_range_id?: string | null
     prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
@@ -137,8 +138,6 @@ type AgeRangeCatalogItem = {
     is_active?: boolean
 }
 
-const CUSTOM_PROSPECT_ROLE_OPTION = '__custom_prospect_role__'
-
 const PROSPECT_DECISION_ROLE_OPTIONS: Array<{ value: NonNullable<ClientData['prospect_decision_role']>; label: string }> = [
     { value: 'decision_maker', label: 'Tomador/a de decisión' },
     { value: 'influencer', label: 'Influenciador/a' },
@@ -209,6 +208,7 @@ export default function ClientModal({
         loss_recorded_by: null,
         prospect_role_catalog_id: null,
         prospect_role_custom: '',
+        prospect_role_exact_title: '',
         prospect_age_exact: null,
         prospect_age_range_id: null,
         prospect_decision_role: null,
@@ -275,6 +275,8 @@ export default function ClientModal({
                     loss_recorded_by: (initialData as any).loss_recorded_by ?? null,
                     prospect_role_catalog_id: (initialData as any).prospect_role_catalog_id ?? null,
                     prospect_role_custom: (initialData as any).prospect_role_custom ?? '',
+                    prospect_role_exact_title: (initialData as any).prospect_role_exact_title
+                        ?? ((initialData as any).prospect_role_catalog_id ? '' : ((initialData as any).prospect_role_custom ?? '')),
                     prospect_age_exact: (initialData as any).prospect_age_exact ?? null,
                     prospect_age_range_id: (initialData as any).prospect_age_range_id ?? null,
                     prospect_decision_role: (initialData as any).prospect_decision_role ?? null,
@@ -284,8 +286,6 @@ export default function ClientModal({
                 })
                 if ((initialData as any).prospect_role_catalog_id) {
                     setSelectedProspectRoleOption(String((initialData as any).prospect_role_catalog_id))
-                } else if (String((initialData as any).prospect_role_custom || '').trim()) {
-                    setSelectedProspectRoleOption(CUSTOM_PROSPECT_ROLE_OPTION)
                 } else {
                     setSelectedProspectRoleOption('')
                 }
@@ -324,6 +324,7 @@ export default function ClientModal({
                     loss_recorded_by: null,
                     prospect_role_catalog_id: null,
                     prospect_role_custom: '',
+                    prospect_role_exact_title: '',
                     prospect_age_exact: null,
                     prospect_age_range_id: null,
                     prospect_decision_role: null,
@@ -766,6 +767,7 @@ export default function ClientModal({
             String(formData.telefono || '') === String(initialData.telefono || '') &&
             norm((formData as any).prospect_role_catalog_id) === norm((initialData as any).prospect_role_catalog_id) &&
             String((formData as any).prospect_role_custom || '') === String((initialData as any).prospect_role_custom || '') &&
+            String((formData as any).prospect_role_exact_title || '') === String((initialData as any).prospect_role_exact_title || '') &&
             asNum((formData as any).prospect_age_exact) === asNum((initialData as any).prospect_age_exact) &&
             norm((formData as any).prospect_age_range_id) === norm((initialData as any).prospect_age_range_id) &&
             norm((formData as any).prospect_decision_role) === norm((initialData as any).prospect_decision_role) &&
@@ -822,22 +824,13 @@ export default function ClientModal({
         if (!nextValue) {
             setFormData((prev) => ({
                 ...prev,
-                prospect_role_catalog_id: null,
-                prospect_role_custom: ''
-            }))
-            return
-        }
-        if (nextValue === CUSTOM_PROSPECT_ROLE_OPTION) {
-            setFormData((prev) => ({
-                ...prev,
                 prospect_role_catalog_id: null
             }))
             return
         }
         setFormData((prev) => ({
             ...prev,
-            prospect_role_catalog_id: nextValue,
-            prospect_role_custom: ''
+            prospect_role_catalog_id: nextValue
         }))
     }
 
@@ -949,13 +942,8 @@ export default function ClientModal({
             return
         }
 
-        const trimmedCustomProspectRole = String((formData as any).prospect_role_custom || '').trim()
-        if (selectedProspectRoleOption === CUSTOM_PROSPECT_ROLE_OPTION && !trimmedCustomProspectRole) {
-            alert('Si seleccionas “Otro (especificar)”, escribe el puesto del prospecto.')
-            return
-        }
-        if (prospectRolesCatalogError && selectedProspectRoleOption && selectedProspectRoleOption !== CUSTOM_PROSPECT_ROLE_OPTION) {
-            alert('No se pudo validar el catálogo de puestos. Ejecuta la migración 085 o elige “Otro (especificar)”.')
+        if (prospectRolesCatalogError && selectedProspectRoleOption) {
+            alert('No se pudo validar el catálogo de puestos. Ejecuta la migración 085 o limpia el área seleccionada.')
             return
         }
         if (ageRangesCatalogError && (formData as any).prospect_age_range_id) {
@@ -975,12 +963,18 @@ export default function ClientModal({
 
         const inferredAgeRangeId = findAgeRangeIdForAge(normalizedProspectAgeExact, sortedAgeRangesCatalog)
         const normalizedProspectAgeRangeId = inferredAgeRangeId || ((formData as any).prospect_age_range_id || null)
+        const normalizedProspectRoleCatalogId = ((formData as any).prospect_role_catalog_id || null)
         const normalizedProspectDecisionRole = ((formData as any).prospect_decision_role || null)
         const normalizedPreferredContactChannel = ((formData as any).prospect_preferred_contact_channel || null)
         const normalizedLinkedin = String((formData as any).prospect_linkedin_url || '').trim() || null
+        const normalizedExactRoleTitle = String((formData as any).prospect_role_exact_title || '').trim() || null
+        const normalizedLegacyProspectRoleCustom = normalizedProspectRoleCatalogId ? null : normalizedExactRoleTitle
 
         const normalizedFormData: ClientData = {
             ...formData,
+            prospect_role_catalog_id: normalizedProspectRoleCatalogId,
+            prospect_role_custom: normalizedLegacyProspectRoleCustom,
+            prospect_role_exact_title: normalizedExactRoleTitle,
             prospect_age_exact: normalizedProspectAgeExact,
             prospect_age_range_id: normalizedProspectAgeRangeId,
             prospect_decision_role: normalizedProspectDecisionRole,
@@ -1095,10 +1089,10 @@ export default function ClientModal({
                 </div>
 
                 {/* Form Body style match with Pre-Lead */}
-                <form onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
+                <form id='client-form' onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
                     <div className='ah-required-note' role='note'>
                         <span className='ah-required-note-dot' aria-hidden='true' />
-                        Campos obligatorios: marcados con * y resaltados en rojo
+                        Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                     </div>
 
                     {/* Sección Empresa */}
@@ -1169,7 +1163,7 @@ export default function ClientModal({
 
                             <div className='space-y-3'>
                                 <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                    Puesto del Prospecto (Opcional)
+                                    Área del Puesto (Opcional)
                                 </label>
                                 <select
                                     value={selectedProspectRoleOption}
@@ -1181,25 +1175,27 @@ export default function ClientModal({
                                         color: 'var(--text-primary)'
                                     }}
                                 >
-                                    <option value=''>Seleccionar puesto...</option>
+                                    <option value=''>Seleccionar área...</option>
                                     {sortedProspectRolesCatalog.map((role) => (
                                         <option key={role.id} value={role.id}>
                                             {role.label}
                                         </option>
                                     ))}
-                                    <option value={CUSTOM_PROSPECT_ROLE_OPTION}>Otro (especificar)</option>
                                 </select>
 
-                                {selectedProspectRoleOption === CUSTOM_PROSPECT_ROLE_OPTION && (
+                                <div className='space-y-2'>
+                                    <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                        Nombre Exacto del Puesto (Opcional)
+                                    </label>
                                     <input
                                         type='text'
-                                        value={(formData as any).prospect_role_custom || ''}
-                                        onChange={(e) => setFormData({ ...formData, prospect_role_custom: e.target.value })}
+                                        value={(formData as any).prospect_role_exact_title || ''}
+                                        onChange={(e) => setFormData({ ...formData, prospect_role_exact_title: e.target.value })}
                                         className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
                                         style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                                        placeholder='Ej. Gerente de Planta'
+                                        placeholder='Ej. Gerente Regional de Operaciones'
                                     />
-                                )}
+                                </div>
 
                                 {prospectRolesCatalogLoading && (
                                     <p className='text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>
@@ -1215,7 +1211,7 @@ export default function ClientModal({
 
                                 {!prospectRolesCatalogError && (
                                     <p className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
-                                        Usa categorías generales para mantener consistencia en correlaciones (ej. “Gerencia” en lugar de variantes por área).
+                                        Registra el área para estandarizar correlaciones y, si aplica, el nombre exacto del puesto para enriquecer la data.
                                     </p>
                                 )}
 
@@ -1553,11 +1549,10 @@ export default function ClientModal({
                             </div>
 
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono WhatsApp *</label>
+                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono WhatsApp</label>
                                 <div className='relative'>
                                     <input
                                         type='text'
-                                        required
                                         value={formData.telefono}
                                         onChange={(e) => {
                                             const val = e.target.value.replace(/\D/g, '').slice(0, 10)
@@ -1566,7 +1561,7 @@ export default function ClientModal({
                                         }}
                                         className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 transition-all font-bold text-xs ${phoneError ? 'bg-red-50/10 border-red-500 focus:ring-red-500/10' : 'focus:ring-blue-500/10 focus:border-blue-500'}`}
                                         style={{ background: 'var(--background)', borderColor: phoneError ? '#ef4444' : 'var(--card-border)', color: 'var(--text-primary)' }}
-                                        placeholder='10 dígitos necesarios'
+                                        placeholder='Opcional · 10 dígitos'
                                     />
                                     {formData.telefono && formData.telefono.length === 10 && (
                                         <span className='absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500 font-bold animate-in zoom-in'>✓</span>
@@ -2092,7 +2087,7 @@ export default function ClientModal({
                                 )}
                             </>
                         )}
-                        <p className='text-[10px] font-black uppercase tracking-wider' style={{ color: '#ef4444' }}>* Campos obligatorios</p>
+                        <p className='text-[10px] font-black uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>* Campos obligatorios</p>
                     </div>
 
                     <div className='flex gap-4'>
@@ -2105,7 +2100,8 @@ export default function ClientModal({
                             Cancelar
                         </button>
                         <button
-                            onClick={handleSubmit}
+                            type='submit'
+                            form='client-form'
                             disabled={isSubmitting || !formData.empresa_id}
                             className={`px-8 py-2.5 text-white rounded-xl font-black shadow-xl transition-all transform active:scale-95 uppercase text-[10px] tracking-widest disabled:opacity-30 ${mode === 'convert' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20' : 'bg-[#2048FF] shadow-blue-500/20 hover:bg-[#1700AC]'}`}
                         >

@@ -320,9 +320,9 @@ body {
   gap: 8px;
   padding: 9px 12px;
   border-radius: 12px;
-  border: 1px solid color-mix(in srgb, #ef4444 44%, var(--card-border));
-  background: color-mix(in srgb, #ef4444 12%, var(--card-bg));
-  color: color-mix(in srgb, #ef4444 74%, var(--text-primary));
+  border: 1px solid color-mix(in srgb, var(--card-border) 85%, #2048FF);
+  background: color-mix(in srgb, var(--hover-bg) 76%, var(--card-bg));
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
   font-size: 0.64rem;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -334,31 +334,38 @@ body {
   height: 8px;
   border-radius: 9999px;
   flex-shrink: 0;
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.2);
+  background: #2048ff;
+  box-shadow: 0 0 0 3px rgb(32 72 255 / 0.18);
 }
 
-.ah-modal-panel :is(.space-y-1\.5, .space-y-2, .space-y-3, .space-y-4):has(input[required], select[required], textarea[required]) > label,
 .ah-modal-panel .ah-required-label {
-  color: color-mix(in srgb, #ef4444 82%, var(--text-primary)) !important;
+  color: inherit !important;
   opacity: 1 !important;
 }
 
 .ah-modal-panel label :is(.text-red-500, .text-rose-600),
 .ah-modal-panel .ah-required-asterisk {
-  color: #ef4444 !important;
+  color: color-mix(in srgb, var(--text-secondary) 72%, var(--text-primary)) !important;
   font-weight: 900;
 }
 
-.ah-modal-panel :is(input, select, textarea)[required],
-.ah-modal-panel .ah-required-control {
+.ah-modal-panel form.ah-form-attempted :is(.space-y-1\.5, .space-y-2, .space-y-3, .space-y-4):has(:is(input, select, textarea):required:invalid) > label,
+.ah-modal-panel form.ah-form-attempted :is(.space-y-1\.5, .space-y-2, .space-y-3, .space-y-4):has(:is(input, select, textarea):required:invalid) .ah-required-label {
+  color: color-mix(in srgb, #ef4444 82%, var(--text-primary)) !important;
+}
+
+.ah-modal-panel form.ah-form-attempted :is(input, select, textarea):required:invalid,
+.ah-modal-panel form.ah-form-attempted .ah-required-control[aria-invalid='true'],
+.ah-modal-panel form.ah-form-attempted .ah-required-control[data-invalid='true'] {
   border-color: color-mix(in srgb, #ef4444 52%, var(--input-border)) !important;
   box-shadow: 0 0 0 1px color-mix(in srgb, #ef4444 26%, transparent);
 }
 
-.ah-modal-panel :is(input, select, textarea)[required]:focus,
-.ah-modal-panel .ah-required-control:focus,
-.ah-modal-panel .ah-required-control:focus-visible {
+.ah-modal-panel form.ah-form-attempted :is(input, select, textarea):required:invalid:focus,
+.ah-modal-panel form.ah-form-attempted .ah-required-control[aria-invalid='true']:focus,
+.ah-modal-panel form.ah-form-attempted .ah-required-control[data-invalid='true']:focus,
+.ah-modal-panel form.ah-form-attempted .ah-required-control[aria-invalid='true']:focus-visible,
+.ah-modal-panel form.ah-form-attempted .ah-required-control[data-invalid='true']:focus-visible {
   border-color: #ef4444 !important;
   box-shadow:
     0 0 0 1px color-mix(in srgb, #ef4444 44%, transparent),
@@ -824,12 +831,19 @@ body {
 }
 
 .ah-accent-hover-surface {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
 .ah-accent-hover-surface:hover {
-  border-color: color-mix(in srgb, var(--input-focus) 62%, var(--card-border));
-  box-shadow: 0 0 0 3px rgb(var(--input-focus-rgb) / 0.12);
+  border-color: color-mix(in srgb, var(--input-focus) 32%, var(--card-border));
+  background: color-mix(in srgb, var(--hover-bg) 78%, var(--card-bg));
+  color: var(--text-primary);
+  box-shadow: 0 12px 22px -20px rgb(var(--input-focus-rgb) / 0.55);
+  transform: translateY(-1px);
+}
+
+.ah-accent-hover-surface:active {
+  transform: translateY(0);
 }
 
 .ah-select-control--maestra {

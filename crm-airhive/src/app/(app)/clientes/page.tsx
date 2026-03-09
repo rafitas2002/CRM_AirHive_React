@@ -68,6 +68,7 @@ const normalizeLead = (lead: Lead) => ({
     loss_recorded_by: (lead as any).loss_recorded_by ?? null,
     prospect_role_catalog_id: (lead as any).prospect_role_catalog_id ?? null,
     prospect_role_custom: (lead as any).prospect_role_custom ?? '',
+    prospect_role_exact_title: (lead as any).prospect_role_exact_title ?? '',
     prospect_age_exact: (lead as any).prospect_age_exact ?? null,
     prospect_age_range_id: (lead as any).prospect_age_range_id ?? null,
     prospect_decision_role: (lead as any).prospect_decision_role ?? null,
@@ -636,6 +637,7 @@ export default function LeadsPage() {
             const prospectRoleCustom = prospectRoleCatalogId
                 ? null
                 : (String((leadData as any).prospect_role_custom || '').trim() || null)
+            const prospectRoleExactTitle = String((leadData as any).prospect_role_exact_title || '').trim() || null
             const prospectAgeExactRaw = (leadData as any).prospect_age_exact
             const prospectAgeExact = prospectAgeExactRaw == null || prospectAgeExactRaw === ''
                 ? null
@@ -648,6 +650,7 @@ export default function LeadsPage() {
                 telefono: leadData.telefono,
                 prospect_role_catalog_id: prospectRoleCatalogId,
                 prospect_role_custom: prospectRoleCustom,
+                prospect_role_exact_title: prospectRoleExactTitle,
                 prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
                 prospect_age_range_id: (leadData as any).prospect_age_range_id || null,
                 prospect_decision_role: (leadData as any).prospect_decision_role || null,
@@ -742,6 +745,8 @@ export default function LeadsPage() {
                 await (supabase.from('lead_history') as any).insert([
                     { lead_id: newId, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
                     { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id },
+                    ...(leadData.valor_estimado != null ? [{ lead_id: newId, field_name: 'valor_estimado', new_value: String(leadData.valor_estimado), changed_by: currentUser.id }] : []),
+                    ...((leadData as any).valor_implementacion_estimado != null ? [{ lead_id: newId, field_name: 'valor_implementacion_estimado', new_value: String((leadData as any).valor_implementacion_estimado), changed_by: currentUser.id }] : []),
                     ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
                 ])
 
@@ -765,6 +770,8 @@ export default function LeadsPage() {
             const historyEntries: any[] = []
             const stageChanged = leadData.etapa !== currentLead.etapa
             const probChanged = leadData.probabilidad !== (currentLead as any).probabilidad
+            const monthlyForecastChanged = (leadData.valor_estimado ?? null) !== ((currentLead as any).valor_estimado ?? null)
+            const implementationForecastChanged = ((leadData as any).valor_implementacion_estimado ?? null) !== ((currentLead as any).valor_implementacion_estimado ?? null)
             const forecastCloseDateChanged = (leadData.forecast_close_date || null) !== ((currentLead as any).forecast_close_date || null)
 
             if (stageChanged) {
@@ -772,6 +779,24 @@ export default function LeadsPage() {
             }
             if (probChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'probabilidad', old_value: String((currentLead as any).probabilidad), new_value: String(leadData.probabilidad), changed_by: currentUser.id })
+            }
+            if (monthlyForecastChanged) {
+                historyEntries.push({
+                    lead_id: currentLead.id,
+                    field_name: 'valor_estimado',
+                    old_value: (currentLead as any).valor_estimado != null ? String((currentLead as any).valor_estimado) : null,
+                    new_value: leadData.valor_estimado != null ? String(leadData.valor_estimado) : null,
+                    changed_by: currentUser.id
+                })
+            }
+            if (implementationForecastChanged) {
+                historyEntries.push({
+                    lead_id: currentLead.id,
+                    field_name: 'valor_implementacion_estimado',
+                    old_value: (currentLead as any).valor_implementacion_estimado != null ? String((currentLead as any).valor_implementacion_estimado) : null,
+                    new_value: (leadData as any).valor_implementacion_estimado != null ? String((leadData as any).valor_implementacion_estimado) : null,
+                    changed_by: currentUser.id
+                })
             }
             if (forecastCloseDateChanged) {
                 historyEntries.push({
@@ -795,6 +820,7 @@ export default function LeadsPage() {
             const prospectRoleCustom = prospectRoleCatalogId
                 ? null
                 : (String((leadData as any).prospect_role_custom || '').trim() || null)
+            const prospectRoleExactTitle = String((leadData as any).prospect_role_exact_title || '').trim() || null
             const prospectAgeExactRaw = (leadData as any).prospect_age_exact
             const prospectAgeExact = prospectAgeExactRaw == null || prospectAgeExactRaw === ''
                 ? null
@@ -807,6 +833,7 @@ export default function LeadsPage() {
                 telefono: leadData.telefono,
                 prospect_role_catalog_id: prospectRoleCatalogId,
                 prospect_role_custom: prospectRoleCustom,
+                prospect_role_exact_title: prospectRoleExactTitle,
                 prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
                 prospect_age_range_id: (leadData as any).prospect_age_range_id || null,
                 prospect_decision_role: (leadData as any).prospect_decision_role || null,

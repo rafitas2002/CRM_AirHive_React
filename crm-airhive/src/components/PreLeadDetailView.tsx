@@ -47,7 +47,7 @@ export default function PreLeadDetailView({
                         </div>
                         <div>
                             <h2 className='ah-modal-title text-xl tracking-tight'>{preLead.nombre_empresa}</h2>
-                            <p className='ah-modal-subtitle'>Archivo de Pre-Lead</p>
+                            <p className='ah-modal-subtitle'>Archivo de Suspect</p>
                         </div>
                     </div>
                     <button

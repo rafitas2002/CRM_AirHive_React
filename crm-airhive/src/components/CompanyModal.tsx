@@ -297,7 +297,7 @@ export default function CompanyModal({
                 .select('id, ubicacion')
                 .not('ubicacion', 'is', null)
             if (preLeadRowsError) {
-                console.warn('No se pudo cargar ubicaciones de pre-leads para validar duplicados:', preLeadRowsError)
+                console.warn('No se pudo cargar ubicaciones de suspects para validar duplicados:', preLeadRowsError)
             }
 
             const existingLocationLabels = companyRowsForLocationValidation
@@ -383,7 +383,7 @@ export default function CompanyModal({
                     <form id='company-form' onSubmit={handleSubmit} className='space-y-6'>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
-                            Campos obligatorios: marcados con * y resaltados en rojo
+                            Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                         </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>

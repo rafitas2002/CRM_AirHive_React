@@ -53,6 +53,7 @@ import {
     Flame,
     Battery,
     Plug,
+    Zap,
     Workflow,
     Cone,
     Cog,
@@ -214,6 +215,20 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
 ]
 
 const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string; coreBorderColorClassName?: string; accentCoreBorderColorHex?: string }> = [
+    {
+        keywords: ['metalmecanica', 'metal mecanica', 'metal-mecanica', 'metalmec', 'mecanizado de metal', 'metalworking'],
+        icon: Cog,
+        colorClass: 'bg-gradient-to-br from-[#e2e8f0] via-[#cbd5e1] to-[#94a3b8]',
+        coreBorderColorClassName: '!border-[#f8fafc]',
+        accentCoreBorderColorHex: '#f8fafc'
+    },
+    {
+        keywords: ['energias electricas', 'energia electrica', 'electricidad', 'electrica'],
+        icon: Plug,
+        colorClass: 'bg-gradient-to-br from-[#22d3ee] via-[#2563eb] to-[#1d4ed8]',
+        coreBorderColorClassName: '!border-[#7dd3fc]',
+        accentCoreBorderColorHex: '#7dd3fc'
+    },
     {
         keywords: ['paqueteria', 'paquetería', 'mensajeria', 'mensajería', 'courier'],
         icon: PackageOpen,

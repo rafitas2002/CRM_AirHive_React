@@ -749,7 +749,7 @@ export default function MeetingModal({
 
     return (
         <div className='ah-modal-overlay'>
-            <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
+            <div className='ah-modal-panel w-full max-w-4xl transform transition-all'>
                 {/* Header */}
                 <div className='ah-modal-header' style={{ background: headerTheme.background, borderBottomColor: headerTheme.border }}>
                     <h2 className='ah-modal-title flex items-center gap-3'>
@@ -771,7 +771,7 @@ export default function MeetingModal({
                     <form id='meeting-form' onSubmit={handleSubmit} className='space-y-4'>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
-                            Campos obligatorios: marcados con * y resaltados en rojo
+                            Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                         </div>
 
                         {/* Título */}
@@ -810,7 +810,7 @@ export default function MeetingModal({
                         </div>
 
                         {/* Fecha y Hora + Duración */}
-                        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                        <div className='grid grid-cols-1 md:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] gap-4'>
                             <div className='space-y-1.5'>
                                 <label className='block text-sm font-bold ah-required-label' style={{ color: 'var(--text-primary)' }}>
                                     Fecha y Hora <span className='text-red-500'>*</span>
@@ -819,6 +819,7 @@ export default function MeetingModal({
                                     value={formData.start_time}
                                     onChange={(next) => setFormData({ ...formData, start_time: next })}
                                     minuteStep={5}
+                                    panelClassName='left-0 right-auto w-full min-w-[17rem] max-w-full sm:w-[min(46rem,calc(100vw-5rem))] sm:min-w-[40rem]'
                                     className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer'
                                 />
                             </div>

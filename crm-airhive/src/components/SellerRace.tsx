@@ -287,7 +287,7 @@ export default function SellerRace({
                                 Carrera pronosticada
                             </p>
                             <p className='text-sm font-bold mt-1' style={{ color: 'var(--text-primary)' }}>
-                                Pronóstico ajustado con confiabilidad de probabilidad, valor y fecha
+                                Pronóstico ajustado con confiabilidad de probabilidad y mensual real
                             </p>
                         </div>
                         <button

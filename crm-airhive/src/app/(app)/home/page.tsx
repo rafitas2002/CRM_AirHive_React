@@ -6,6 +6,7 @@ import { Database } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import {
     LayoutDashboard,
+    Drone,
     TrendingUp,
     TrendingDown,
     Target,
@@ -25,7 +26,11 @@ import PipelineVisualizer from '@/components/PipelineVisualizer'
 import UpcomingMeetingsWidget from '@/components/UpcomingMeetingsWidget'
 import MyTasksWidget from '@/components/MyTasksWidget'
 import { rankRaceItems } from '@/lib/raceRanking'
-import { computeAdjustedMonthlyRaceLeadValue, computeSellerForecastRaceReliability } from '@/lib/forecastRaceAdjustments'
+import {
+    computeAdjustedMonthlyRaceLeadValue,
+    computeSellerForecastRaceReliability,
+    computeSellerOverallForecastReliability
+} from '@/lib/forecastRaceAdjustments'
 import { getAdminExecutiveDashboardSupportData } from '@/app/actions/dashboard'
 import { getLeadLossExecutiveSummarySupportData, type LeadLossExecutiveSummaryPayload } from '@/app/actions/lossAnalytics'
 import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
@@ -40,13 +45,6 @@ type CrmEventRow = {
     event_type?: string | null
     created_at?: string | null
 }
-type History = {
-    lead_id: number
-    field_name: string
-    old_value: string | null
-    new_value: string | null
-    created_at: string
-}
 
 const normalizeStage = (stage: string | null | undefined) => String(stage || '').trim().toLowerCase()
 const isWonStage = (stage: string | null | undefined) => normalizeStage(stage).includes('ganad')
@@ -60,7 +58,10 @@ const isCurrentUtcMonth = (isoLike: string | null | undefined) => {
     const now = new Date()
     return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
 }
-const getRealCloseValue = (lead: Lead) => Number((lead as any).valor_real_cierre ?? lead.valor_estimado ?? 0)
+const getRealCloseValue = (lead: Lead) => {
+    const realMonthly = Number((lead as any).valor_real_cierre)
+    return Number.isFinite(realMonthly) && realMonthly > 0 ? realMonthly : 0
+}
 const getRealCloseTimestamp = (lead: Lead) =>
     ((lead as any).closed_at_real as string | null)
     || (lead.forecast_scored_at as string | null)
@@ -123,10 +124,31 @@ const HOME_EXEC_METRICS = {
     sellersAtRisk7d: getCommercialMetricDefinition('sellers_at_risk_7d')
 } as const
 
+const HERO_DRONE_PATTERN = (() => {
+    const rowTops = [6, 16, 26, 36, 46, 56, 66, 76, 86]
+    const colLefts = [5, 14, 23, 32, 41, 50, 59, 68, 77, 86, 95]
+
+    return rowTops.flatMap((top, rowIdx) =>
+        colLefts.map((left, colIdx) => {
+            const mod = (rowIdx + colIdx) % 3
+            const size = mod === 0 ? 14 : mod === 1 ? 15 : 16
+            const rotate = mod === 0 ? -6 : mod === 1 ? 0 : 6
+            const opacity = mod === 0 ? 0.075 : mod === 1 ? 0.09 : 0.105
+
+            return {
+                top: `${top}%`,
+                left: `${left}%`,
+                size,
+                rotate,
+                opacity
+            }
+        })
+    )
+})()
+
 function AdminDashboardView({ displayName }: { displayName: string }) {
     const { theme } = useTheme()
     const [leads, setLeads] = useState<Lead[]>([])
-    const [history, setHistory] = useState<History[]>([])
     const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, ForecastReliabilityMetric>>({})
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; role?: string | null; banned?: boolean | null }>>({})
     const [crmEvents, setCrmEvents] = useState<CrmEventRow[]>([])
@@ -149,20 +171,17 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
             try {
                 const [
                     { data: leadData },
-                    { data: histData },
                     { data: reliabilityData },
                     supportDataRes,
                     lossExecutiveRes
                 ] = await Promise.all([
                     supabase.from('clientes').select('*'),
-                    (supabase.from('lead_history') as any).select('*').eq('field_name', 'probabilidad').order('created_at', { ascending: false }),
                     (supabase.from('seller_forecast_reliability_metrics') as any).select('*'),
                     getAdminExecutiveDashboardSupportData(),
                     getLeadLossExecutiveSummarySupportData('month')
                 ])
 
                 if (leadData) setLeads(leadData)
-                if (histData) setHistory(histData as any)
                 if (reliabilityData) {
                     const nextMap: Record<string, ForecastReliabilityMetric> = {}
                     ;(reliabilityData as ForecastReliabilityMetric[]).forEach((row) => {
@@ -229,6 +248,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
             raceForecastLeadCount: number
             raceForecastAdjustedValue: number
             raceForecastAdjustedReliability: number
+            raceReliability: number
             monthlyWonCount: number
             monthlyLostCount: number
             monthlyConversionRate: number | null
@@ -240,11 +260,6 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
         const currentMonth0 = now.getUTCMonth()
         const riskThreshold = new Date(now)
         riskThreshold.setUTCDate(riskThreshold.getUTCDate() - 7)
-
-        const latestProbHistoryByLeadId = new Map<number, History>()
-        history.forEach((item) => {
-            if (!latestProbHistoryByLeadId.has(item.lead_id)) latestProbHistoryByLeadId.set(item.lead_id, item)
-        })
 
         const closed = leads.filter((l) => isClosedStage(l.etapa))
         const active = leads.filter((l) => !isClosedStage(l.etapa))
@@ -266,6 +281,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     raceForecastLeadCount: 0,
                     raceForecastAdjustedValue: 0,
                     raceForecastAdjustedReliability: 0,
+                    raceReliability: 0,
                     monthlyWonCount: 0,
                     monthlyLostCount: 0,
                     monthlyConversionRate: null,
@@ -277,24 +293,6 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
         })
 
         const sellers = Object.values(sellerMap).map((s) => {
-            const scoredLeads = s.historicalLeads.map((l) => {
-                let p = 0
-                let y = isWonStage(l.etapa) ? 1 : 0
-                if (l.forecast_evaluated_probability !== null) {
-                    p = l.forecast_evaluated_probability / 100
-                    y = l.forecast_outcome ?? (isWonStage(l.etapa) ? 1 : 0)
-                } else {
-                    const h = latestProbHistoryByLeadId.get(l.id)
-                    if (h?.new_value) p = parseInt(h.new_value) / 100
-                    else return null
-                }
-                return Math.pow(y - p, 2)
-            }).filter((err) => err !== null) as number[]
-
-            const scoredN = scoredLeads.length
-            const rawAcc = scoredN > 0 ? 1 - (scoredLeads.reduce((a, b) => a + b, 0) / scoredN) : 0
-            const relScore = scoredN > 0 ? (rawAcc * (scoredN / (scoredN + 4))) * 100 : 0
-
             const negotiationLeads = s.activeLeads.filter((l) => isNegotiationStage(l.etapa))
             const negPipeline = negotiationLeads
                 .reduce((acc, l) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
@@ -305,6 +303,8 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
             const raceForecastAdjustedValue = negotiationLeads
                 .reduce((acc, l) => acc + computeAdjustedMonthlyRaceLeadValue(l, reliabilityMetrics), 0)
             const raceForecastAdjustedReliability = computeSellerForecastRaceReliability(reliabilityMetrics)
+            const raceReliability = computeSellerForecastRaceReliability(reliabilityMetrics)
+            const relScore = computeSellerOverallForecastReliability(reliabilityMetrics, { fallback: 0 })
 
             const wonThisMonth = s.historicalLeads.filter((l) => isWonStage(l.etapa) && isInUtcMonthFromIso(getStrictClosedAtReal(l), currentYear, currentMonth0))
             const lostThisMonth = s.historicalLeads.filter((l) => isLostStage(l.etapa) && isInUtcMonthFromIso(getStrictClosedAtReal(l), currentYear, currentMonth0))
@@ -327,6 +327,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                 raceForecastLeadCount: negotiationLeads.length,
                 raceForecastAdjustedValue,
                 raceForecastAdjustedReliability,
+                raceReliability,
                 monthlyWonCount: wonThisMonth.length,
                 monthlyLostCount: lostThisMonth.length,
                 monthlyConversionRate: closedThisMonthCount > 0 ? (wonThisMonth.length / closedThisMonthCount) * 100 : null,
@@ -441,7 +442,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     })
             }
         }
-    }, [leads, history, reliabilityMetricsBySellerId, sellerProfilesById, crmEvents, activeCompaniesCountSupport, executiveSupportWarning])
+    }, [leads, reliabilityMetricsBySellerId, sellerProfilesById, crmEvents, activeCompaniesCountSupport, executiveSupportWarning])
 
     if (loading && leads.length === 0) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
@@ -452,6 +453,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
     const goalProgress = Math.min(100, (stats.adjustedForecast / teamGoal) * 100)
     const auditImpact = leads.length > 0 ? (stats.dataWarnings / leads.length * 100) : 0
     const rankedSellers = rankRaceItems(stats.sellers, (seller) => seller.raceRealClosedValue)
+    const heroDronePattern = HERO_DRONE_PATTERN
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
@@ -461,9 +463,25 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     <div className='absolute -top-24 -right-16 w-80 h-80 rounded-full blur-3xl opacity-30 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute -bottom-24 -left-20 w-72 h-72 rounded-full blur-3xl opacity-15 pointer-events-none' style={{ background: 'var(--home-hero-glow)' }} />
                     <div className='absolute inset-0 pointer-events-none opacity-55' style={{ background: 'linear-gradient(125deg, transparent 0%, rgba(255,255,255,0.1) 38%, transparent 75%)' }} />
-
+                    <div className='pointer-events-none absolute inset-0 z-[1]' aria-hidden='true'>
+                        {heroDronePattern.map((item, idx) => (
+                            <Drone
+                                key={`hero-drone-pattern-${idx}`}
+                                className='absolute'
+                                style={{
+                                    top: item.top,
+                                    left: item.left,
+                                    width: `${item.size}px`,
+                                    height: `${item.size}px`,
+                                    color: 'var(--home-hero-muted)',
+                                    opacity: item.opacity,
+                                    transform: `rotate(${item.rotate}deg)`
+                                }}
+                            />
+                        ))}
+                    </div>
                     <div className='relative z-10 grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-8 items-center'>
-                        <div className='space-y-6'>
+                        <div className='space-y-6 relative'>
                             <div className='flex flex-wrap items-center gap-3'>
                                 <div className='inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl border shadow-sm' style={{ background: 'var(--home-hero-chip-bg)', borderColor: 'var(--home-hero-chip-border)' }}>
                                     <LayoutDashboard size={14} style={{ color: 'var(--home-hero-chip-text)' }} />
@@ -670,17 +688,17 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                 name: s.name,
                                 value: s.raceRealClosedValue,
                                 percentage: (s.raceRealClosedValue / teamGoal) * 100,
-                                reliability: s.score
+                                reliability: s.raceReliability
                             }))}
                             forecastRace={{
                                 maxGoal: forecastCombinedGoal,
                                 title: 'Carrera de Pronóstico Ajustado',
-                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad, valor y fecha',
+                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad y mensual real',
                                 sellers: stats.sellers.map((s) => ({
                                     name: s.name,
                                     value: s.raceRealClosedValue + s.raceForecastAdjustedValue,
                                     percentage: ((s.raceRealClosedValue + s.raceForecastAdjustedValue) / forecastCombinedGoal) * 100,
-                                    reliability: s.raceForecastAdjustedReliability,
+                                    reliability: s.raceReliability,
                                     rawValueBeforeAdjustment: s.raceRealClosedValue + s.raceForecastValue
                                 }))
                             }}
