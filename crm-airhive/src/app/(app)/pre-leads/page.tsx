@@ -20,7 +20,7 @@ export default function PreLeadsPage() {
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
     const [loading, setLoading] = useState(true)
 
-    // Modals Pre-Lead
+    // Modals Suspect
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
     const [currentPreLead, setCurrentPreLead] = useState<any>(null)
@@ -165,7 +165,7 @@ export default function PreLeadsPage() {
                 setSellerProfilesById({})
             }
         } catch (error) {
-            console.error('Error fetching pre-leads:', error)
+            console.error('Error fetching suspects:', error)
         } finally {
             if (isInitial) setLoading(false)
         }
@@ -220,7 +220,7 @@ export default function PreLeadsPage() {
                 throw new Error('Sesión inválida. Vuelve a iniciar sesión.')
             }
 
-            // Step 1: Create company for each new pre-lead to keep full funnel traceability.
+            // Step 1: Create company for each new suspect to keep full funnel traceability.
             let companyResult: { id: string, nombre: string } | null = null
             if (modalMode === 'create') {
                 companyResult = await createCompanyFromPreLead(
@@ -242,7 +242,7 @@ export default function PreLeadsPage() {
                     },
                     auth.user.id
                 )
-                if (!companyResult) throw new Error('No se pudo crear la empresa para este pre-lead')
+                if (!companyResult) throw new Error('No se pudo crear la empresa para este suspect')
 
                 void emitTrackingEvent({
                     eventType: 'company_created',
@@ -277,10 +277,10 @@ export default function PreLeadsPage() {
                     },
                     auth.user.id
                 )
-                if (!companyResult) throw new Error('No se pudo crear la empresa para este pre-lead')
+                if (!companyResult) throw new Error('No se pudo crear la empresa para este suspect')
             }
 
-            // Step 2: Save pre-lead with empresa_id
+            // Step 2: Save suspect with empresa_id
             const table = supabase.from('pre_leads') as any
             const shouldPreserveOriginalSeller = modalMode === 'edit' && !!currentPreLead
             const preservedSellerId = shouldPreserveOriginalSeller
@@ -331,7 +331,7 @@ export default function PreLeadsPage() {
                     }
                 })
 
-                alert(`✅ Pre-Lead creado exitosamente.\n🏢 Empresa registrada: "${companyResult.nombre}".`)
+                alert(`✅ Suspect creado exitosamente.\n🏢 Empresa registrada: "${companyResult.nombre}".`)
             } else {
                 const { error } = await table
                     .update(preLeadData)
@@ -352,13 +352,13 @@ export default function PreLeadsPage() {
                         updated_at: new Date().toISOString()
                     }
                 })
-                alert('✅ Pre-Lead actualizado exitosamente.')
+                alert('✅ Suspect actualizado exitosamente.')
             }
 
             setIsModalOpen(false)
             fetchPreLeads()
         } catch (error: any) {
-            console.error('Error in handleSave Pre-Lead [Full Object]:', error)
+            console.error('Error in handleSave Suspect [Full Object]:', error)
             console.error('Error Message:', error.message)
             console.error('Error Code:', error.code)
             console.error('Error Details:', error.details)
@@ -372,7 +372,7 @@ export default function PreLeadsPage() {
         setIsDetailViewOpen(false)
         setSourcePreLead(pl)
 
-        // Mappear Pre-Lead a Lead structure with empresa_id
+        // Mappear Suspect a Lead structure with empresa_id
         const initialLeadData = {
             empresa: pl.nombre_empresa,
             empresa_id: pl.empresa_id || undefined, // Fallback to undefined if missing
@@ -418,6 +418,7 @@ export default function PreLeadsPage() {
             leadInsertPayload.prospect_role_custom = prospectRoleCatalogId
                 ? null
                 : (String(data?.prospect_role_custom || '').trim() || null)
+            leadInsertPayload.prospect_role_exact_title = String(data?.prospect_role_exact_title || '').trim() || null
             const prospectAgeExactRaw = data?.prospect_age_exact
             const prospectAgeExact = prospectAgeExactRaw == null || prospectAgeExactRaw === ''
                 ? null
@@ -445,7 +446,7 @@ export default function PreLeadsPage() {
                 }
             })
 
-            // 2. If conversion, mark the pre-lead as converted
+            // 2. If conversion, mark the suspect as converted
             if (clientModalMode === 'convert' && sourcePreLead?.id) {
                 await (supabase
                     .from('pre_leads') as any)
@@ -636,7 +637,7 @@ export default function PreLeadsPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Pre leads
+                                    Suspects
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
                                     Empresas investigadas y calificadas antes del primer contacto comercial.
@@ -672,7 +673,7 @@ export default function PreLeadsPage() {
                             onClick={() => { setModalMode('create'); setCurrentPreLead(null); setIsModalOpen(true); }}
                             className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
-                            + Registrar Pre lead
+                            + Registrar Suspect
                         </button>
                     </div>
                 </div>
@@ -686,7 +687,7 @@ export default function PreLeadsPage() {
                                     <ListFilter size={22} strokeWidth={2} />
                                 </div>
                                 <div>
-                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Bandeja de pre leads</h2>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Bandeja de Suspects</h2>
                                     <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Investigación y validación sin contacto</p>
                                 </div>
                             </div>
@@ -796,7 +797,7 @@ export default function PreLeadsPage() {
                         {loading && preLeads.length === 0 ? (
                             <div className='w-full h-96 flex flex-col items-center justify-center gap-4'>
                                 <div className='w-12 h-12 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
-                                <p className='text-sm font-bold text-gray-500 animate-pulse uppercase tracking-widest'>Sincronizando Pre leads...</p>
+                                <p className='text-sm font-bold text-gray-500 animate-pulse uppercase tracking-widest'>Sincronizando Suspects...</p>
                             </div>
                         ) : (
                             <PreLeadsTable
@@ -849,7 +850,7 @@ export default function PreLeadsPage() {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={handleDelete}
-                title="Eliminar Pre lead"
+                title="Eliminar Suspect"
                 message="¿Estás seguro de que deseas eliminar este registro? Esta acción es permanente."
                 isDestructive
             />

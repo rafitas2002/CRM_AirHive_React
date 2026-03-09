@@ -5,6 +5,7 @@ import GlobalMeetingHandler from '@/components/GlobalMeetingHandler'
 import GlobalBadgeCelebration from '@/components/GlobalBadgeCelebration'
 import EventTracker from '@/components/EventTracker'
 import VisualIdentityBackground from '@/components/VisualIdentityBackground'
+import ModalRequiredValidationManager from '@/components/ModalRequiredValidationManager'
 import { useAuth } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/ThemeContext'
 import { useEffect } from 'react'
@@ -35,6 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <GlobalMeetingHandler />
             <GlobalBadgeCelebration />
             <EventTracker />
+            <ModalRequiredValidationManager />
             <div className='h-screen flex flex-col relative overflow-hidden' style={{ background: 'var(--background)' }}>
                 {/* Decorative background identity layer */}
                 <VisualIdentityBackground />

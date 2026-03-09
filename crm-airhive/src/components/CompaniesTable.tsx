@@ -99,7 +99,7 @@ export default function CompaniesTable({
                             color: getCompanyLifecycle(company) === 'pre_lead' ? '#2563eb' : '#047857'
                         }}
                     >
-                        {getCompanyLifecycle(company) === 'pre_lead' ? 'Pre-lead' : 'Lead'}
+                        {getCompanyLifecycle(company) === 'pre_lead' ? 'Suspect' : 'Lead'}
                     </span>
                 </div>
             </td>
@@ -292,7 +292,7 @@ export default function CompaniesTable({
                 </thead>
                 <tbody>
                     {renderLifecycleSection('Empresas en Lead', 'lead', groupedCompanies.lead)}
-                    {renderLifecycleSection('Empresas en Pre-lead', 'pre_lead', groupedCompanies.pre_lead)}
+                    {renderLifecycleSection('Empresas en Suspect', 'pre_lead', groupedCompanies.pre_lead)}
                 </tbody>
             </table>
         </div>

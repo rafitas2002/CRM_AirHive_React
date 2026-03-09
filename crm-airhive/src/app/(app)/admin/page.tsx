@@ -19,17 +19,14 @@ import RaceForecastTable from '@/components/RaceForecastTable'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { rankRaceItems } from '@/lib/raceRanking'
-import { computeAdjustedMonthlyRaceLeadValue, computeSellerForecastRaceReliability } from '@/lib/forecastRaceAdjustments'
+import {
+    computeAdjustedMonthlyRaceLeadValue,
+    computeSellerForecastRaceReliability,
+    computeSellerOverallForecastReliability
+} from '@/lib/forecastRaceAdjustments'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type ForecastReliabilityMetric = Database['public']['Tables']['seller_forecast_reliability_metrics']['Row']
-type History = {
-    lead_id: number
-    field_name: string
-    old_value: string | null
-    new_value: string | null
-    created_at: string
-}
 
 const normalizeStage = (stage: string | null | undefined) => String(stage || '').trim().toLowerCase()
 const isWonStage = (stage: string | null | undefined) => normalizeStage(stage).includes('ganad')
@@ -42,7 +39,10 @@ const isCurrentUtcMonth = (isoLike: string | null | undefined) => {
     const now = new Date()
     return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
 }
-const getRealCloseValue = (lead: Lead) => Number((lead as any).valor_real_cierre ?? lead.valor_estimado ?? 0)
+const getRealCloseValue = (lead: Lead) => {
+    const realMonthly = Number((lead as any).valor_real_cierre)
+    return Number.isFinite(realMonthly) && realMonthly > 0 ? realMonthly : 0
+}
 const getRealCloseTimestamp = (lead: Lead) =>
     ((lead as any).closed_at_real as string | null)
     || (lead.forecast_scored_at as string | null)
@@ -50,7 +50,6 @@ const getRealCloseTimestamp = (lead: Lead) =>
 
 export default function AdminDashboard() {
     const [leads, setLeads] = useState<Lead[]>([])
-    const [history, setHistory] = useState<History[]>([])
     const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, ForecastReliabilityMetric>>({})
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
@@ -58,14 +57,12 @@ export default function AdminDashboard() {
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
-            const [{ data: leadData }, { data: histData }, { data: reliabilityData }] = await Promise.all([
+            const [{ data: leadData }, { data: reliabilityData }] = await Promise.all([
                 supabase.from('clientes').select('*'),
-                (supabase.from('lead_history') as any).select('*').eq('field_name', 'probabilidad').order('created_at', { ascending: false }),
                 (supabase.from('seller_forecast_reliability_metrics') as any).select('*')
             ])
 
             if (leadData) setLeads(leadData)
-            if (histData) setHistory(histData as any)
             if (reliabilityData) {
                 const nextMap: Record<string, ForecastReliabilityMetric> = {}
                 ;(reliabilityData as ForecastReliabilityMetric[]).forEach((row) => {
@@ -91,7 +88,8 @@ export default function AdminDashboard() {
             raceForecastValue: number,
             raceForecastLeadCount: number,
             raceForecastAdjustedValue: number,
-            raceForecastAdjustedReliability: number
+            raceForecastAdjustedReliability: number,
+            raceReliability: number
         }> = {}
 
         // Baseline global win rate for L_base calculation (historical comparison)
@@ -113,7 +111,8 @@ export default function AdminDashboard() {
                     raceForecastValue: 0,
                     raceForecastLeadCount: 0,
                     raceForecastAdjustedValue: 0,
-                    raceForecastAdjustedReliability: 0
+                    raceForecastAdjustedReliability: 0,
+                    raceReliability: 0
                 }
             }
             if (isClosedStage(lead.etapa)) map[sellerKey].historicalLeads.push(lead)
@@ -121,25 +120,6 @@ export default function AdminDashboard() {
         })
 
         const sellers = Object.values(map).map(s => {
-            // New Strict Reliability Algorithm (Quadratic + N Penalty)
-            const scoredLeads = s.historicalLeads.map(l => {
-                let p = 0
-                let y = l.etapa === 'Cerrado Ganado' ? 1 : 0
-                if (l.forecast_evaluated_probability !== null) {
-                    p = l.forecast_evaluated_probability / 100
-                    y = l.forecast_outcome ?? (l.etapa === 'Cerrado Ganado' ? 1 : 0)
-                } else {
-                    const h = history.filter(item => item.lead_id === l.id)[0]
-                    if (h?.new_value) p = parseInt(h.new_value) / 100
-                    else return null
-                }
-                return Math.pow(y - p, 2)
-            }).filter(err => err !== null) as number[]
-
-            const scoredN = scoredLeads.length
-            const rawAcc = scoredN > 0 ? 1 - (scoredLeads.reduce((a, b) => a + b, 0) / scoredN) : 0
-            const relScore = scoredN > 0 ? (rawAcc * (scoredN / (scoredN + 4))) * 100 : 0
-
             const negPipeline = s.activeLeads
                 .filter(l => isNegotiationStage(l.etapa))
                 .reduce((acc, l) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
@@ -151,6 +131,8 @@ export default function AdminDashboard() {
             const raceForecastAdjustedValue = negotiationLeads
                 .reduce((acc, l) => acc + computeAdjustedMonthlyRaceLeadValue(l, reliabilityMetrics), 0)
             const raceForecastAdjustedReliability = computeSellerForecastRaceReliability(reliabilityMetrics)
+            const raceReliability = computeSellerForecastRaceReliability(reliabilityMetrics)
+            const relScore = computeSellerOverallForecastReliability(reliabilityMetrics, { fallback: 0 })
             const raceRealClosedValue = s.historicalLeads
                 .filter((l) => isWonStage(l.etapa) && isCurrentUtcMonth(getRealCloseTimestamp(l)))
                 .reduce((acc, l) => acc + getRealCloseValue(l), 0)
@@ -163,7 +145,8 @@ export default function AdminDashboard() {
                 raceForecastValue,
                 raceForecastLeadCount: negotiationLeads.length,
                 raceForecastAdjustedValue,
-                raceForecastAdjustedReliability
+                raceForecastAdjustedReliability,
+                raceReliability
             }
         }).sort((a, b) => b.raceRealClosedValue - a.raceRealClosedValue)
 
@@ -187,7 +170,7 @@ export default function AdminDashboard() {
             activeCount: active.length,
             dataWarnings: active.filter(l => !l.valor_estimado).length
         }
-    }, [leads, history, reliabilityMetricsBySellerId])
+    }, [leads, reliabilityMetricsBySellerId])
 
     if (loading) return <div className='h-full flex items-center justify-center' style={{ background: 'transparent' }}><div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600'></div></div>
 
@@ -266,17 +249,17 @@ export default function AdminDashboard() {
                                 name: s.name,
                                 value: s.raceRealClosedValue,
                                 percentage: (s.raceRealClosedValue / teamGoal) * 100,
-                                reliability: s.score
+                                reliability: s.raceReliability
                             }))}
                             forecastRace={{
                                 maxGoal: forecastCombinedGoal,
                                 title: 'Carrera de Pronóstico Ajustado',
-                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad, valor y fecha',
+                                subtitle: 'Cierres reales del mes + pronóstico mensual ajustado con confiabilidad de probabilidad y mensual real',
                                 sellers: stats.sellers.map((s) => ({
                                     name: s.name,
                                     value: s.raceRealClosedValue + s.raceForecastAdjustedValue,
                                     percentage: ((s.raceRealClosedValue + s.raceForecastAdjustedValue) / forecastCombinedGoal) * 100,
-                                    reliability: s.raceForecastAdjustedReliability,
+                                    reliability: s.raceReliability,
                                     rawValueBeforeAdjustment: s.raceRealClosedValue + s.raceForecastValue
                                 }))
                             }}
@@ -288,7 +271,7 @@ export default function AdminDashboard() {
                                 name: s.name,
                                 forecastValue: s.raceForecastValue,
                                 activeNegotiationLeads: s.raceForecastLeadCount,
-                                reliability: s.score
+                                reliability: s.raceReliability
                             }))}
                         />
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Boxes, Plus, Save, Wrench, ArrowUpDown, Search } from 'lucide-react'
+import { FolderClosed, Plus, Save, Wrench, ArrowUpDown, Search } from 'lucide-react'
 
 type Industry = {
     id: string
@@ -303,7 +303,7 @@ export default function ProyectosPage() {
                 <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                     <div className='flex items-center gap-6'>
                         <div className='ah-icon-card'>
-                            <Boxes size={34} strokeWidth={1.9} />
+                            <FolderClosed size={34} strokeWidth={1.9} />
                         </div>
                         <div>
                             <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Proyectos</h1>

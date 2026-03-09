@@ -15,6 +15,7 @@ import BadgeMedallion from '@/components/BadgeMedallion'
 import { formatTenureExactLabel, getTenureBadgeMetrics } from '@/lib/tenureBadgeUtils'
 import { formatLocalDateOnly } from '@/lib/dateUtils'
 import { getQuoteContributionLevelMeta, getQuoteLikesReceivedLevelMeta, isQuoteAttributedToUser } from '@/lib/quoteBadgeUtils'
+import { computeSellerOverallForecastReliability } from '@/lib/forecastRaceAdjustments'
 
 const BADGE_GRANT_ALLOWED_ADMINS = [
     'Jesus Gracia',
@@ -53,6 +54,7 @@ const INDUSTRY_BADGE_EVOLUTION_DEFAULT_LEVELS = [
 ] as const
 
 const CLOSING_STREAK_EIGHT_TIER_THRESHOLDS = [2, 5, 8, 12, 18, 24, 36, 48] as const
+const CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS = [1, 5, 10, 15, 20, 30, 40, 50] as const
 
 type ProfileViewCachePayload = {
     savedAt: number
@@ -324,7 +326,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     { count: totalPreLeadsCount },
                     { count: totalLeadsCount },
                     { count: completedMeetingsCount },
-                    { data: reliabilityRows },
+                    { data: reliabilityMetricRow },
                     { data: industriesRaw },
                     directCatalogs
                 ] = await Promise.all([
@@ -365,10 +367,10 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         .eq('seller_id', userId)
                         .or('status.eq.completed,meeting_status.eq.held'),
                     (supabase
-                        .from('clientes') as any)
-                        .select('forecast_logloss')
-                        .eq('owner_id', userId)
-                        .not('forecast_logloss', 'is', null),
+                        .from('seller_forecast_reliability_metrics') as any)
+                        .select('*')
+                        .eq('seller_id', userId)
+                        .maybeSingle(),
                     (supabase
                         .from('industrias') as any)
                         .select('id, name, is_active')
@@ -469,6 +471,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
             const totalPreLeads = Math.max(0, Number(totalPreLeadsCount || 0))
             const totalLeads = Math.max(0, Number(totalLeadsCount || 0))
             const completedMeetings = Math.max(0, Number(completedMeetingsCount || 0))
+            const closureMilestoneMeta = getThresholdLevelMetaFromList(totalClosuresCount, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
             const preLeadLevelMeta = getThresholdLevelMeta(totalPreLeads, [1, 25, 100, 300])
             const leadLevelMeta = getThresholdLevelMeta(totalLeads, [1, 10, 25, 50, 75, 100, 200, 500])
             const meetingLevelMeta = getThresholdLevelMeta(completedMeetings, [1, 10, 25, 50, 75, 100, 200, 500])
@@ -500,7 +503,7 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     id: 'derived-prelead-registered',
                     badge_type: 'prelead_registered',
                     badge_key: 'prelead_registered',
-                    badge_label: 'Pre-Leads Registrados',
+                    badge_label: 'Suspects Registrados',
                     progress_count: totalPreLeads,
                     level: preLeadLevelMeta.level,
                     next_level_threshold: preLeadLevelMeta.next
@@ -528,12 +531,22 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                     next_level_threshold: meetingLevelMeta.next
                 })
             }
+            if (closureMilestoneMeta.level > 0) {
+                derivedSpecial.push({
+                    id: 'derived-closure-milestone',
+                    badge_type: 'closure_milestone',
+                    badge_key: 'closure_milestone',
+                    badge_label: 'Cierres de Empresas',
+                    progress_count: totalClosuresCount,
+                    level: closureMilestoneMeta.level,
+                    next_level_threshold: closureMilestoneMeta.next
+                })
+            }
 
             const realSpecial = (userSpecialBadges || []).filter((b: any) =>
                 b &&
                 (b.id || b.badge_type || b.badge_key) &&
-                (b.level || 0) > 0 &&
-                (b.progress_count || 0) > 0
+                (b.level || 0) > 0
             )
             const mergedByKey = new Map<string, any>()
             for (const row of [...realSpecial, ...derivedSpecial]) {
@@ -573,14 +586,8 @@ export default function ProfileView({ userId }: ProfileViewProps) {
                         || (now.getMonth() === startDate.getMonth() && now.getDate() < startDate.getDate())) ? 1 : 0)
                 )
                 : 0
-            const relRows = (reliabilityRows || [])
-                .map((r: any) => Number(r?.forecast_logloss))
-                .filter((v: number) => Number.isFinite(v))
-            const relN = relRows.length
-            const avgLogloss = relN > 0 ? (relRows.reduce((a: number, b: number) => a + b, 0) / relN) : 1
-            const rawAcc = Math.max(0, 1 - avgLogloss)
-            const relScore = relN > 0 ? Math.max(0, Math.min(100, (rawAcc * (relN / (relN + 4))) * 100)) : 0
-            setSellerStats({
+                const relScore = computeSellerOverallForecastReliability(reliabilityMetricRow || null, { fallback: 0 })
+                setSellerStats({
                     totalClosures: Math.max(0, totalClosuresCount),
                     reliabilityScore: Math.round(relScore),
                     seniorityYears: years,
@@ -2222,10 +2229,10 @@ function getSpecialBadgeEvolutionMilestones(badge: any): Array<{ level: number, 
     }
     if (type === 'prelead_registered') {
         return [
-            { level: 1, threshold: 1, caption: '1 pre-lead' },
-            { level: 2, threshold: 25, caption: '25 pre-leads' },
-            { level: 3, threshold: 100, caption: '100 pre-leads' },
-            { level: 4, threshold: 300, caption: '300 pre-leads' }
+            { level: 1, threshold: 1, caption: '1 suspect' },
+            { level: 2, threshold: 25, caption: '25 suspects' },
+            { level: 3, threshold: 100, caption: '100 suspects' },
+            { level: 4, threshold: 300, caption: '300 suspects' }
         ]
     }
     if (type === 'lead_registered') {
@@ -2412,7 +2419,7 @@ function getSpecialBadgeTypeMeta(badgeType: string, label?: string | null, badge
     }
     if (badgeType === 'prelead_registered') {
         return {
-            title: 'Pre-Leads',
+            title: 'Suspects',
             icon: Target,
             containerClass: `${metallicContainer} bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]`,
             iconClass: solidIconClass
@@ -2584,24 +2591,9 @@ function buildSpecialBadgeCatalog(
     const closingStreakBestMonths = Math.max(0, Number(options?.sellerStats?.closingStreakBestMonths || 0))
     const closingStreakIsActive = Boolean(options?.sellerStats?.closingStreakIsActive)
     const closingStreakLevelMeta = getThresholdLevelMetaFromList(closingStreakBestMonths, CLOSING_STREAK_EIGHT_TIER_THRESHOLDS)
-    const closureLevel = totalClosures >= 50 ? 8
-        : totalClosures >= 40 ? 7
-        : totalClosures >= 30 ? 6
-        : totalClosures >= 20 ? 5
-        : totalClosures >= 15 ? 4
-        : totalClosures >= 10 ? 3
-        : totalClosures >= 5 ? 2
-        : totalClosures >= 1 ? 1
-        : 0
-    const closureNextThreshold = closureLevel === 0 ? 1
-        : closureLevel === 1 ? 5
-        : closureLevel === 2 ? 10
-        : closureLevel === 3 ? 15
-        : closureLevel === 4 ? 20
-        : closureLevel === 5 ? 30
-        : closureLevel === 6 ? 40
-        : closureLevel === 7 ? 50
-        : null
+    const closureLevelMeta = getThresholdLevelMetaFromList(totalClosures, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
+    const closureLevel = closureLevelMeta.level
+    const closureNextThreshold = closureLevelMeta.next
     const reliabilityThreshold = 80
     const companySizeProgressByKey = new Map<string, number>()
     ;(specialBadges || [])
@@ -2704,7 +2696,7 @@ function buildSpecialBadgeCatalog(
             id: 'virtual-prelead-registered',
             badge_type: 'prelead_registered',
             badge_key: 'prelead_registered',
-            badge_label: 'Pre-Leads Registrados',
+            badge_label: 'Suspects Registrados',
             progress_count: Math.max(0, Number(options?.sellerStats?.totalPreLeads || 0)),
             level: 0,
             next_level_threshold: 1

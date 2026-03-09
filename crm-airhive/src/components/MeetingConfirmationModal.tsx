@@ -53,6 +53,7 @@ export default function MeetingConfirmationModal({
     const [loadingReasons, setLoadingReasons] = useState(true)
     const [error, setError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [formAttempted, setFormAttempted] = useState(false)
 
     useEffect(() => {
         let active = true
@@ -75,8 +76,15 @@ export default function MeetingConfirmationModal({
     const selectedFallbackReason = showNoCatalogNotice && notHeldReasonId.startsWith(FALLBACK_REASON_PREFIX)
         ? FALLBACK_REASON_OPTIONS.find((reason) => `${FALLBACK_REASON_PREFIX}${reason.code}` === notHeldReasonId) || null
         : null
+    const resultInvalid = formAttempted && !result
+    const responsibilityInvalid = formAttempted && requiresNotHeldDetails && notHeldResponsibility !== 'propia' && notHeldResponsibility !== 'ajena'
+    const reasonInvalid = formAttempted && requiresNotHeldDetails && !notHeldReasonId
+    const customReasonInvalid = formAttempted && requiresNotHeldDetails && isCustomReason && !customNotHeldReason.trim()
+    const requiredErrorColor = 'color-mix(in srgb, #ef4444 82%, var(--text-primary))'
 
     const handleConfirm = async () => {
+        setFormAttempted(true)
+
         if (!result) {
             setError('Selecciona si la junta se llevó a cabo o no.')
             return
@@ -97,6 +105,7 @@ export default function MeetingConfirmationModal({
             }
         }
 
+        setFormAttempted(false)
         setError('')
         setIsSubmitting(true)
         try {
@@ -148,8 +157,12 @@ export default function MeetingConfirmationModal({
                     </button>
                 </div>
 
-                <div
-                    className='p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar'
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        void handleConfirm()
+                    }}
+                    className={`p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar ${formAttempted ? 'ah-form-attempted' : ''}`}
                     style={{ background: 'color-mix(in srgb, var(--card-bg) 88%, var(--background))' }}
                 >
                     {/* Header */}
@@ -173,7 +186,7 @@ export default function MeetingConfirmationModal({
 
                     <div className='ah-required-note mb-4' role='note'>
                         <span className='ah-required-note-dot' aria-hidden='true' />
-                        Campos obligatorios: marcados con * y resaltados en rojo
+                        Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                     </div>
 
                     {/* Meeting Info */}
@@ -217,10 +230,18 @@ export default function MeetingConfirmationModal({
 
                     {/* Result */}
                     <div className='mb-5'>
-                        <label className='block text-sm font-black mb-2 ah-required-label' style={{ color: 'var(--text-primary)' }}>
+                        <label className='block text-sm font-black mb-2 ah-required-label' style={{ color: resultInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
                             Resultado de la junta <span className='text-rose-600'>*</span>
                         </label>
-                        <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                        <div
+                            className='grid grid-cols-1 sm:grid-cols-2 gap-2 p-1 rounded-xl'
+                            style={resultInvalid
+                                ? {
+                                    border: '1px solid color-mix(in srgb, #ef4444 46%, var(--card-border))',
+                                    background: 'color-mix(in srgb, #ef4444 8%, transparent)'
+                                }
+                                : undefined}
+                        >
                             <button
                                 type='button'
                                 disabled={isSubmitting}
@@ -276,7 +297,7 @@ export default function MeetingConfirmationModal({
                                 borderColor: 'color-mix(in srgb, #ef4444 32%, var(--card-border))'
                             }}
                         >
-                            <label className='block text-sm font-black mb-2 ah-required-label' style={{ color: 'var(--text-primary)' }}>
+                            <label className='block text-sm font-black mb-2 ah-required-label' style={{ color: responsibilityInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
                                 ¿De quién fue la cancelación? <span className='text-rose-600'>*</span>
                             </label>
                             <select
@@ -286,6 +307,8 @@ export default function MeetingConfirmationModal({
                                     setError('')
                                 }}
                                 className='ah-modal-field ah-modal-select ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
+                                aria-invalid={responsibilityInvalid ? 'true' : undefined}
+                                data-invalid={responsibilityInvalid ? 'true' : undefined}
                                 style={{
                                     background: 'var(--input-bg)',
                                     borderColor: 'var(--input-border)',
@@ -298,7 +321,7 @@ export default function MeetingConfirmationModal({
                                 <option value='ajena'>Ajena (de la otra empresa)</option>
                             </select>
 
-                            <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: 'var(--text-primary)' }}>
+                            <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: reasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
                                 Motivo de cancelación <span className='text-rose-600'>*</span>
                             </label>
                             <select
@@ -308,6 +331,8 @@ export default function MeetingConfirmationModal({
                                     setError('')
                                 }}
                                 className='ah-modal-field ah-modal-select ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
+                                aria-invalid={reasonInvalid ? 'true' : undefined}
+                                data-invalid={reasonInvalid ? 'true' : undefined}
                                 style={{
                                     background: 'var(--input-bg)',
                                     borderColor: 'var(--input-border)',
@@ -342,7 +367,7 @@ export default function MeetingConfirmationModal({
 
                             {isCustomReason && (
                                 <>
-                                    <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: 'var(--text-primary)' }}>
+                                    <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: customReasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
                                         Nuevo motivo <span className='text-rose-600'>*</span>
                                     </label>
                                     <input
@@ -354,6 +379,8 @@ export default function MeetingConfirmationModal({
                                         }}
                                         placeholder='Escribe el nuevo motivo'
                                         className='ah-modal-field ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
+                                        aria-invalid={customReasonInvalid ? 'true' : undefined}
+                                        data-invalid={customReasonInvalid ? 'true' : undefined}
                                         style={{
                                             background: 'var(--input-bg)',
                                             borderColor: 'var(--input-border)',
@@ -419,9 +446,8 @@ export default function MeetingConfirmationModal({
                             Cerrar
                         </button>
                         <button
-                            type='button'
-                            onClick={handleConfirm}
-                            disabled={isSubmitting || !result}
+                            type='submit'
+                            disabled={isSubmitting}
                             className='flex-1 h-11 rounded-xl bg-[#2048FF] text-white font-bold hover:bg-[#1636c7] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
                         >
                             Confirmar
@@ -439,8 +465,11 @@ export default function MeetingConfirmationModal({
                     <p className='text-xs text-center' style={{ color: 'var(--text-secondary)' }}>
                         <span className='font-bold'>Importante:</span> El snapshot solo se creará si confirmas que la junta se realizó
                     </p>
+                    <p className='text-[11px] text-center mt-1' style={{ color: 'var(--text-secondary)' }}>
+                        Después de confirmar una junta realizada podrás abrir el popup para actualizar pronósticos.
+                    </p>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     )

@@ -662,7 +662,7 @@ export default function EmpresasPage() {
                                         }).length}
                                     </span>
                                     <div className='ah-count-chip-meta'>
-                                        <span className='ah-count-chip-title'>Pre-leads</span>
+                                        <span className='ah-count-chip-title'>Suspects</span>
                                         <span className='ah-count-chip-subtitle'>Empresas</span>
                                     </div>
                                 </div>
@@ -742,7 +742,7 @@ export default function EmpresasPage() {
                                     >
                                         <option value="All">Tipo: Todos</option>
                                         <option value="lead">Tipo: Lead</option>
-                                        <option value="pre_lead">Tipo: Pre-lead</option>
+                                        <option value="pre_lead">Tipo: Suspect</option>
                                     </select>
                                     <select
                                         value={filterSize}

@@ -10,7 +10,7 @@ import TaskModal from './TaskModal'
 import MeetingModal from './MeetingModal'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { createMeeting } from '@/lib/meetingsService'
-import { FileText, MapPin, Globe, Users2, ClipboardList, Boxes, CalendarClock, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil } from 'lucide-react'
+import { FileText, MapPin, Globe, Users2, ClipboardList, FolderClosed, CalendarClock, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil, Camera, ArrowUpRight, ArrowDownRight, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
@@ -29,6 +29,7 @@ import {
 type Cliente = Database['public']['Tables']['clientes']['Row']
 type MeetingRow = Database['public']['Tables']['meetings']['Row']
 type TaskRow = Database['public']['Tables']['tareas']['Row']
+type ForecastSnapshotRow = Database['public']['Tables']['forecast_snapshots']['Row']
 type CompanyNoteRow = {
     id: string
     empresa_id: string
@@ -75,6 +76,18 @@ type QuickProjectFormState = {
     notes: string
 }
 
+type SnapshotDeltaTrend = 'up' | 'down' | 'flat' | 'na'
+
+type SnapshotComparisonRow = {
+    snapshot: ForecastSnapshotRow
+    previous: ForecastSnapshotRow | null
+    deltaProbability: number | null
+    deltaMonthly: number | null
+    deltaImplementation: number | null
+    deltaTotal: number | null
+    deltaCloseDateDays: number | null
+}
+
 function isWonStage(stage: unknown) {
     const normalized = String(stage || '').trim().toLowerCase()
     return normalized === 'cerrado ganado' || normalized === 'cerrada ganada'
@@ -91,6 +104,25 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
     if (!y || !m || !d) return null
     const localDate = new Date(y, m - 1, d, 12, 0, 0, 0)
     return Number.isNaN(localDate.getTime()) ? null : localDate.toISOString()
+}
+
+function parseSnapshotComparableDate(value?: string | null) {
+    const raw = String(value || '').trim()
+    if (!raw) return null
+
+    const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (dateOnlyMatch) {
+        const [, yearRaw, monthRaw, dayRaw] = dateOnlyMatch
+        const year = Number(yearRaw)
+        const month = Number(monthRaw)
+        const day = Number(dayRaw)
+        if (!year || !month || !day) return null
+        return new Date(year, month - 1, day, 12, 0, 0, 0).getTime()
+    }
+
+    const parsed = new Date(raw)
+    if (!Number.isFinite(parsed.getTime())) return null
+    return parsed.getTime()
 }
 
 /**
@@ -120,6 +152,7 @@ export default function AdminCompanyDetailView({
     const [leadOwnerProfilesById, setLeadOwnerProfilesById] = useState<Record<string, { fullName?: string | null }>>({})
     const [meetings, setMeetings] = useState<MeetingRow[]>([])
     const [tasks, setTasks] = useState<TaskRow[]>([])
+    const [forecastSnapshots, setForecastSnapshots] = useState<ForecastSnapshotRow[]>([])
     const [companyNotes, setCompanyNotes] = useState<CompanyNoteRow[]>([])
     const [loadingWorkspaceExtras, setLoadingWorkspaceExtras] = useState(false)
     const [workspaceWarning, setWorkspaceWarning] = useState<string | null>(null)
@@ -130,6 +163,7 @@ export default function AdminCompanyDetailView({
     const [isQuickTaskModalOpen, setIsQuickTaskModalOpen] = useState(false)
     const [isQuickMeetingLeadPickerOpen, setIsQuickMeetingLeadPickerOpen] = useState(false)
     const [isQuickMeetingModalOpen, setIsQuickMeetingModalOpen] = useState(false)
+    const [isForecastHistoryModalOpen, setIsForecastHistoryModalOpen] = useState(false)
     const [selectedMeetingLeadId, setSelectedMeetingLeadId] = useState<number | null>(null)
     const [isQuickNoteModalOpen, setIsQuickNoteModalOpen] = useState(false)
     const [quickProjectCatalog, setQuickProjectCatalog] = useState<ProjectCatalogQuickItem[]>([])
@@ -139,6 +173,7 @@ export default function AdminCompanyDetailView({
     const [quickNoteText, setQuickNoteText] = useState('')
     const [quickNoteType, setQuickNoteType] = useState<'seguimiento' | 'contexto' | 'riesgo' | 'acuerdo'>('seguimiento')
     const [quickActionError, setQuickActionError] = useState<string | null>(null)
+    const [isCompanyMeetingsExpanded, setIsCompanyMeetingsExpanded] = useState(false)
     const [quickProjectForm, setQuickProjectForm] = useState<QuickProjectFormState>({
         proyecto_id: '',
         assignment_stage: 'in_negotiation',
@@ -154,6 +189,10 @@ export default function AdminCompanyDetailView({
             void fetchCompanyWorkspace(company.id)
         }
     }, [isOpen, company.id, currentUserProfile?.id, currentUserProfile?.role])
+
+    useEffect(() => {
+        setIsCompanyMeetingsExpanded(false)
+    }, [company.id])
 
     const fetchCompanyWorkspace = async (companyId: string) => {
         setLoadingClients(true)
@@ -180,6 +219,7 @@ export default function AdminCompanyDetailView({
             setProjectAssignments([])
             setMeetings([])
             setTasks([])
+            setForecastSnapshots([])
             setCompanyNotes([])
             setLoadingClients(false)
             setLoadingWorkspaceExtras(false)
@@ -222,7 +262,7 @@ export default function AdminCompanyDetailView({
         const rawAssignments = (projectAssignmentsRawResult.data || []) as any[]
         const projectIds = Array.from(new Set(rawAssignments.map((row) => String(row?.proyecto_id || '')).filter(Boolean)))
 
-        const [projectsCatalogResult, meetingsResult, tasksResult, notesResult, industryCatalogResult] = await Promise.all([
+        const [projectsCatalogResult, meetingsResult, tasksResult, notesResult, industryCatalogResult, snapshotsResult] = await Promise.all([
             projectIds.length > 0
                 ? (supabase.from('proyectos_catalogo') as any)
                     .select('id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd')
@@ -249,10 +289,17 @@ export default function AdminCompanyDetailView({
                 .limit(50),
             (supabase.from('industrias') as any)
                 .select('id, name')
-                .order('name', { ascending: true })
+                .order('name', { ascending: true }),
+            leadIds.length > 0
+                ? (supabase.from('forecast_snapshots') as any)
+                    .select('*')
+                    .in('lead_id', leadIds)
+                    .eq('source', 'meeting_confirmed_held')
+                    .order('snapshot_timestamp', { ascending: false })
+                : Promise.resolve({ data: [], error: null } as any)
         ])
 
-        if (projectsCatalogResult?.error || meetingsResult?.error || tasksResult?.error || notesResult?.error || industryCatalogResult?.error) {
+        if (projectsCatalogResult?.error || meetingsResult?.error || tasksResult?.error || notesResult?.error || industryCatalogResult?.error || snapshotsResult?.error) {
             const notesMessage = String(notesResult?.error?.message || '').toLowerCase()
             const notesCatalogMissing = notesMessage.includes('empresa_notas') || notesMessage.includes('does not exist') || notesMessage.includes('42p01')
             console.warn('[AdminCompanyDetailView] Partial workspace data load error', {
@@ -260,12 +307,13 @@ export default function AdminCompanyDetailView({
                 meetings: meetingsResult?.error?.message,
                 tasks: tasksResult?.error?.message,
                 notes: notesResult?.error?.message,
-                industries: industryCatalogResult?.error?.message
+                industries: industryCatalogResult?.error?.message,
+                snapshots: snapshotsResult?.error?.message
             })
             setWorkspaceWarning(
                 notesCatalogMissing
-                    ? 'Algunas secciones (proyectos/tareas/juntas/notas) no pudieron cargarse completamente. Para notas de empresa, ejecuta la migración 062.'
-                    : 'Algunas secciones (proyectos/tareas/juntas/notas) no pudieron cargarse completamente.'
+                    ? 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos) no pudieron cargarse completamente. Para notas de empresa, ejecuta la migración 062.'
+                    : 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos) no pudieron cargarse completamente.'
             )
         }
 
@@ -295,6 +343,7 @@ export default function AdminCompanyDetailView({
         setProjectAssignments(normalizedAssignments)
         setMeetings(((meetingsResult?.data || []) as MeetingRow[]))
         setTasks(((tasksResult?.data || []) as TaskRow[]))
+        setForecastSnapshots((snapshotsResult?.data || []) as ForecastSnapshotRow[])
         setIndustryCatalogVisualRows(
             Array.isArray(industryCatalogResult?.data)
                 ? (industryCatalogResult.data as any[])
@@ -442,6 +491,7 @@ export default function AdminCompanyDetailView({
             const prospectRoleCustom = prospectRoleCatalogId
                 ? null
                 : (String(leadData.prospect_role_custom || '').trim() || null)
+            const prospectRoleExactTitle = String(leadData.prospect_role_exact_title || '').trim() || null
             const prospectAgeExactRaw = leadData.prospect_age_exact
             const prospectAgeExact = prospectAgeExactRaw == null
                 ? null
@@ -455,6 +505,7 @@ export default function AdminCompanyDetailView({
                 telefono: leadData.telefono || null,
                 prospect_role_catalog_id: prospectRoleCatalogId,
                 prospect_role_custom: prospectRoleCustom,
+                prospect_role_exact_title: prospectRoleExactTitle,
                 prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
                 prospect_age_range_id: leadData.prospect_age_range_id || null,
                 prospect_decision_role: leadData.prospect_decision_role || null,
@@ -513,6 +564,8 @@ export default function AdminCompanyDetailView({
             await (supabase.from('lead_history') as any).insert([
                 { lead_id: leadId, field_name: 'etapa', new_value: leadData.etapa, changed_by: currentUser.id },
                 { lead_id: leadId, field_name: 'probabilidad', new_value: String(leadData.probabilidad ?? 50), changed_by: currentUser.id },
+                ...(leadData.valor_estimado != null ? [{ lead_id: leadId, field_name: 'valor_estimado', new_value: String(leadData.valor_estimado), changed_by: currentUser.id }] : []),
+                ...(leadData.valor_implementacion_estimado != null ? [{ lead_id: leadId, field_name: 'valor_implementacion_estimado', new_value: String(leadData.valor_implementacion_estimado), changed_by: currentUser.id }] : []),
                 ...(leadData.forecast_close_date ? [{ lead_id: leadId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
             ])
 
@@ -812,6 +865,7 @@ export default function AdminCompanyDetailView({
         loss_recorded_by: null,
         prospect_role_catalog_id: null,
         prospect_role_custom: '',
+        prospect_role_exact_title: '',
         prospect_age_exact: null,
         prospect_age_range_id: null,
         prospect_decision_role: null,
@@ -921,6 +975,11 @@ export default function AdminCompanyDetailView({
         )
     ), [industryCatalogVisualRows, companyBadgeIndustries])
     const companyPrimaryIndustryDisplay = companyBadgeIndustries[0]?.name || company.industria || 'N/A'
+    const companyPrimaryBadgeVisual = useMemo(() => {
+        const primary = companyBadgeIndustries[0]
+        if (!primary) return null
+        return getIndustryBadgeVisualFromMap(primary.id, companyBadgeVisualMap, primary.name)
+    }, [companyBadgeIndustries, companyBadgeVisualMap])
 
     const recentWonOrLostLeads = [...clients]
         .filter((client) => {
@@ -949,6 +1008,116 @@ export default function AdminCompanyDetailView({
         return groups
     }, [projectAssignments])
 
+    const meetingsById = useMemo(() => {
+        const map = new Map<string, MeetingRow>()
+        meetings.forEach((meeting) => {
+            const key = String((meeting as any)?.id || '')
+            if (!key) return
+            map.set(key, meeting)
+        })
+        return map
+    }, [meetings])
+
+    const sortedForecastSnapshots = useMemo(() => {
+        return [...forecastSnapshots].sort((a, b) => {
+            const aTime = parseSnapshotComparableDate(a.snapshot_timestamp || a.created_at)
+            const bTime = parseSnapshotComparableDate(b.snapshot_timestamp || b.created_at)
+            if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) {
+                return Number(bTime) - Number(aTime)
+            }
+            return Number(b.snapshot_number || 0) - Number(a.snapshot_number || 0)
+        })
+    }, [forecastSnapshots])
+
+    const snapshotComparisons = useMemo<SnapshotComparisonRow[]>(() => {
+        return sortedForecastSnapshots.map((snapshot, index) => {
+            const previous = sortedForecastSnapshots[index + 1] || null
+            const currentMonthly = Number(snapshot.forecast_value_amount || 0)
+            const currentImplementation = Number(snapshot.forecast_implementation_amount || 0)
+            const currentTotal = currentMonthly + currentImplementation
+
+            if (!previous) {
+                return {
+                    snapshot,
+                    previous: null,
+                    deltaProbability: null,
+                    deltaMonthly: null,
+                    deltaImplementation: null,
+                    deltaTotal: null,
+                    deltaCloseDateDays: null
+                }
+            }
+
+            const previousMonthly = Number(previous.forecast_value_amount || 0)
+            const previousImplementation = Number(previous.forecast_implementation_amount || 0)
+            const previousTotal = previousMonthly + previousImplementation
+            const currentCloseDateTs = parseSnapshotComparableDate(snapshot.forecast_close_date)
+            const previousCloseDateTs = parseSnapshotComparableDate(previous.forecast_close_date)
+            const closeDateDeltaDays = Number.isFinite(currentCloseDateTs) && Number.isFinite(previousCloseDateTs)
+                ? Math.round((Number(currentCloseDateTs) - Number(previousCloseDateTs)) / (1000 * 60 * 60 * 24))
+                : null
+
+            return {
+                snapshot,
+                previous,
+                deltaProbability: Number(snapshot.probability || 0) - Number(previous.probability || 0),
+                deltaMonthly: currentMonthly - previousMonthly,
+                deltaImplementation: currentImplementation - previousImplementation,
+                deltaTotal: currentTotal - previousTotal,
+                deltaCloseDateDays: closeDateDeltaDays
+            }
+        })
+    }, [sortedForecastSnapshots])
+
+    const latestSnapshotProgress = useMemo(() => {
+        if (sortedForecastSnapshots.length < 2) return null
+        const latest = sortedForecastSnapshots[0]
+        const oldest = sortedForecastSnapshots[sortedForecastSnapshots.length - 1]
+        const latestMonthly = Number(latest.forecast_value_amount || 0)
+        const latestImplementation = Number(latest.forecast_implementation_amount || 0)
+        const oldestMonthly = Number(oldest.forecast_value_amount || 0)
+        const oldestImplementation = Number(oldest.forecast_implementation_amount || 0)
+        const latestCloseDateTs = parseSnapshotComparableDate(latest.forecast_close_date)
+        const oldestCloseDateTs = parseSnapshotComparableDate(oldest.forecast_close_date)
+        const closeDateDeltaDays = Number.isFinite(latestCloseDateTs) && Number.isFinite(oldestCloseDateTs)
+            ? Math.round((Number(latestCloseDateTs) - Number(oldestCloseDateTs)) / (1000 * 60 * 60 * 24))
+            : null
+        return {
+            latestSnapshotAt: latest.snapshot_timestamp || latest.created_at || null,
+            oldestSnapshotAt: oldest.snapshot_timestamp || oldest.created_at || null,
+            deltaProbability: Number(latest.probability || 0) - Number(oldest.probability || 0),
+            deltaMonthly: latestMonthly - oldestMonthly,
+            deltaImplementation: latestImplementation - oldestImplementation,
+            deltaTotal: (latestMonthly + latestImplementation) - (oldestMonthly + oldestImplementation),
+            deltaCloseDateDays: closeDateDeltaDays
+        }
+    }, [sortedForecastSnapshots])
+
+    const forecastSummary = useMemo(() => {
+        if (sortedForecastSnapshots.length === 0) {
+            return {
+                totalSnapshots: 0,
+                averageProbability: 0,
+                totalMonthlyForecast: 0,
+                totalImplementationForecast: 0,
+                latestSnapshotAt: null as string | null
+            }
+        }
+
+        const totalSnapshots = sortedForecastSnapshots.length
+        const probabilitySum = sortedForecastSnapshots.reduce((acc, row) => acc + Number(row.probability || 0), 0)
+        const totalMonthlyForecast = sortedForecastSnapshots.reduce((acc, row) => acc + Number(row.forecast_value_amount || 0), 0)
+        const totalImplementationForecast = sortedForecastSnapshots.reduce((acc, row) => acc + Number(row.forecast_implementation_amount || 0), 0)
+
+        return {
+            totalSnapshots,
+            averageProbability: probabilitySum / totalSnapshots,
+            totalMonthlyForecast,
+            totalImplementationForecast,
+            latestSnapshotAt: sortedForecastSnapshots[0]?.snapshot_timestamp || null
+        }
+    }, [sortedForecastSnapshots])
+
     const formatCurrency = (value?: number | null) => {
         if (value == null || Number.isNaN(Number(value))) return '-'
         return `$${Number(value).toLocaleString('es-MX')}`
@@ -972,6 +1141,48 @@ export default function AdminCompanyDetailView({
         const dt = new Date(value)
         if (Number.isNaN(dt.getTime())) return '-'
         return dt.toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })
+    }
+
+    const getSnapshotDeltaTrend = (delta: number | null | undefined): SnapshotDeltaTrend => {
+        if (delta == null || !Number.isFinite(delta)) return 'na'
+        if (Math.abs(delta) < 0.00001) return 'flat'
+        return delta > 0 ? 'up' : 'down'
+    }
+
+    const formatSignedPoints = (value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return 'N/D'
+        const rounded = Math.round(value)
+        const sign = rounded > 0 ? '+' : ''
+        return `${sign}${rounded} pts`
+    }
+
+    const formatSignedCurrency = (value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return 'N/D'
+        const sign = value > 0 ? '+' : ''
+        return `${sign}${formatCurrency(value)}`
+    }
+
+    const formatCloseDateShift = (value: number | null | undefined) => {
+        if (value == null || !Number.isFinite(value)) return 'Sin referencia'
+        if (value === 0) return 'Sin cambio'
+        const absDays = Math.abs(Math.round(value))
+        const dayWord = absDays === 1 ? 'día' : 'días'
+        if (value > 0) return `+${absDays} ${dayWord} (más tarde)`
+        return `-${absDays} ${dayWord} (más temprano)`
+    }
+
+    const getDeltaToneLane = (trend: SnapshotDeltaTrend, mode: 'value' | 'closeDate' = 'value'): UiToneLane => {
+        if (trend === 'na' || trend === 'flat') return 'slate'
+        if (mode === 'closeDate') {
+            return trend === 'down' ? 'emerald' : 'rose'
+        }
+        return trend === 'up' ? 'blue' : 'amber'
+    }
+
+    const renderSnapshotTrendIcon = (trend: SnapshotDeltaTrend) => {
+        if (trend === 'up') return <ArrowUpRight size={12} strokeWidth={2.5} />
+        if (trend === 'down') return <ArrowDownRight size={12} strokeWidth={2.5} />
+        return <Minus size={12} strokeWidth={2.5} />
     }
 
     const getProjectStageLabel = (stage?: string | null) => {
@@ -1005,9 +1216,27 @@ export default function AdminCompanyDetailView({
                     {company.logo_url && (
                         <img src={company.logo_url} alt={company.nombre} className='h-10 w-10 object-cover bg-white rounded-lg' />
                     )}
-                    <h1 className='text-2xl font-black text-white tracking-tight'>
-                        {company.nombre}
-                    </h1>
+                    <div className='flex items-center gap-3 min-w-0'>
+                        <h1 className='text-2xl font-black text-white tracking-tight truncate'>
+                            {company.nombre}
+                        </h1>
+                        {companyPrimaryBadgeVisual ? (
+                            <BadgeInfoTooltip
+                                title={companyPrimaryIndustryDisplay}
+                                subtitle='Badge de industria en ficha empresa'
+                                rows={[
+                                    { label: 'Empresa', value: company.nombre || 'N/A' },
+                                    { label: 'Nivel visual', value: 'Base (L1)' }
+                                ]}
+                                align='start'
+                                density='compact'
+                            >
+                                <span className='shrink-0 h-10 w-10 rounded-2xl border-2 border-white/20 bg-white/15 shadow-sm inline-flex items-center justify-center backdrop-blur-[1px]'>
+                                    <companyPrimaryBadgeVisual.icon size={15} className='text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]' />
+                                </span>
+                            </BadgeInfoTooltip>
+                        ) : null}
+                    </div>
                 </div>
 
                 <div className='flex items-center gap-3'>
@@ -1219,6 +1448,13 @@ export default function AdminCompanyDetailView({
                                 >
                                     <StickyNote size={13} /> Nueva Nota
                                 </button>
+                                <button
+                                    onClick={() => setIsForecastHistoryModalOpen(true)}
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('blue')}
+                                >
+                                    <Camera size={13} /> Historial Pronósticos
+                                </button>
                             </div>
 
                             {quickActionError && (
@@ -1360,7 +1596,7 @@ export default function AdminCompanyDetailView({
                             <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
                                 <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-3'>
                                     <div className='flex items-center gap-2'>
-                                        <Boxes size={16} className='text-amber-500 dark:text-amber-300' />
+                                        <FolderClosed size={16} className='text-amber-500 dark:text-amber-300' />
                                         <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
                                             Proyectos por empresa
                                         </h3>
@@ -1447,14 +1683,25 @@ export default function AdminCompanyDetailView({
                                                 Juntas asociadas
                                             </h3>
                                         </div>
-                                        <span className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
-                                            {meetings.length}
-                                        </span>
+                                        <div className='flex items-center gap-2'>
+                                            <span className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                                {meetings.length}
+                                            </span>
+                                            <button
+                                                type='button'
+                                                onClick={() => setIsCompanyMeetingsExpanded((prev) => !prev)}
+                                                className='h-8 px-2.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1.5 cursor-pointer'
+                                            >
+                                                {isCompanyMeetingsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                {isCompanyMeetingsExpanded ? 'Ocultar' : 'Mostrar'}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className='p-4 max-h-[260px] overflow-y-auto custom-scrollbar'>
+                                    <div className={isCompanyMeetingsExpanded ? 'p-4 max-h-[260px] overflow-y-auto custom-scrollbar' : 'px-4 py-0'}>
                                         {loadingWorkspaceExtras ? (
                                             <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando juntas...</div>
-                                        ) : meetings.length === 0 ? (
+                                        ) : !isCompanyMeetingsExpanded ? null : (
+                                            meetings.length === 0 ? (
                                             <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin juntas registradas para esta empresa.</div>
                                         ) : (
                                             <div className='space-y-2'>
@@ -1487,7 +1734,7 @@ export default function AdminCompanyDetailView({
                                                     )
                                                 })}
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
                                 </div>
 
@@ -1720,6 +1967,262 @@ export default function AdminCompanyDetailView({
                                     </p>
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isForecastHistoryModalOpen && (
+                <div className='ah-modal-overlay z-[210]'>
+                    <div className='ah-modal-panel w-full max-w-5xl'>
+                        <div className='ah-modal-header'>
+                            <div>
+                                <h3 className='ah-modal-title text-lg flex items-center gap-2'>
+                                    <Camera size={16} /> Historial de Pronósticos Capturados
+                                </h3>
+                                <p className='ah-modal-subtitle'>
+                                    {company.nombre} · snapshots generados al confirmar juntas realizadas
+                                </p>
+                            </div>
+                            <button
+                                className='ah-modal-close cursor-pointer'
+                                onClick={() => setIsForecastHistoryModalOpen(false)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className='p-5 space-y-4 overflow-y-auto custom-scrollbar'>
+                            <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Snapshots</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{forecastSummary.totalSnapshots}</p>
+                                </div>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Probabilidad Promedio</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>
+                                        {forecastSummary.totalSnapshots > 0 ? `${Math.round(forecastSummary.averageProbability)}%` : '-'}
+                                    </p>
+                                </div>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Mensualidad Pronosticada</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{formatCurrency(forecastSummary.totalMonthlyForecast)}</p>
+                                </div>
+                                <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] opacity-80'>Implementación Pronosticada</p>
+                                    <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{formatCurrency(forecastSummary.totalImplementationForecast)}</p>
+                                </div>
+                            </div>
+
+                            {forecastSummary.latestSnapshotAt && (
+                                <div className={`rounded-2xl px-4 py-3 ${tonePanelClassName}`} style={toneVars('blue')}>
+                                    <p className='text-[10px] font-black uppercase tracking-[0.14em] [color:var(--tone-panel-text)]'>Último snapshot registrado</p>
+                                    <p className='text-sm font-black text-[var(--text-primary)] mt-1'>
+                                        {formatDateTime(forecastSummary.latestSnapshotAt)}
+                                    </p>
+                                </div>
+                            )}
+
+                            {latestSnapshotProgress && (
+                                <div className={`rounded-2xl p-4 ${tonePanelSoftClassName}`} style={toneVars('violet')}>
+                                    <div className='flex flex-wrap items-center justify-between gap-2 mb-3'>
+                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] [color:var(--tone-panel-text)]'>
+                                            Comparativo de Progreso (Último vs Primer Snapshot)
+                                        </p>
+                                        <p className='text-[10px] font-bold text-[var(--text-secondary)]'>
+                                            {formatDateTime(latestSnapshotProgress.oldestSnapshotAt)} → {formatDateTime(latestSnapshotProgress.latestSnapshotAt)}
+                                        </p>
+                                    </div>
+                                    <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2'>
+                                        {[
+                                            {
+                                                key: 'probability',
+                                                label: 'Probabilidad',
+                                                delta: latestSnapshotProgress.deltaProbability,
+                                                valueText: formatSignedPoints(latestSnapshotProgress.deltaProbability),
+                                                mode: 'value' as const
+                                            },
+                                            {
+                                                key: 'monthly',
+                                                label: 'Mensualidad',
+                                                delta: latestSnapshotProgress.deltaMonthly,
+                                                valueText: formatSignedCurrency(latestSnapshotProgress.deltaMonthly),
+                                                mode: 'value' as const
+                                            },
+                                            {
+                                                key: 'implementation',
+                                                label: 'Implementación',
+                                                delta: latestSnapshotProgress.deltaImplementation,
+                                                valueText: formatSignedCurrency(latestSnapshotProgress.deltaImplementation),
+                                                mode: 'value' as const
+                                            },
+                                            {
+                                                key: 'total',
+                                                label: 'Total Forecast',
+                                                delta: latestSnapshotProgress.deltaTotal,
+                                                valueText: formatSignedCurrency(latestSnapshotProgress.deltaTotal),
+                                                mode: 'value' as const
+                                            },
+                                            {
+                                                key: 'closeDate',
+                                                label: 'Fecha Cierre',
+                                                delta: latestSnapshotProgress.deltaCloseDateDays,
+                                                valueText: formatCloseDateShift(latestSnapshotProgress.deltaCloseDateDays),
+                                                mode: 'closeDate' as const
+                                            }
+                                        ].map((item) => {
+                                            const trend = getSnapshotDeltaTrend(item.delta)
+                                            return (
+                                                <div
+                                                    key={item.key}
+                                                    className={`rounded-xl px-3 py-2 ${toneChipClassName}`}
+                                                    style={toneVars(getDeltaToneLane(trend, item.mode))}
+                                                >
+                                                    <p className='text-[9px] font-black uppercase tracking-[0.13em] [color:var(--tone-chip-text)] opacity-90'>{item.label}</p>
+                                                    <p className='mt-1 text-[11px] font-black [color:var(--tone-chip-text)] flex items-center gap-1.5'>
+                                                        {renderSnapshotTrendIcon(trend)}
+                                                        <span>{item.valueText}</span>
+                                                    </p>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {loadingWorkspaceExtras ? (
+                                <div className='py-10 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando historial de pronósticos...</div>
+                            ) : sortedForecastSnapshots.length === 0 ? (
+                                <div className='py-10 text-center text-[var(--text-secondary)] font-bold rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)]'>
+                                    Aún no hay snapshots de pronóstico capturados para esta empresa.
+                                </div>
+                            ) : (
+                                <div className='space-y-3 max-h-[52dvh] overflow-y-auto custom-scrollbar pr-1'>
+                                    {snapshotComparisons.map((comparison) => {
+                                        const snapshot = comparison.snapshot
+                                        const linkedLead = leadById.get(Number(snapshot.lead_id))
+                                        const linkedMeeting = meetingsById.get(String(snapshot.meeting_id || ''))
+                                        const totalSnapshotForecast = Number(snapshot.forecast_value_amount || 0) + Number(snapshot.forecast_implementation_amount || 0)
+                                        return (
+                                            <div key={snapshot.id} className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4'>
+                                                <div className='flex items-start justify-between gap-3'>
+                                                    <div className='min-w-0'>
+                                                        <p className='text-sm font-black text-[var(--text-primary)] truncate'>
+                                                            {(linkedLead?.nombre || linkedLead?.empresa || `Lead ${snapshot.lead_id}`)}
+                                                        </p>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] mt-1'>
+                                                            Snapshot #{snapshot.snapshot_number} · {formatDateTime(snapshot.snapshot_timestamp)}
+                                                        </p>
+                                                        <p className='text-xs font-bold text-[var(--text-secondary)] mt-1 truncate'>
+                                                            Junta: {String((linkedMeeting as any)?.title || snapshot.meeting_id || 'Sin referencia')}
+                                                        </p>
+                                                    </div>
+                                                    <span
+                                                        className={`shrink-0 rounded-xl px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                        style={toneVars('emerald')}
+                                                    >
+                                                        {snapshot.probability}% prob.
+                                                    </span>
+                                                </div>
+
+                                                <div className='mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs'>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Mensualidad</p>
+                                                        <p className='font-black text-[var(--text-primary)]'>{formatCurrency(snapshot.forecast_value_amount)}</p>
+                                                    </div>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Implementación</p>
+                                                        <p className='font-black text-[var(--text-primary)]'>{formatCurrency(snapshot.forecast_implementation_amount)}</p>
+                                                    </div>
+                                                    <div className='rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Total Forecast</p>
+                                                        <p className='font-black text-[var(--text-primary)]'>{formatCurrency(totalSnapshotForecast)}</p>
+                                                    </div>
+                                                </div>
+
+                                                {comparison.previous ? (
+                                                    <div className='mt-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-3'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                                            Comparado vs snapshot anterior ({formatDateTime(comparison.previous.snapshot_timestamp)})
+                                                        </p>
+                                                        <div className='mt-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2'>
+                                                            {[
+                                                                {
+                                                                    key: 'probability',
+                                                                    label: 'Prob.',
+                                                                    delta: comparison.deltaProbability,
+                                                                    valueText: formatSignedPoints(comparison.deltaProbability),
+                                                                    mode: 'value' as const
+                                                                },
+                                                                {
+                                                                    key: 'monthly',
+                                                                    label: 'Mensual',
+                                                                    delta: comparison.deltaMonthly,
+                                                                    valueText: formatSignedCurrency(comparison.deltaMonthly),
+                                                                    mode: 'value' as const
+                                                                },
+                                                                {
+                                                                    key: 'implementation',
+                                                                    label: 'Implementación',
+                                                                    delta: comparison.deltaImplementation,
+                                                                    valueText: formatSignedCurrency(comparison.deltaImplementation),
+                                                                    mode: 'value' as const
+                                                                },
+                                                                {
+                                                                    key: 'total',
+                                                                    label: 'Total',
+                                                                    delta: comparison.deltaTotal,
+                                                                    valueText: formatSignedCurrency(comparison.deltaTotal),
+                                                                    mode: 'value' as const
+                                                                },
+                                                                {
+                                                                    key: 'closeDate',
+                                                                    label: 'Cierre',
+                                                                    delta: comparison.deltaCloseDateDays,
+                                                                    valueText: formatCloseDateShift(comparison.deltaCloseDateDays),
+                                                                    mode: 'closeDate' as const
+                                                                }
+                                                            ].map((item) => {
+                                                                const trend = getSnapshotDeltaTrend(item.delta)
+                                                                return (
+                                                                    <div
+                                                                        key={`${snapshot.id}-${item.key}`}
+                                                                        className={`rounded-lg px-2.5 py-2 ${toneChipClassName}`}
+                                                                        style={toneVars(getDeltaToneLane(trend, item.mode))}
+                                                                    >
+                                                                        <p className='text-[9px] font-black uppercase tracking-[0.11em] [color:var(--tone-chip-text)] opacity-90'>{item.label}</p>
+                                                                        <p className='mt-1 text-[10px] font-black [color:var(--tone-chip-text)] flex items-center gap-1'>
+                                                                            {renderSnapshotTrendIcon(trend)}
+                                                                            <span className='truncate'>{item.valueText}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className='mt-3 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>
+                                                        Snapshot base para comparación histórica.
+                                                    </p>
+                                                )}
+
+                                                <p className='mt-3 text-[11px] font-bold text-[var(--text-secondary)]'>
+                                                    Fecha de cierre pronosticada: {formatDateOnly(snapshot.forecast_close_date)}
+                                                </p>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end'>
+                            <button
+                                onClick={() => setIsForecastHistoryModalOpen(false)}
+                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                            >
+                                Cerrar
+                            </button>
                         </div>
                     </div>
                 </div>

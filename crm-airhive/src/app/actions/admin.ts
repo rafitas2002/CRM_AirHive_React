@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase-server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { cookies } from 'next/headers'
 import { parseLocalDateOnly } from '@/lib/dateUtils'
+import {
+    computeSellerOverallForecastReliability,
+    computeSellerOverallForecastSampleCount
+} from '@/lib/forecastRaceAdjustments'
 
 export interface CommercialForecastFilters {
     dateFrom?: string
@@ -41,6 +45,23 @@ const isClosedStage = (stage: string | null | undefined) => {
 }
 
 const norm = (value: string | null | undefined) => (value || '').trim().toLowerCase()
+
+async function ensureAdminContext() {
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { ok: false as const, error: 'No autenticado', supabase: null, user: null, profile: null }
+
+    const { data: profile, error: roleError } = await (supabase.from('profiles') as any)
+        .select('id, role, full_name')
+        .eq('id', user.id)
+        .single()
+
+    if (roleError || !profile) return { ok: false as const, error: 'No se pudo verificar el rol', supabase: null, user: null, profile: null }
+    if (profile.role !== 'admin') return { ok: false as const, error: 'No tienes permisos para esta acción', supabase: null, user: null, profile: null }
+
+    return { ok: true as const, supabase, user, profile }
+}
 
 export async function getAdminCorrelationData() {
     try {
@@ -99,7 +120,9 @@ export async function getAdminCorrelationData() {
             { data: companyProjectAssignments, error: companyProjectAssignmentsError },
             { data: sellerIndustryBadgesRows, error: sellerIndustryBadgesError },
             { data: sellerSpecialBadgesRows, error: sellerSpecialBadgesError },
-            { data: meetingCancellationReasonRows, error: meetingCancellationReasonRowsError }
+            { data: meetingCancellationReasonRows, error: meetingCancellationReasonRowsError },
+            { data: prospectRolesCatalogRows, error: prospectRolesCatalogRowsError },
+            { data: companySizesCatalogRows, error: companySizesCatalogRowsError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name') as any,
             dbClient.from('employee_profiles').select('*') as any,
@@ -119,7 +142,9 @@ export async function getAdminCorrelationData() {
                 .select('proyecto_id, source_lead_id, assigned_by, assignment_stage') as any,
             dbClient.from('seller_industry_badges').select('seller_id, level').gt('level', 0) as any,
             dbClient.from('seller_special_badges').select('seller_id, level').gt('level', 0) as any,
-            dbClient.from('meeting_cancellation_reason_analytics_view').select('*') as any
+            dbClient.from('meeting_cancellation_reason_analytics_view').select('*') as any,
+            dbClient.from('lead_prospect_roles_catalog').select('id, label, sort_order, is_active') as any,
+            dbClient.from('company_sizes').select('size_value, name, sort_order, is_active') as any
         ])
 
         if (profError) throw profError
@@ -149,6 +174,12 @@ export async function getAdminCorrelationData() {
         }
         if (meetingCancellationReasonRowsError && meetingCancellationReasonRowsError.code !== '42P01') {
             throw meetingCancellationReasonRowsError
+        }
+        if (prospectRolesCatalogRowsError && prospectRolesCatalogRowsError.code !== '42P01') {
+            throw prospectRolesCatalogRowsError
+        }
+        if (companySizesCatalogRowsError && companySizesCatalogRowsError.code !== '42P01') {
+            throw companySizesCatalogRowsError
         }
 
         const reliabilityMetricsByUser = new Map<string, any>(
@@ -312,7 +343,13 @@ export async function getAdminCorrelationData() {
             const forecastAccuracyFallback = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
             const persistedReliability = reliabilityMetricsByUser.get(p.id)
             const forecastAccuracy = Number(
-                persistedReliability?.probability_reliability_score ?? forecastAccuracyFallback ?? 0
+                computeSellerOverallForecastReliability(
+                    persistedReliability || null,
+                    { fallback: forecastAccuracyFallback }
+                )
+            )
+            const forecastAccuracySamples = Number(
+                computeSellerOverallForecastSampleCount(persistedReliability || null)
             )
 
             // Industry Success
@@ -469,7 +506,7 @@ export async function getAdminCorrelationData() {
                 meetingsLlamadaCount,
                 meetingsVideoCount,
                 forecastAccuracy,
-                forecastAccuracySamples: Number(persistedReliability?.probability_reliability_samples ?? closedWon.length ?? 0),
+                forecastAccuracySamples,
                 topIndustry,
                 physicalCloseRate,
                 avgResponseTimeHours,
@@ -504,6 +541,16 @@ export async function getAdminCorrelationData() {
 
         const profileNameById = new Map<string, string>(
             (profiles || []).map((p: any) => [p.id, p.full_name || 'Desconocido'])
+        )
+        const prospectRoleLabelById = new Map<string, string>(
+            ((prospectRolesCatalogRows || []) as any[])
+                .filter((row: any) => row?.id)
+                .map((row: any) => [String(row.id), String(row.label || '').trim()])
+        )
+        const companySizeLabelByValue = new Map<number, string>(
+            ((companySizesCatalogRows || []) as any[])
+                .filter((row: any) => row?.size_value != null)
+                .map((row: any) => [Number(row.size_value), String(row.name || `Tamaño ${row.size_value}`).trim()])
         )
 
         const meetingsByLeadId = (meetings || []).reduce((acc: Record<number, any[]>, meeting: any) => {
@@ -567,6 +614,138 @@ export async function getAdminCorrelationData() {
 
         const companyById = new Map<number, any>((companies || []).map((comp: any) => [comp.id, comp]))
         const leadById = new Map<number, any>((clients || []).map((client: any) => [client.id, client]))
+        const toFiniteNumber = (value: any): number | null => {
+            if (value === null || value === undefined || value === '') return null
+            const parsed = Number(value)
+            return Number.isFinite(parsed) ? parsed : null
+        }
+        const computeDaysDiff = (fromValue: any, toValue: any): number | null => {
+            if (!fromValue || !toValue) return null
+            const fromTs = new Date(fromValue).getTime()
+            const toTs = new Date(toValue).getTime()
+            if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return null
+            return Math.max(0, (toTs - fromTs) / (1000 * 60 * 60 * 24))
+        }
+
+        const prospectAnalyticsRows = (clients || []).map((lead: any) => {
+            const company = lead?.empresa_id ? companyById.get(lead.empresa_id) : null
+            const stage = String(lead?.etapa || '').trim() || null
+            const isClosedWon = isWonStage(stage)
+            const ageRaw = lead?.prospect_age_exact
+            const prospectAgeExact = ageRaw == null || ageRaw === ''
+                ? null
+                : Math.round(Number(ageRaw))
+            const normalizedAge = Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null
+            const prospectRoleCatalogId = lead?.prospect_role_catalog_id ? String(lead.prospect_role_catalog_id) : null
+            const prospectRoleAreaLabel = prospectRoleCatalogId
+                ? (prospectRoleLabelById.get(prospectRoleCatalogId) || null)
+                : null
+            const prospectRoleExactTitle = String(lead?.prospect_role_exact_title || '').trim() || null
+            const legacyCustomRole = String(lead?.prospect_role_custom || '').trim() || null
+            const companySizeRaw = company?.tamano
+            const companySizeValue = companySizeRaw == null
+                ? null
+                : Number(companySizeRaw)
+            const normalizedCompanySize = Number.isFinite(companySizeValue as number) && Number(companySizeValue) >= 1 && Number(companySizeValue) <= 5
+                ? Number(companySizeValue)
+                : null
+            const explicitCompanySizeLabel = String(company?.tamano_label || '').trim() || null
+            const companySizeLabel = explicitCompanySizeLabel
+                || (normalizedCompanySize != null ? (companySizeLabelByValue.get(normalizedCompanySize) || `Tamaño ${normalizedCompanySize}`) : null)
+            const createdAt = lead?.created_at || null
+
+            const monthlyForecastAmount = toFiniteNumber(lead?.value_forecast_estimated)
+                ?? toFiniteNumber(lead?.valor_estimado)
+            const implementationForecastAmount = toFiniteNumber(lead?.implementation_forecast_estimated)
+                ?? toFiniteNumber(lead?.valor_implementacion_estimado)
+            const totalForecastAmount = (monthlyForecastAmount != null || implementationForecastAmount != null)
+                ? Number(monthlyForecastAmount || 0) + Number(implementationForecastAmount || 0)
+                : null
+
+            const monthlyRealCandidate = toFiniteNumber(lead?.value_forecast_actual)
+                ?? toFiniteNumber(lead?.valor_real_cierre)
+            const implementationRealCandidate = toFiniteNumber(lead?.implementation_forecast_actual)
+                ?? toFiniteNumber(lead?.valor_implementacion_real_cierre)
+            const monthlyRealAmount = isClosedWon ? monthlyRealCandidate : null
+            const implementationRealAmount = isClosedWon ? implementationRealCandidate : null
+            const totalRealAmount = (monthlyRealAmount != null || implementationRealAmount != null)
+                ? Number(monthlyRealAmount || 0) + Number(implementationRealAmount || 0)
+                : null
+
+            const forecastCloseDate = lead?.close_date_forecast_estimated
+                || lead?.forecast_close_date
+                || null
+            const realClosedAt = lead?.closed_at_real
+                || lead?.close_date_forecast_actual
+                || null
+            const forecastCloseDays = computeDaysDiff(createdAt, forecastCloseDate)
+            const realCloseDays = isClosedWon ? computeDaysDiff(createdAt, realClosedAt) : null
+            const closeDaysGapRealMinusForecast = (forecastCloseDays != null && realCloseDays != null)
+                ? Number(realCloseDays) - Number(forecastCloseDays)
+                : null
+
+            return {
+                leadId: Number(lead?.id || 0),
+                ownerId: lead?.owner_id || null,
+                companyId: lead?.empresa_id || null,
+                companyName: String(company?.nombre || lead?.empresa || '').trim() || null,
+                companyIndustry: String(company?.industria || '').trim() || null,
+                companySizeValue: normalizedCompanySize,
+                companySizeLabel,
+                prospectAgeExact: normalizedAge,
+                prospectRoleCatalogId,
+                prospectRoleAreaLabel,
+                prospectRoleExactTitle,
+                prospectRoleCustom: legacyCustomRole,
+                stage,
+                isClosedWon,
+                createdAt,
+                monthlyForecastAmount,
+                monthlyRealAmount,
+                implementationForecastAmount,
+                implementationRealAmount,
+                totalForecastAmount,
+                totalRealAmount,
+                forecastCloseDate,
+                realClosedAt,
+                forecastCloseDays,
+                realCloseDays,
+                closeDaysGapRealMinusForecast
+            }
+        })
+
+        const prospectIndustryOptions = Array.from(
+            new Set(
+                prospectAnalyticsRows
+                    .map((row: any) => String(row.companyIndustry || '').trim())
+                    .filter(Boolean)
+            )
+        ) as string[]
+        prospectIndustryOptions.sort((a, b) => a.localeCompare(b, 'es'))
+
+        const prospectCompanySizeValues = Array.from(
+            new Set(
+                prospectAnalyticsRows
+                    .map((row: any) => row.companySizeValue)
+                    .filter((value: any) => value != null)
+                    .map((value: any) => Number(value))
+            )
+        ) as number[]
+        const prospectCompanySizeOptions = prospectCompanySizeValues
+            .sort((a, b) => a - b)
+            .map((value: number) => ({
+                value,
+                label: companySizeLabelByValue.get(value)
+                    || (prospectAnalyticsRows.find((row: any) => row.companySizeValue === value)?.companySizeLabel || `Tamaño ${value}`)
+            }))
+
+        const prospectRoleAreaOptions = ((prospectRolesCatalogRows || []) as any[])
+            .filter((row: any) => row?.id && row?.is_active !== false)
+            .sort((a: any, b: any) => Number(a?.sort_order || 0) - Number(b?.sort_order || 0))
+            .map((row: any) => ({
+                id: String(row.id),
+                label: String(row.label || '').trim() || 'Sin etiqueta'
+            }))
 
         const sizeBucket: Record<number, { total: number, postponed: number, held: number }> = {
             1: { total: 0, postponed: 0, held: 0 },
@@ -635,7 +814,16 @@ export async function getAdminCorrelationData() {
             success: true,
             data: {
                 users: masterData,
+                leadRows: leadAnalyticsRows,
                 companyRegistry,
+                prospectAnalytics: {
+                    rows: prospectAnalyticsRows,
+                    options: {
+                        industries: prospectIndustryOptions,
+                        companySizes: prospectCompanySizeOptions,
+                        roleAreas: prospectRoleAreaOptions
+                    }
+                },
                 analytics: {
                     correlationData,
                     correlations,
@@ -647,6 +835,227 @@ export async function getAdminCorrelationData() {
     } catch (error: any) {
         console.error('[AdminCorrelation] General Exception:', error)
         return { success: false, error: error.message }
+    }
+}
+
+export type AdminProspectQueryPreset = {
+    id: string
+    name: string
+    queryText: string
+    createdAt: string | null
+    createdBy: string | null
+    createdByName: string | null
+}
+
+export type AdminProspectQueryFavorite = {
+    id: string
+    name: string
+    queryText: string
+    createdAt: string | null
+}
+
+export async function getAdminProspectQueryPresets() {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error, data: [] as AdminProspectQueryPreset[] }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_presets') as any)
+            .select('id, name, query_text, created_at, created_by, created_by_name, is_active')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        const presets: AdminProspectQueryPreset[] = (data || []).map((row: any) => ({
+            id: String(row.id),
+            name: String(row.name || '').trim() || 'Preset sin nombre',
+            queryText: String(row.query_text || '').trim(),
+            createdAt: row.created_at || null,
+            createdBy: row.created_by || null,
+            createdByName: String(row.created_by_name || '').trim() || null
+        }))
+
+        return { success: true, data: presets }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryPresets] get error:', error)
+        return { success: false, error: error?.message || 'No se pudieron cargar los presets.', data: [] as AdminProspectQueryPreset[] }
+    }
+}
+
+export async function createAdminProspectQueryPreset(input: { name: string, queryText: string }) {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error, data: null as AdminProspectQueryPreset | null }
+
+        const trimmedName = String(input?.name || '').trim()
+        const trimmedQuery = String(input?.queryText || '').trim()
+        if (!trimmedName) {
+            return { success: false, error: 'El nombre del preset es obligatorio.', data: null as AdminProspectQueryPreset | null }
+        }
+        if (!trimmedQuery) {
+            return { success: false, error: 'La pregunta del preset es obligatoria.', data: null as AdminProspectQueryPreset | null }
+        }
+        if (trimmedName.length > 120) {
+            return { success: false, error: 'El nombre del preset no puede exceder 120 caracteres.', data: null as AdminProspectQueryPreset | null }
+        }
+        if (trimmedQuery.length > 500) {
+            return { success: false, error: 'La pregunta del preset no puede exceder 500 caracteres.', data: null as AdminProspectQueryPreset | null }
+        }
+
+        const payload = {
+            name: trimmedName,
+            query_text: trimmedQuery,
+            created_by: ctx.user.id,
+            created_by_name: String(ctx.profile?.full_name || ctx.user.email || '').trim() || null,
+            is_active: true
+        }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_presets') as any)
+            .insert(payload)
+            .select('id, name, query_text, created_at, created_by, created_by_name')
+            .single()
+
+        if (error) throw error
+
+        const createdPreset: AdminProspectQueryPreset = {
+            id: String(data.id),
+            name: String(data.name || '').trim() || 'Preset sin nombre',
+            queryText: String(data.query_text || '').trim(),
+            createdAt: data.created_at || null,
+            createdBy: data.created_by || null,
+            createdByName: String(data.created_by_name || '').trim() || null
+        }
+
+        return { success: true, data: createdPreset }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryPresets] create error:', error)
+        return { success: false, error: error?.message || 'No se pudo crear el preset.', data: null as AdminProspectQueryPreset | null }
+    }
+}
+
+export async function deleteAdminProspectQueryPreset(presetId: string) {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error }
+
+        const safePresetId = String(presetId || '').trim()
+        if (!safePresetId) return { success: false, error: 'Preset inválido.' }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_presets') as any)
+            .update({ is_active: false })
+            .eq('id', safePresetId)
+            .eq('is_active', true)
+            .select('id')
+            .maybeSingle()
+
+        if (error) throw error
+        if (!data?.id) return { success: false, error: 'No se encontró el preset o ya estaba eliminado.' }
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryPresets] delete error:', error)
+        return { success: false, error: error?.message || 'No se pudo eliminar el preset.' }
+    }
+}
+
+export async function getMyAdminProspectQueryFavorites() {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error, data: [] as AdminProspectQueryFavorite[] }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_favorites') as any)
+            .select('id, name, query_text, created_at, is_active')
+            .eq('user_id', ctx.user.id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        const favorites: AdminProspectQueryFavorite[] = (data || []).map((row: any) => ({
+            id: String(row.id),
+            name: String(row.name || '').trim() || 'Favorito sin nombre',
+            queryText: String(row.query_text || '').trim(),
+            createdAt: row.created_at || null
+        }))
+
+        return { success: true, data: favorites }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryFavorites] get error:', error)
+        return { success: false, error: error?.message || 'No se pudieron cargar los favoritos.', data: [] as AdminProspectQueryFavorite[] }
+    }
+}
+
+export async function createMyAdminProspectQueryFavorite(input: { name: string, queryText: string }) {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error, data: null as AdminProspectQueryFavorite | null }
+
+        const trimmedName = String(input?.name || '').trim()
+        const trimmedQuery = String(input?.queryText || '').trim()
+        if (!trimmedName) {
+            return { success: false, error: 'El nombre del favorito es obligatorio.', data: null as AdminProspectQueryFavorite | null }
+        }
+        if (!trimmedQuery) {
+            return { success: false, error: 'La pregunta del favorito es obligatoria.', data: null as AdminProspectQueryFavorite | null }
+        }
+        if (trimmedName.length > 120) {
+            return { success: false, error: 'El nombre del favorito no puede exceder 120 caracteres.', data: null as AdminProspectQueryFavorite | null }
+        }
+        if (trimmedQuery.length > 500) {
+            return { success: false, error: 'La pregunta del favorito no puede exceder 500 caracteres.', data: null as AdminProspectQueryFavorite | null }
+        }
+
+        const payload = {
+            user_id: ctx.user.id,
+            name: trimmedName,
+            query_text: trimmedQuery,
+            is_active: true
+        }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_favorites') as any)
+            .insert(payload)
+            .select('id, name, query_text, created_at')
+            .single()
+
+        if (error) throw error
+
+        const createdFavorite: AdminProspectQueryFavorite = {
+            id: String(data.id),
+            name: String(data.name || '').trim() || 'Favorito sin nombre',
+            queryText: String(data.query_text || '').trim(),
+            createdAt: data.created_at || null
+        }
+
+        return { success: true, data: createdFavorite }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryFavorites] create error:', error)
+        return { success: false, error: error?.message || 'No se pudo crear el favorito.', data: null as AdminProspectQueryFavorite | null }
+    }
+}
+
+export async function deleteMyAdminProspectQueryFavorite(favoriteId: string) {
+    try {
+        const ctx = await ensureAdminContext()
+        if (!ctx.ok) return { success: false, error: ctx.error }
+
+        const safeFavoriteId = String(favoriteId || '').trim()
+        if (!safeFavoriteId) return { success: false, error: 'Favorito inválido.' }
+
+        const { data, error } = await (ctx.supabase.from('admin_prospect_query_favorites') as any)
+            .update({ is_active: false })
+            .eq('id', safeFavoriteId)
+            .eq('user_id', ctx.user.id)
+            .eq('is_active', true)
+            .select('id')
+            .maybeSingle()
+
+        if (error) throw error
+        if (!data?.id) return { success: false, error: 'No se encontró el favorito o ya estaba eliminado.' }
+
+        return { success: true }
+    } catch (error: any) {
+        console.error('[AdminProspectQueryFavorites] delete error:', error)
+        return { success: false, error: error?.message || 'No se pudo eliminar el favorito.' }
     }
 }
 
@@ -948,6 +1357,25 @@ export async function getUserActivitySummary(targetUserId: string) {
             .replace(/[\u0300-\u036f]/g, '')
             .trim()
             .toLowerCase()
+        const CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS = [1, 5, 10, 15, 20, 30, 40, 50] as const
+        const getThresholdLevelMetaFromList = (progress: number, thresholds: readonly number[]) => {
+            const safeProgress = Math.max(0, Number(progress || 0))
+            let level = 0
+            let next: number | null = thresholds[0] ?? null
+            thresholds.forEach((threshold, index) => {
+                if (safeProgress >= threshold) {
+                    level = index + 1
+                    next = thresholds[index + 1] ?? null
+                }
+            })
+            return { level, next }
+        }
+        const normalizeSpecialBadgeKey = (type: string, key: string) => {
+            const safeType = String(type || '')
+            const safeKey = String(key || '').trim()
+            if (safeType === 'closure_milestone') return 'closure_milestone'
+            return safeKey
+        }
 
         const [
             { data: targetProfile },
@@ -960,6 +1388,7 @@ export async function getUserActivitySummary(targetUserId: string) {
             { data: companies },
             { data: industryBadges },
             { data: specialBadges },
+            { count: closureCount },
             { data: allQuotesRows },
             { data: persistedReliabilityMetrics, error: persistedReliabilityMetricsError }
         ] = await Promise.all([
@@ -981,6 +1410,10 @@ export async function getUserActivitySummary(targetUserId: string) {
                 .select('badge_type, badge_key, badge_label, progress_count, level')
                 .eq('seller_id', targetUserId)
                 .gt('level', 0) as any,
+            dbClient
+                .from('seller_badge_closures')
+                .select('lead_id', { count: 'exact', head: true })
+                .eq('seller_id', targetUserId) as any,
             dbClient
                 .from('crm_quotes')
                 .select('id, contributed_by, contributed_by_name, quote_author, quote_source')
@@ -1061,6 +1494,17 @@ export async function getUserActivitySummary(targetUserId: string) {
                 progress: quoteLikesProgress
             })
         }
+        const closureProgress = Math.max(0, Number(closureCount || 0))
+        const closureMeta = getThresholdLevelMetaFromList(closureProgress, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
+        if (closureMeta.level > 0) {
+            derivedSpecialBadges.push({
+                type: 'closure_milestone',
+                key: 'closure_milestone',
+                label: 'Cierres de Empresas',
+                level: closureMeta.level,
+                progress: closureProgress
+            })
+        }
 
         const mergedSpecialByKey = new Map<string, {
             type: string
@@ -1070,16 +1514,18 @@ export async function getUserActivitySummary(targetUserId: string) {
             progress: number
         }>()
         for (const row of (specialBadges || [])) {
+            const type = String((row as any)?.badge_type || 'special')
+            const badgeKey = normalizeSpecialBadgeKey(type, String((row as any)?.badge_key || ''))
             const normalized = {
-                type: String((row as any)?.badge_type || 'special'),
-                key: String((row as any)?.badge_key || ''),
+                type,
+                key: badgeKey,
                 label: String((row as any)?.badge_label || 'Badge especial'),
                 level: Number((row as any)?.level || 0),
                 progress: Number((row as any)?.progress_count || 0)
             }
-            const key = `${normalized.type}::${normalized.key}`
-            const prev = mergedSpecialByKey.get(key)
-            if (!prev || normalized.level >= prev.level) mergedSpecialByKey.set(key, normalized)
+            const identityKey = `${normalized.type}::${normalized.key}`
+            const prev = mergedSpecialByKey.get(identityKey)
+            if (!prev || normalized.level >= prev.level) mergedSpecialByKey.set(identityKey, normalized)
         }
         for (const row of derivedSpecialBadges) {
             const key = `${row.type}::${row.key}`
@@ -1105,7 +1551,7 @@ export async function getUserActivitySummary(targetUserId: string) {
 
         let totalForecastError = 0
         closedWon.forEach((c: any) => totalForecastError += (100 - (c.probabilidad || 0)))
-        const forecastAccuracy = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
+        const forecastAccuracyFallback = closedWon.length > 0 ? 100 - (totalForecastError / closedWon.length) : 0
 
         const valueAccuracySamples = closedWon
             .map((c: any) => {
@@ -1147,6 +1593,15 @@ export async function getUserActivitySummary(targetUserId: string) {
         const persistedReliability = (persistedReliabilityMetricsError?.code === '42P01')
             ? null
             : (persistedReliabilityMetrics as any)
+        const forecastAccuracy = Number(
+            computeSellerOverallForecastReliability(
+                persistedReliability || null,
+                { fallback: forecastAccuracyFallback }
+            )
+        )
+        const forecastAccuracySamples = Number(
+            computeSellerOverallForecastSampleCount(persistedReliability || null)
+        )
 
         const industryMap: Record<string, number> = {}
         closedWon.forEach((c: any) => {
@@ -1223,6 +1678,7 @@ export async function getUserActivitySummary(targetUserId: string) {
                     totalMedals: medals.gold + medals.silver + medals.bronze,
                     meetingsPerClose,
                     forecastAccuracy,
+                    forecastAccuracySamples,
                     valueForecastAccuracy: Number(persistedReliability?.value_reliability_score ?? valueForecastAccuracy ?? 0),
                     closeDateForecastAccuracy: Number(persistedReliability?.close_date_reliability_score ?? closeDateForecastAccuracy ?? 0),
                     valueForecastAccuracySamples: Number(persistedReliability?.value_reliability_samples ?? valueAccuracySamples.length ?? 0),

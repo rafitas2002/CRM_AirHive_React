@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
+import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
@@ -642,9 +642,9 @@ export default function TopBar() {
                             <div className='bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1.5'>
                                 {[
                                     { href: '/clientes', label: 'Leads', icon: UsersRound },
-                                    { href: '/pre-leads', label: 'Pre leads', icon: Target },
+                                    { href: '/pre-leads', label: 'Suspects', icon: Target },
                                     { href: '/empresas', label: 'Empresas', icon: Building2 },
-                                    { href: '/proyectos', label: 'Proyectos', icon: Boxes }
+                                    { href: '/proyectos', label: 'Proyectos', icon: FolderClosed }
                                 ].map((item) => {
                                     const Icon = item.icon as LucideIcon
                                     const isActive = pathname === item.href

@@ -88,6 +88,7 @@ export type Database = {
                     closed_at_real: string | null
                     prospect_role_catalog_id: string | null
                     prospect_role_custom: string | null
+                    prospect_role_exact_title: string | null
                     prospect_age_exact: number | null
                     prospect_age_range_id: string | null
                     prospect_decision_role: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
@@ -144,6 +145,7 @@ export type Database = {
                     closed_at_real?: string | null
                     prospect_role_catalog_id?: string | null
                     prospect_role_custom?: string | null
+                    prospect_role_exact_title?: string | null
                     prospect_age_exact?: number | null
                     prospect_age_range_id?: string | null
                     prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
@@ -200,6 +202,7 @@ export type Database = {
                     closed_at_real?: string | null
                     prospect_role_catalog_id?: string | null
                     prospect_role_custom?: string | null
+                    prospect_role_exact_title?: string | null
                     prospect_age_exact?: number | null
                     prospect_age_range_id?: string | null
                     prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null

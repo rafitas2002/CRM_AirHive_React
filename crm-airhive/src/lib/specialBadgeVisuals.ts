@@ -146,7 +146,7 @@ export function getSpecialBadgeVisualSpec(badgeType?: string | null, badgeLabel?
         return { title: 'Antigüedad', category: 'Trayectoria', icon: CalendarDays, centerGradientClass: 'bg-gradient-to-br from-[#4b5563] to-[#111827]', iconClassName: 'text-white', ringStyle: 'royal_dark' }
     }
     if (type === 'prelead_registered') {
-        return { title: 'Pre-Leads', category: 'Actividad Comercial', icon: Target, centerGradientClass: 'bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]', iconClassName: 'text-white', ringStyle: 'match' }
+        return { title: 'Suspects', category: 'Actividad Comercial', icon: Target, centerGradientClass: 'bg-gradient-to-br from-[#8b5cf6] to-[#6d28d9]', iconClassName: 'text-white', ringStyle: 'match' }
     }
     if (type === 'lead_registered') {
         return { title: 'Leads', category: 'Actividad Comercial', icon: Users, centerGradientClass: 'bg-gradient-to-br from-[#3b82f6] to-[#1d4ed8]', iconClassName: 'text-white', ringStyle: 'match' }
