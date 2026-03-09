@@ -280,6 +280,10 @@ export default function PreLeadModal({
 
                 {/* Form */}
                 <form id="pre-lead-form" onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
+                    <div className='ah-required-note' role='note'>
+                        <span className='ah-required-note-dot' aria-hidden='true' />
+                        Campos obligatorios: marcados con * y resaltados en rojo
+                    </div>
 
                     {/* 🏢 Sección de Empresa */}
                     <div className='space-y-6'>
@@ -318,8 +322,8 @@ export default function PreLeadModal({
                             </div>
 
                             <div className='space-y-1.5'>
-                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
-                                    Nombre de la Empresa
+                                <label className='block text-sm font-medium text-[var(--text-primary)] ah-required-label'>
+                                    Nombre de la Empresa <span className='ah-required-asterisk'>*</span>
                                 </label>
                                 <input
                                     required

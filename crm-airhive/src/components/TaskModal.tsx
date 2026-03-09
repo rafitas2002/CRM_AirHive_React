@@ -231,9 +231,14 @@ export default function TaskModal({
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className='p-8 space-y-6 overflow-y-auto custom-scrollbar flex-1 min-h-0'>
+                    <div className='ah-required-note' role='note'>
+                        <span className='ah-required-note-dot' aria-hidden='true' />
+                        Campos obligatorios: marcados con * y resaltados en rojo
+                    </div>
+
                     {!leadId && (
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>Lead Asociado *</label>
+                            <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest ah-required-label'>Lead Asociado <span className='ah-required-asterisk'>*</span></label>
                             <select
                                 required
                                 disabled={mode === 'edit' && !isModificationMode}
@@ -251,13 +256,13 @@ export default function TaskModal({
                     )}
 
                     <div className='space-y-2'>
-                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>Tipo de Actividad *</label>
+                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest ah-required-label'>Tipo de Actividad <span className='ah-required-asterisk'>*</span></label>
                         <div className="relative" ref={dropdownRef}>
                             <button
                                 type="button"
                                 disabled={mode === 'edit' && !isModificationMode}
                                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                                className={`w-full flex items-center justify-between px-4 py-3 border border-[var(--input-border)] rounded-xl transition-all font-bold text-sm
+                                className={`ah-required-control w-full flex items-center justify-between px-4 py-3 border border-[var(--input-border)] rounded-xl transition-all font-bold text-sm
                                     ${mode === 'edit' && !isModificationMode
                                         ? 'bg-[var(--hover-bg)] opacity-70 cursor-not-allowed'
                                         : 'bg-[var(--input-bg)] hover:border-[#2048FF] focus:ring-2 focus:ring-[#2048FF]/20'}`}
@@ -306,7 +311,7 @@ export default function TaskModal({
                             </div>
 
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>¿Por qué se realizó este cambio?</label>
+                                <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest ah-required-label'>¿Por qué se realizó este cambio? <span className='ah-required-asterisk'>*</span></label>
                                 <textarea
                                     required
                                     value={changeReason}
@@ -339,7 +344,7 @@ export default function TaskModal({
 
                     <div className='grid grid-cols-2 gap-4'>
                         <div className='space-y-2'>
-                            <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest'>Fecha Límite</label>
+                            <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest ah-required-label'>Fecha Límite <span className='ah-required-asterisk'>*</span></label>
                             <input
                                 required
                                 disabled={mode === 'edit' && !isModificationMode}

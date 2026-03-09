@@ -188,8 +188,15 @@ export default function GlobalMeetingHandler() {
         }
     }, [userId, checkUpdates, supabase])
 
-    const handleConfirmMeeting = async (wasHeld: boolean, notes: string) => {
+    const handleConfirmMeeting = async (payload: {
+        wasHeld: boolean
+        notes: string
+        notHeldReasonId?: string | null
+        notHeldReasonCustom?: string | null
+        notHeldResponsibility?: 'propia' | 'ajena' | null
+    }) => {
         if (!selectedMeeting || !userId) return
+        if (selectedMeeting.seller_id !== userId) return
 
         const meetingId = selectedMeeting.id
         if (processingMeetings.current.has(meetingId)) {
@@ -203,8 +210,13 @@ export default function GlobalMeetingHandler() {
 
             const result = await confirmMeeting(
                 meetingId,
-                wasHeld,
-                notes,
+                payload.wasHeld,
+                {
+                    notes: payload.notes,
+                    notHeldReasonId: payload.notHeldReasonId || null,
+                    notHeldReasonCustom: payload.notHeldReasonCustom || null,
+                    notHeldResponsibility: payload.notHeldResponsibility || null
+                },
                 userId
             )
 

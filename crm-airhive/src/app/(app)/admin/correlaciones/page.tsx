@@ -24,7 +24,9 @@ import {
     Timer,
     CheckCircle,
     MapPin,
-    Hash
+    Hash,
+    Eye,
+    EyeOff
 } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import CorrelationScatterWindow from '@/components/insights/CorrelationScatterWindow'
@@ -228,6 +230,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
     const [loading, setLoading] = useState(true)
     const [forecastLoading, setForecastLoading] = useState(false)
     const [autoClosingMonth, setAutoClosingMonth] = useState(false)
+    const [showCompanyRegistry, setShowCompanyRegistry] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [sortBy, setSortBy] = useState('totalSales')
     const [genderFilter, setGenderFilter] = useState('all')
@@ -357,6 +360,12 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         setYMetric(preset.y)
     }, [selectedPresetId])
 
+    const getMeetingsHeld = (row: any) => Number(row?.meetingsHeldCount || 0)
+    const getMeetingsPending = (row: any) => Number(row?.meetingsPendingCount || 0)
+    const getMeetingsPresencial = (row: any) => Number(row?.meetingsPresencialCount || 0)
+    const getMeetingsLlamada = (row: any) => Number(row?.meetingsLlamadaCount || 0)
+    const getMeetingsZoom = (row: any) => Number(row?.meetingsVideoCount || 0)
+
     const scopeMetrics = useMemo(() => METRIC_CATALOG.filter((metric) => metric.scopes.includes(analysisScope)), [analysisScope])
 
     useEffect(() => {
@@ -397,6 +406,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
             if (sortBy === 'growth') return b.growth - a.growth
             if (sortBy === 'efficiency') return b.medalRatio - a.medalRatio
             if (sortBy === 'meetings') return a.meetingsPerClose - b.meetingsPerClose // Lower is better
+            if (sortBy === 'meetingsHeld') return getMeetingsHeld(b) - getMeetingsHeld(a)
+            if (sortBy === 'meetingsPending') return getMeetingsPending(b) - getMeetingsPending(a)
             if (sortBy === 'accuracy') return b.forecastAccuracy - a.forecastAccuracy
             if (sortBy === 'speed') return a.avgResponseTimeHours - b.avgResponseTimeHours // Lower is better
             return 0
@@ -788,6 +799,8 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                     <option value="closedProjects">Ordenar por: Proyectos cerrados</option>
                                     <option value="distinctClosedProjects">Ordenar por: Proyectos distintos cerrados</option>
                                     <option value="meetings">Ordenar por: Effort (Mtg/Close)</option>
+                                    <option value="meetingsHeld">Ordenar por: Juntas realizadas</option>
+                                    <option value="meetingsPending">Ordenar por: Juntas pendientes</option>
                                     <option value="accuracy">Ordenar por: Forecast Accuracy</option>
                                     <option value="speed">Ordenar por: Response Speed</option>
                                     <option value="tenure">Ordenar por: Antigüedad</option>
@@ -835,6 +848,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                         <th className='px-8 py-5 text-center'>Badges Acum.</th>
                                         <th className='px-8 py-5 text-center'>Medallas</th>
                                         <th className='px-8 py-5 text-center'>Effort (Mtg/C)</th>
+                                        <th className='px-8 py-5 text-center'>Juntas (R/P + Modalidad)</th>
                                         <th className='px-8 py-5 text-center'>Accuracy</th>
                                         <th className='px-8 py-5 text-center'>Top Ind.</th>
                                     </tr>
@@ -940,6 +954,16 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                                 </span>
                                             </td>
                                             <td className='px-8 py-5 text-center'>
+                                                <div className='flex flex-col items-center gap-1'>
+                                                    <span className='font-black text-sm' style={{ color: 'var(--text-primary)' }}>
+                                                        R {getMeetingsHeld(item)} · P {getMeetingsPending(item)}
+                                                    </span>
+                                                    <span className='text-[9px] font-bold opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                                        Pres {getMeetingsPresencial(item)} · Llam {getMeetingsLlamada(item)} · Zoom {getMeetingsZoom(item)}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className='px-8 py-5 text-center'>
                                                 <span className='font-black text-sm' style={{ color: item.forecastAccuracy > 80 ? '#10b981' : 'var(--text-primary)' }}>
                                                     {item.forecastAccuracy.toFixed(0)}%
                                                 </span>
@@ -964,52 +988,73 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                     )}
                     {/* Past Races History */}
                     {showGeneralView && (
-                    <div className='order-8 space-y-6'>
-                        <div className='flex items-center gap-4'>
-                            <div className='ah-icon-card ah-icon-card-sm'>
-                                <Building2 size={22} strokeWidth={2} />
+                    <div className='order-8 space-y-4'>
+                        <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
+                            <div className='flex items-center gap-4'>
+                                <div className='ah-icon-card ah-icon-card-sm'>
+                                    <Trophy size={22} strokeWidth={2} />
+                                </div>
+                                <div>
+                                    <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Registro de Empresas</h2>
+                                    <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
+                                        Historial de empresas registradas por usuarios
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Registro de Empresas</h2>
-                                <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
-                                    Historial de empresas registradas por usuarios
-                                </p>
-                            </div>
+                            <button
+                                type='button'
+                                onClick={() => setShowCompanyRegistry((prev) => !prev)}
+                                className='inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all hover:opacity-90 cursor-pointer'
+                                style={{ borderColor: 'var(--card-border)', color: 'var(--text-primary)', background: 'var(--card-bg)' }}
+                            >
+                                {showCompanyRegistry ? <EyeOff size={14} /> : <Eye size={14} />}
+                                {showCompanyRegistry ? 'Ocultar registro' : 'Mostrar registro'}
+                            </button>
                         </div>
 
-                        <div className='rounded-[28px] border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
-                            <div className='overflow-x-auto'>
-                                <table className='w-full text-left border-collapse'>
-                                    <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
-                                        <tr>
-                                            <th className='px-8 py-4'>Fecha Registro</th>
-                                            <th className='px-8 py-4'>Empresa</th>
-                                            <th className='px-8 py-4'>Registrada Por</th>
-                                            <th className='px-8 py-4'>Industria</th>
-                                            <th className='px-8 py-4'>Ubicación</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
-                                        {companyRegistry.slice(0, 120).map((entry) => (
-                                            <tr key={entry.id} className='hover:bg-black/5 transition-colors'>
-                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-primary)' }}>
-                                                    {entry.createdAt ? new Date(entry.createdAt).toLocaleString('es-MX') : 'N/A'}
-                                                </td>
-                                                <td className='px-8 py-4 font-black text-sm' style={{ color: 'var(--text-primary)' }}>{entry.nombre}</td>
-                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.ownerName}</td>
-                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.industria}</td>
-                                                <td className='px-8 py-4 font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>{entry.ubicacion}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {companyRegistry.length === 0 && (
-                                <div className='p-8 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
-                                    Aún no hay registros de empresas para mostrar.
+                        {showCompanyRegistry ? (
+                            <div className='rounded-[22px] border overflow-hidden max-w-5xl' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                <div className='px-5 py-3 border-b flex items-center justify-between text-[10px] font-black uppercase tracking-widest' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'var(--background)' }}>
+                                    <span>Tabla compacta con scroll</span>
+                                    <span>{companyRegistry.length.toLocaleString('es-MX')} registros</span>
                                 </div>
-                            )}
-                        </div>
+                                <div className='max-h-[300px] overflow-auto custom-scrollbar'>
+                                    <table className='w-full text-left border-collapse'>
+                                        <thead className='uppercase text-[10px] font-black tracking-[0.2em]' style={{ background: 'var(--background)', color: 'var(--text-secondary)' }}>
+                                            <tr>
+                                                <th className='px-5 py-3'>Fecha Registro</th>
+                                                <th className='px-5 py-3'>Empresa</th>
+                                                <th className='px-5 py-3'>Registrada Por</th>
+                                                <th className='px-5 py-3'>Industria</th>
+                                                <th className='px-5 py-3'>Ubicación</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className='divide-y' style={{ borderColor: 'var(--card-border)' }}>
+                                            {companyRegistry.map((entry) => (
+                                                <tr key={entry.id} className='hover:bg-black/5 transition-colors'>
+                                                    <td className='px-5 py-3 font-bold text-xs' style={{ color: 'var(--text-primary)' }}>
+                                                        {entry.createdAt ? new Date(entry.createdAt).toLocaleString('es-MX') : 'N/A'}
+                                                    </td>
+                                                    <td className='px-5 py-3 font-black text-xs' style={{ color: 'var(--text-primary)' }}>{entry.nombre}</td>
+                                                    <td className='px-5 py-3 font-bold text-xs' style={{ color: 'var(--text-secondary)' }}>{entry.ownerName}</td>
+                                                    <td className='px-5 py-3 font-bold text-xs' style={{ color: 'var(--text-secondary)' }}>{entry.industria}</td>
+                                                    <td className='px-5 py-3 font-bold text-xs' style={{ color: 'var(--text-secondary)' }}>{entry.ubicacion}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {companyRegistry.length === 0 && (
+                                    <div className='p-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>
+                                        Aún no hay registros de empresas para mostrar.
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className='rounded-2xl border border-dashed px-5 py-4 text-sm font-semibold max-w-3xl' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'var(--card-bg)' }}>
+                                Registro de empresas oculto. Usa <strong style={{ color: 'var(--text-primary)' }}>Mostrar registro</strong> para desplegarlo.
+                            </div>
+                        )}
                     </div>
                     )}
 

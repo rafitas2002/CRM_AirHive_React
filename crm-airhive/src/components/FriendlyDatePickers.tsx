@@ -217,11 +217,13 @@ function PickerShell({
             {open && !disabled && (
                 <div
                     ref={panelRef}
-                    className='absolute right-0 left-auto z-[200] mt-2 w-[24.5rem] max-w-[calc(100vw-1.25rem)] rounded-2xl border shadow-2xl p-4'
+                    className='absolute left-0 right-auto top-full z-[220] mt-2 w-full min-w-[17rem] max-w-full rounded-2xl border shadow-2xl p-4'
                     style={{
                         background: 'color-mix(in srgb, var(--card-bg) 88%, var(--background))',
                         borderColor: 'var(--card-border)',
-                        boxShadow: '0 18px 50px rgba(0,0,0,0.35)'
+                        boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
+                        maxHeight: 'min(34rem, calc(100dvh - 220px))',
+                        overflowY: 'auto'
                     }}
                 >
                     {children}

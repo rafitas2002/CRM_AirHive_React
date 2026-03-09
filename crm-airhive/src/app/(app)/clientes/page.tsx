@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import ClientsTable from '@/components/ClientsTable'
@@ -10,6 +10,8 @@ import ClientDetailView from '@/components/ClientDetailView'
 import { Search, Users, Pencil, RotateCw, ListFilter, Clock3, TriangleAlert } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
+import { useTheme } from '@/lib/ThemeContext'
+import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type LeadInsert = Database['public']['Tables']['clientes']['Insert']
@@ -23,7 +25,7 @@ type NegotiationAgingRow = {
     empresa_id: string | null
     empresa: string | null
     nombre: string | null
-    valor_estimado: number
+    valor_estimado: number | null
     probabilidad: number | null
     forecast_close_date: string | null
     negotiation_started_at: string | null
@@ -48,9 +50,9 @@ const normalizeLead = (lead: Lead) => ({
     email: lead.email || '',
     telefono: lead.telefono || '',
     etapa: lead.etapa || 'Negociación',
-    valor_estimado: lead.valor_estimado || 0,
+    valor_estimado: lead.valor_estimado ?? null,
     valor_real_cierre: (lead as any).valor_real_cierre ?? null,
-    valor_implementacion_estimado: (lead as any).valor_implementacion_estimado ?? 0,
+    valor_implementacion_estimado: (lead as any).valor_implementacion_estimado ?? null,
     valor_implementacion_real_cierre: (lead as any).valor_implementacion_real_cierre ?? null,
     oportunidad: lead.oportunidad || '',
     calificacion: lead.calificacion || 3,
@@ -63,7 +65,15 @@ const normalizeLead = (lead: Lead) => ({
     loss_subreason_id: (lead as any).loss_subreason_id ?? null,
     loss_notes: (lead as any).loss_notes ?? '',
     loss_recorded_at: (lead as any).loss_recorded_at ?? null,
-    loss_recorded_by: (lead as any).loss_recorded_by ?? null
+    loss_recorded_by: (lead as any).loss_recorded_by ?? null,
+    prospect_role_catalog_id: (lead as any).prospect_role_catalog_id ?? null,
+    prospect_role_custom: (lead as any).prospect_role_custom ?? '',
+    prospect_age_exact: (lead as any).prospect_age_exact ?? null,
+    prospect_age_range_id: (lead as any).prospect_age_range_id ?? null,
+    prospect_decision_role: (lead as any).prospect_decision_role ?? null,
+    prospect_preferred_contact_channel: (lead as any).prospect_preferred_contact_channel ?? null,
+    prospect_linkedin_url: (lead as any).prospect_linkedin_url ?? '',
+    prospect_is_family_member: (lead as any).prospect_is_family_member ?? false
 })
 
 import { useAuth } from '@/lib/auth'
@@ -71,9 +81,41 @@ import { useAuth } from '@/lib/auth'
 function parseSupabaseError(error: any, fallback: string) {
     if (!error) return fallback
     if (typeof error === 'string') return error
-    if (error?.message) return error.message as string
+    const nested = error?.error ?? null
+    const message = String(
+        error?.message
+        || error?.error_description
+        || error?.description
+        || nested?.message
+        || ''
+    ).trim()
+    const details = String(error?.details || nested?.details || '').trim()
+    const hint = String(error?.hint || nested?.hint || '').trim()
+    const code = String(error?.code || nested?.code || '').trim()
+    const combined = [message, details, hint, code].filter(Boolean).join(' | ')
+    const normalized = combined.toLowerCase()
 
-    const fragments = [error?.code, error?.details, error?.hint].filter(Boolean)
+    if (
+        normalized.includes('valor_estimado')
+        && (code === '23502' || normalized.includes('null value'))
+    ) {
+        return 'Tu base actual exige mensualidad estimada. Aplica la migración 076 para permitir "No disponible".'
+    }
+
+    if (
+        normalized.includes('valor_implementacion_estimado')
+        && (code === '23502' || normalized.includes('null value'))
+    ) {
+        return 'Tu base actual exige valor de implementación estimado. Aplica la migración 076 para permitir "No disponible".'
+    }
+
+    if (normalized.includes('delete requires a where clause')) {
+        return 'Tu base tiene un trigger legacy bloqueado por safe-delete. Aplica las migraciones 077 y 084 en Supabase y vuelve a intentar.'
+    }
+
+    if (message) return message
+
+    const fragments = [code, details, hint].filter(Boolean)
     if (fragments.length > 0) {
         return fragments.join(' | ')
     }
@@ -107,6 +149,7 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
 }
 
 export default function LeadsPage() {
+    const { theme } = useTheme()
     const [leads, setLeads] = useState<Lead[]>([])
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
     const [loading, setLoading] = useState(true)
@@ -150,6 +193,9 @@ export default function LeadsPage() {
     const [agingError, setAgingError] = useState<string | null>(null)
     const [agingOnlyStalled, setAgingOnlyStalled] = useState(false)
     const [agingMinDays, setAgingMinDays] = useState('0')
+    const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
+    const toneChipClassName = 'border shadow-sm [background:var(--tone-chip-bg)] [border-color:var(--tone-chip-border)] [color:var(--tone-chip-text)]'
+    const toneChipHoverButtonClassName = `${toneChipClassName} transition-all cursor-pointer hover:-translate-y-px hover:[background:var(--tone-chip-hover-bg)] hover:[border-color:var(--tone-chip-hover-border)] hover:[color:var(--tone-chip-hover-text)] hover:[box-shadow:0_10px_22px_-14px_var(--tone-shadow)] active:translate-y-0`
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -367,7 +413,7 @@ export default function LeadsPage() {
             empresa_id: row?.empresa_id ? String(row.empresa_id) : null,
             empresa: row?.empresa ? String(row.empresa) : null,
             nombre: row?.nombre ? String(row.nombre) : null,
-            valor_estimado: row?.valor_estimado == null ? 0 : Number(row.valor_estimado),
+            valor_estimado: row?.valor_estimado == null ? null : Number(row.valor_estimado),
             probabilidad: row?.probabilidad == null ? null : Number(row.probabilidad),
             forecast_close_date: row?.forecast_close_date ? String(row.forecast_close_date) : null,
             negotiation_started_at: row?.negotiation_started_at ? String(row.negotiation_started_at) : null,
@@ -525,6 +571,44 @@ export default function LeadsPage() {
         }
     }
 
+    const recomputeSellerCompanyBadges = async (params: {
+        sellerId: string
+        empresaId?: string | null
+        sourceLeadId?: number | null
+    }) => {
+        const sellerId = String(params.sellerId || '')
+        if (!sellerId) return
+
+        const empresaId = params.empresaId ? String(params.empresaId) : null
+        const sourceLeadId = params.sourceLeadId ?? null
+
+        try {
+            await (supabase.rpc as any)('recompute_badges_for_seller_company', {
+                p_seller_id: sellerId,
+                p_empresa_id: empresaId,
+                p_source_lead_id: sourceLeadId
+            })
+            return
+        } catch (error) {
+            console.warn('recompute_badges_for_seller_company failed, using fallback path:', error)
+        }
+
+        await Promise.all([
+            (supabase.rpc as any)('recompute_seller_special_badges', {
+                p_seller_id: sellerId,
+                p_source_lead_id: sourceLeadId
+            }),
+            (supabase.rpc as any)('recompute_seller_deal_value_tier_badges_usd', {
+                p_seller_id: sellerId,
+                p_source_lead_id: sourceLeadId
+            }).catch(() => null),
+            (supabase.rpc as any)('recompute_seller_company_size_badges_strict', {
+                p_seller_id: sellerId,
+                p_source_lead_id: sourceLeadId
+            }).catch(() => null)
+        ])
+    }
+
     const handleSaveLead = async (leadData: ReturnType<typeof normalizeLead> & { empresa_id?: string }) => {
         if (!currentUser) {
             alert('No se pudo identificar al usuario actual.')
@@ -542,21 +626,38 @@ export default function LeadsPage() {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
             const realClosureValue = isWon
-                ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
+                ? (leadData.valor_real_cierre ?? null)
                 : null
             const realImplementationValue = isWon
-                ? ((leadData as any).valor_implementacion_real_cierre ?? (leadData as any).valor_implementacion_estimado ?? 0)
+                ? ((leadData as any).valor_implementacion_real_cierre ?? null)
                 : null
             const safeCreateStage = isWon ? 'Negociación' : leadData.etapa
+            const prospectRoleCatalogId = (leadData as any).prospect_role_catalog_id || null
+            const prospectRoleCustom = prospectRoleCatalogId
+                ? null
+                : (String((leadData as any).prospect_role_custom || '').trim() || null)
+            const prospectAgeExactRaw = (leadData as any).prospect_age_exact
+            const prospectAgeExact = prospectAgeExactRaw == null || prospectAgeExactRaw === ''
+                ? null
+                : Math.round(Number(prospectAgeExactRaw))
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
+                contacto: leadData.nombre,
                 email: leadData.email,
                 telefono: leadData.telefono,
+                prospect_role_catalog_id: prospectRoleCatalogId,
+                prospect_role_custom: prospectRoleCustom,
+                prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
+                prospect_age_range_id: (leadData as any).prospect_age_range_id || null,
+                prospect_decision_role: (leadData as any).prospect_decision_role || null,
+                prospect_preferred_contact_channel: (leadData as any).prospect_preferred_contact_channel || null,
+                prospect_linkedin_url: String((leadData as any).prospect_linkedin_url || '').trim() || null,
+                prospect_is_family_member: Boolean((leadData as any).prospect_is_family_member),
                 etapa: safeCreateStage,
                 valor_estimado: leadData.valor_estimado,
                 valor_real_cierre: isWon ? null : realClosureValue,
-                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? null,
                 valor_implementacion_real_cierre: isWon ? null : realImplementationValue,
                 forecast_close_date: leadData.forecast_close_date || null,
                 oportunidad: leadData.oportunidad,
@@ -584,8 +685,17 @@ export default function LeadsPage() {
                 .select()
 
             if (error) {
-                console.error('Error creating lead:', error)
-                alert('Error al crear el lead: ' + parseSupabaseError(error, 'No se pudo crear el lead.'))
+                const parsed = parseSupabaseError(error, 'No se pudo crear el lead.')
+                console.warn('Error creating lead:', {
+                    code: (error as any)?.code ?? (error as any)?.error?.code,
+                    message: (error as any)?.message ?? (error as any)?.error?.message,
+                    details: (error as any)?.details ?? (error as any)?.error?.details,
+                    hint: (error as any)?.hint ?? (error as any)?.error?.hint,
+                    parsed,
+                    raw: error
+                })
+                alert('Error al crear el lead: ' + parsed)
+                return
             } else if (data && data[0]) {
                 const newId = data[0].id
 
@@ -594,7 +704,7 @@ export default function LeadsPage() {
                         etapa: 'Cerrado Ganado',
                         valor_estimado: leadData.valor_estimado,
                         valor_real_cierre: realClosureValue,
-                        valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                        valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? null,
                         valor_implementacion_real_cierre: realImplementationValue,
                         closed_at_real: toIsoFromDateOnly((leadData as any).closed_at_real) || new Date().toISOString()
                     }
@@ -676,20 +786,37 @@ export default function LeadsPage() {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
             const realClosureValue = isWon
-                ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0)
+                ? (leadData.valor_real_cierre ?? null)
                 : null
             const realImplementationValue = isWon
-                ? ((leadData as any).valor_implementacion_real_cierre ?? (leadData as any).valor_implementacion_estimado ?? 0)
+                ? ((leadData as any).valor_implementacion_real_cierre ?? null)
                 : null
+            const prospectRoleCatalogId = (leadData as any).prospect_role_catalog_id || null
+            const prospectRoleCustom = prospectRoleCatalogId
+                ? null
+                : (String((leadData as any).prospect_role_custom || '').trim() || null)
+            const prospectAgeExactRaw = (leadData as any).prospect_age_exact
+            const prospectAgeExact = prospectAgeExactRaw == null || prospectAgeExactRaw === ''
+                ? null
+                : Math.round(Number(prospectAgeExactRaw))
             const payload: any = {
                 empresa: finalEmpresaName,
                 nombre: leadData.nombre,
+                contacto: leadData.nombre,
                 email: leadData.email,
                 telefono: leadData.telefono,
+                prospect_role_catalog_id: prospectRoleCatalogId,
+                prospect_role_custom: prospectRoleCustom,
+                prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
+                prospect_age_range_id: (leadData as any).prospect_age_range_id || null,
+                prospect_decision_role: (leadData as any).prospect_decision_role || null,
+                prospect_preferred_contact_channel: (leadData as any).prospect_preferred_contact_channel || null,
+                prospect_linkedin_url: String((leadData as any).prospect_linkedin_url || '').trim() || null,
+                prospect_is_family_member: Boolean((leadData as any).prospect_is_family_member),
                 etapa: leadData.etapa,
                 valor_estimado: leadData.valor_estimado,
                 valor_real_cierre: realClosureValue,
-                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? 0,
+                valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? null,
                 valor_implementacion_real_cierre: realImplementationValue,
                 forecast_close_date: leadData.forecast_close_date || null,
                 oportunidad: leadData.oportunidad,
@@ -752,7 +879,8 @@ export default function LeadsPage() {
                 .eq('id', currentLead.id)
 
             if (error) {
-                alert(`Error al actualizar el lead: ${error.message} ${error.details || ''}`)
+                alert(`Error al actualizar el lead: ${parseSupabaseError(error, 'No se pudo actualizar el lead.')}`)
+                return
             } else {
                 const wasWonBefore = isWonStage(currentLead.etapa)
                 const isWonNow = isWonStage(leadData.etapa)
@@ -767,9 +895,10 @@ export default function LeadsPage() {
                     }
                 } else if (wasWonBefore && ownerId) {
                     try {
-                        await (supabase.rpc as any)('recompute_seller_special_badges', {
-                            p_seller_id: ownerId,
-                            p_source_lead_id: currentLead.id
+                        await recomputeSellerCompanyBadges({
+                            sellerId: ownerId,
+                            empresaId: finalEmpresaId as string,
+                            sourceLeadId: currentLead.id
                         })
                     } catch (badgeError) {
                         console.warn('Lead moved out of won stage but special badge recompute failed:', badgeError)
@@ -790,7 +919,7 @@ export default function LeadsPage() {
                             eventType: 'lead_closed',
                             entityType: 'lead',
                             entityId: currentLead.id,
-                            metadata: { outcome: leadData.etapa, value: realClosureValue ?? leadData.valor_estimado }
+                            metadata: { outcome: leadData.etapa, value: realClosureValue }
                         })
                     }
                 } else if (probChanged) {
@@ -886,42 +1015,11 @@ export default function LeadsPage() {
         } else {
             if (shouldRecomputeBadges && ownerId) {
                 try {
-                    const industryIds = new Set<string>()
-
-                    if (companyId) {
-                        const [{ data: companyRow }, { data: companyIndustryRows }] = await Promise.all([
-                            (supabase
-                                .from('empresas') as any)
-                                .select('industria_id')
-                                .eq('id', companyId)
-                                .maybeSingle(),
-                            (supabase
-                                .from('company_industries') as any)
-                                .select('industria_id')
-                                .eq('empresa_id', companyId)
-                        ])
-
-                        const primaryIndustryId = String((companyRow as any)?.industria_id || '')
-                        if (primaryIndustryId) industryIds.add(primaryIndustryId)
-                        for (const row of (companyIndustryRows || [])) {
-                            const industriaId = String((row as any)?.industria_id || '')
-                            if (industriaId) industryIds.add(industriaId)
-                        }
-                    }
-
-                    await Promise.all([
-                        ...Array.from(industryIds).map(async (industriaId) => {
-                            await (supabase.rpc as any)('recompute_seller_industry_badge', {
-                                p_seller_id: ownerId,
-                                p_industria_id: industriaId,
-                                p_source_lead_id: leadId
-                            })
-                        }),
-                        (supabase.rpc as any)('recompute_seller_special_badges', {
-                            p_seller_id: ownerId,
-                            p_source_lead_id: leadId
-                        })
-                    ])
+                    await recomputeSellerCompanyBadges({
+                        sellerId: ownerId,
+                        empresaId: companyId || null,
+                        sourceLeadId: leadId
+                    })
                 } catch (badgeRecomputeError) {
                     console.warn('Lead deleted but badge recomputation failed:', badgeRecomputeError)
                 }
@@ -998,7 +1096,7 @@ export default function LeadsPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Negociaciones activas
+                                    Leads
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
                                     Pipeline operativo comercial: prospección y negociación. Los cierres se consultan en Empresas Cerradas.
@@ -1077,12 +1175,8 @@ export default function LeadsPage() {
                                         key={scope.key}
                                         type='button'
                                         onClick={() => setPipelineScope(scope.key as typeof pipelineScope)}
-                                        className={[
-                                            'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
-                                            active
-                                                ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
-                                                : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
-                                        ].join(' ')}
+                                        className={`${toneChipHoverButtonClassName} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
+                                        style={toneVars(active ? 'blue' : 'slate')}
                                     >
                                         {scope.label}
                                     </button>
@@ -1091,7 +1185,8 @@ export default function LeadsPage() {
                             <button
                                 type='button'
                                 onClick={() => router.push('/cierres')}
-                                className='ml-auto px-3 py-1.5 rounded-xl border border-emerald-400/25 bg-emerald-500/10 text-emerald-200 text-[10px] font-black uppercase tracking-[0.15em] hover:bg-emerald-500/15 hover:border-emerald-300/35 transition-all cursor-pointer'
+                                className={`${toneChipHoverButtonClassName} ml-auto px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
+                                style={toneVars('emerald')}
                             >
                                 Ver Empresas Cerradas
                             </button>
@@ -1205,12 +1300,8 @@ export default function LeadsPage() {
                             <button
                                 type='button'
                                 onClick={() => setAgingOnlyStalled((v) => !v)}
-                                className={[
-                                    'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
-                                    agingOnlyStalled
-                                        ? 'bg-rose-500/12 border-rose-400/35 text-rose-200'
-                                        : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
-                                ].join(' ')}
+                                className={`${toneChipHoverButtonClassName} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
+                                style={toneVars(agingOnlyStalled ? 'rose' : 'slate')}
                             >
                                 Solo atorados
                             </button>
@@ -1221,12 +1312,8 @@ export default function LeadsPage() {
                                         key={days}
                                         type='button'
                                         onClick={() => setAgingMinDays(days)}
-                                        className={[
-                                            'px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-[0.15em] transition-all cursor-pointer',
-                                            active
-                                                ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
-                                                : 'bg-white/5 border-white/10 text-white/65 hover:bg-white/10 hover:border-white/20 hover:text-white/85'
-                                        ].join(' ')}
+                                        className={`${toneChipHoverButtonClassName} px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
+                                        style={toneVars(active ? 'blue' : 'slate')}
                                     >
                                         {days === '0' ? 'Todos los días' : `${days}+ días`}
                                     </button>
@@ -1235,7 +1322,8 @@ export default function LeadsPage() {
                             <button
                                 type='button'
                                 onClick={fetchNegotiationAging}
-                                className='ml-auto px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 text-white/75 text-[10px] font-black uppercase tracking-[0.15em] hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer'
+                                className={`${toneChipHoverButtonClassName} ml-auto px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
+                                style={toneVars('blue')}
                             >
                                 Actualizar Aging
                             </button>
@@ -1253,7 +1341,7 @@ export default function LeadsPage() {
                         {agingLoading && agingRows.length === 0 ? (
                             <div className='w-full py-14 flex flex-col items-center justify-center gap-3'>
                                 <div className='w-8 h-8 border-4 border-[#2048FF] border-t-transparent rounded-full animate-spin' />
-                                <p className='text-xs font-bold uppercase tracking-widest text-white/50'>Calculando aging...</p>
+                                <p className='text-xs font-bold uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>Calculando aging...</p>
                             </div>
                         ) : filteredAgingRows.length === 0 ? (
                             <div className='w-full py-14 text-center text-sm font-semibold' style={{ color: 'var(--text-secondary)' }}>
@@ -1275,18 +1363,14 @@ export default function LeadsPage() {
                                         const lead = leads.find((item) => Number(item.id) === Number(row.lead_id))
                                         const sellerDisplay = row.seller_full_name || row.seller_username || 'Sin asignar'
                                         const agingDays = Number(row.aging_days || 0)
-                                        const agingChip = agingDays >= 14
-                                            ? 'bg-rose-500/12 border-rose-400/30 text-rose-200'
-                                            : agingDays >= 7
-                                                ? 'bg-amber-500/12 border-amber-400/30 text-amber-200'
-                                                : 'bg-white/5 border-white/10 text-white/80'
-                                        const statusChip = row.is_stalled
-                                            ? 'bg-rose-500/12 border-rose-400/35 text-rose-200'
+                                        const agingTone: UiToneLane = agingDays >= 14 ? 'rose' : agingDays >= 7 ? 'amber' : 'slate'
+                                        const statusTone: UiToneLane = row.is_stalled
+                                            ? 'rose'
                                             : row.has_future_meeting
-                                                ? 'bg-emerald-500/12 border-emerald-400/35 text-emerald-200'
+                                                ? 'emerald'
                                                 : row.has_open_tasks
-                                                    ? 'bg-blue-500/12 border-blue-400/35 text-blue-200'
-                                                    : 'bg-white/5 border-white/10 text-white/70'
+                                                    ? 'blue'
+                                                    : 'slate'
                                         const statusText = row.is_stalled
                                             ? 'Atorado'
                                             : row.has_future_meeting
@@ -1298,7 +1382,7 @@ export default function LeadsPage() {
                                             <tr
                                                 key={`aging-${row.lead_id}`}
                                                 onClick={() => handleAgingRowClick(row)}
-                                                className='border-b transition-colors cursor-pointer hover:bg-white/5'
+                                                className='border-b transition-colors cursor-pointer hover:bg-[var(--hover-bg)]'
                                                 style={{ borderColor: 'var(--card-border)' }}
                                                 title={lead ? 'Abrir detalle del lead' : 'Abrir detalle'}
                                             >
@@ -1316,7 +1400,10 @@ export default function LeadsPage() {
                                                     </div>
                                                 </td>
                                                 <td className='px-4 py-3 align-top'>
-                                                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-xl border text-xs font-black ${agingChip}`}>
+                                                    <div
+                                                        className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-xl text-xs font-black ${toneChipClassName}`}
+                                                        style={toneVars(agingTone)}
+                                                    >
                                                         {agingDays} días
                                                     </div>
                                                     {row.negotiation_started_at && (
@@ -1353,15 +1440,27 @@ export default function LeadsPage() {
                                                     <div className='text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
                                                         {row.pending_tasks_count}
                                                     </div>
-                                                    <div className='text-[11px]' style={{ color: row.overdue_tasks_count > 0 ? '#fca5a5' : 'var(--text-secondary)' }}>
+                                                    <div
+                                                        className='text-[11px]'
+                                                        style={{
+                                                            color: row.overdue_tasks_count > 0
+                                                                ? 'color-mix(in srgb, #e11d48 72%, var(--text-primary))'
+                                                                : 'var(--text-secondary)'
+                                                        }}
+                                                    >
                                                         {row.overdue_tasks_count > 0 ? `${row.overdue_tasks_count} atrasada(s)` : 'sin atraso'}
                                                     </div>
                                                 </td>
-                                                <td className='px-4 py-3 align-top text-sm font-black' style={{ color: '#dbeafe' }}>
-                                                    {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(row.valor_estimado || 0))}
+                                                <td className='px-4 py-3 align-top text-sm font-black' style={{ color: 'var(--text-primary)' }}>
+                                                    {row.valor_estimado == null
+                                                        ? 'N/D'
+                                                        : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(row.valor_estimado))}
                                                 </td>
                                                 <td className='px-4 py-3 align-top'>
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-[0.14em] ${statusChip}`}>
+                                                    <span
+                                                        className={`inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] ${toneChipClassName}`}
+                                                        style={toneVars(statusTone)}
+                                                    >
                                                         {statusText}
                                                     </span>
                                                 </td>

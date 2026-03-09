@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
 import { Building2, ChevronDown, Search, ShieldCheck, XCircle, TrendingDown, AlertTriangle, BarChart3 } from 'lucide-react'
@@ -10,6 +10,8 @@ import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ClientDetailView from '@/components/ClientDetailView'
 import CompanyModal, { type CompanyData } from '@/components/CompanyModal'
 import { useAuth } from '@/lib/auth'
+import { useTheme } from '@/lib/ThemeContext'
+import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
 import { getLeadLossAnalyticsSupportData, type LeadLossAnalyticsRow } from '@/app/actions/lossAnalytics'
 import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
 
@@ -226,6 +228,7 @@ function calculateLossAnalyticsKpis(rows: LeadLossAnalyticsRow[]): LossAnalytics
 
 export default function ClosedCompaniesPage() {
     const auth = useAuth()
+    const { theme } = useTheme()
     const [supabase] = useState(() => createClient())
     const [loading, setLoading] = useState(true)
     const [allLeads, setAllLeads] = useState<LeadRow[]>([])
@@ -255,6 +258,9 @@ export default function ClosedCompaniesPage() {
     const [lossSubreasonOptions, setLossSubreasonOptions] = useState<Array<{ id: string; reason_id: string | null; label: string }>>([])
     const [selectedLossLead, setSelectedLossLead] = useState<LeadRow | null>(null)
     const [isLossLeadDetailOpen, setIsLossLeadDetailOpen] = useState(false)
+    const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
+    const toneChipClassName = 'border shadow-sm [background:var(--tone-chip-bg)] [border-color:var(--tone-chip-border)] [color:var(--tone-chip-text)]'
+    const tonePanelClassName = 'border [background:var(--tone-panel-bg)] [border-color:var(--tone-panel-border)] [color:var(--tone-panel-text)]'
 
     useEffect(() => {
         let cancelled = false
@@ -804,65 +810,77 @@ export default function ClosedCompaniesPage() {
     }
 
     return (
-        <div className='p-8 max-w-[1600px] mx-auto'>
-            <div className='rounded-3xl border border-white/10 bg-black/20 backdrop-blur-md overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.28)]'>
-                <div className='px-8 py-7 border-b border-white/10 bg-gradient-to-r from-black/20 to-transparent'>
-                    <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
-                        <div className='flex items-start gap-4'>
-                            <div className='ah-icon-card h-14 w-14 rounded-2xl shrink-0'>
-                                <Building2 size={24} strokeWidth={2.2} />
-                            </div>
-                            <div>
-                                <h1 className='text-3xl font-black text-[var(--text-primary)]'>Empresas Cerradas</h1>
-                                <p className='text-sm font-bold uppercase tracking-[0.18em] text-[var(--text-secondary)]'>
-                                    Control de empresas con operación activa y seguimiento de cierres perdidos
-                                </p>
-                            </div>
-                        </div>
+        <div className='p-8 max-w-[1600px] mx-auto space-y-6'>
+            <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
+                <div className='flex items-center gap-6'>
+                    <div className='ah-icon-card h-20 w-20 rounded-[30px] shrink-0'>
+                        <Building2 size={34} strokeWidth={2.1} />
+                    </div>
+                    <div>
+                        <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Empresas Cerradas</h1>
+                        <p className='text-sm font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)' }}>
+                            Control de empresas con operación activa y seguimiento de cierres perdidos
+                        </p>
+                    </div>
+                </div>
 
-                        <div className='flex items-center gap-3'>
-                            <div className='rounded-2xl border border-blue-400/35 bg-blue-500/10 px-4 py-2 min-w-[150px]'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-blue-200'>Empresas cerradas</p>
-                                <p className='text-2xl font-black text-white'>{filteredClosedCompanies.length}</p>
-                            </div>
-                            <div className='rounded-2xl border border-rose-400/25 bg-rose-500/10 px-4 py-2 min-w-[150px]'>
-                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-rose-200'>Cerrados perdidos</p>
-                                <p className='text-2xl font-black text-white'>{filteredLostLeads.length}</p>
-                            </div>
+                <div className='flex items-center gap-3'>
+                    <div className='ah-count-chip'>
+                        <span className='ah-count-chip-number'>{filteredClosedCompanies.length}</span>
+                        <div className='ah-count-chip-meta'>
+                            <span className='ah-count-chip-title'>Empresas cerradas</span>
+                            <span className='ah-count-chip-subtitle'>clientes activos</span>
                         </div>
                     </div>
+                    <div
+                        className='ah-count-chip'
+                        style={{
+                            borderColor: 'color-mix(in srgb, #fb7185 42%, var(--card-border))',
+                            background: 'color-mix(in srgb, #fb7185 14%, var(--card-bg))'
+                        }}
+                    >
+                        <span className='ah-count-chip-number' style={{ color: 'color-mix(in srgb, #be123c 62%, var(--text-primary))' }}>{filteredLostLeads.length}</span>
+                        <div className='ah-count-chip-meta'>
+                            <span className='ah-count-chip-title'>Cerrados perdidos</span>
+                            <span className='ah-count-chip-subtitle'>histórico</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                        <div className='mt-6 relative'>
-                        <Search className='w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-white/45' />
+            <div className='rounded-[40px] border shadow-xl overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='px-8 py-6 border-b' style={{ borderColor: 'var(--card-border)' }}>
+                    <div className='ah-search-control'>
+                        <Search className='ah-search-icon' size={20} />
                         <input
                             type='text'
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder='Buscar empresa, lead o vendedor...'
-                            className='w-full rounded-2xl border border-white/10 bg-white/5 pl-12 pr-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#2048FF]/40'
+                            className='ah-search-input'
                         />
-                        </div>
+                    </div>
 
                     {companyDetailError && (
-                        <div className='mt-4 rounded-xl border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200'>
+                        <div className={`mt-4 rounded-xl px-4 py-3 text-sm font-bold ${tonePanelClassName}`} style={toneVars('rose')}>
                             {companyDetailError}
                         </div>
                     )}
                 </div>
 
                 <div className='p-6'>
-                    <section className='rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                        <div className='px-5 py-4 border-b border-white/10 flex items-center gap-2'>
-                            <ShieldCheck size={16} className='text-emerald-300' />
-                            <h2 className='text-xs font-black uppercase tracking-[0.16em] text-white/80'>
+                    <section className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                        <div className='px-5 py-4 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                            <ShieldCheck size={16} style={{ color: 'color-mix(in srgb, #10b981 76%, var(--text-primary))' }} />
+                            <h2 className='text-xs font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-primary)' }}>
                                 Empresas cerradas (clientes activos)
                             </h2>
                         </div>
 
                         {loading ? (
-                            <div className='p-8 text-center text-white/70 animate-pulse'>Cargando empresas cerradas...</div>
+                            <div className='p-8 text-center animate-pulse' style={{ color: 'var(--text-secondary)' }}>Cargando empresas cerradas...</div>
                         ) : filteredClosedCompanies.length === 0 ? (
-                            <div className='p-8 text-center text-white/65'>No hay empresas cerradas para mostrar.</div>
+                            <div className='p-8 text-center' style={{ color: 'var(--text-secondary)' }}>No hay empresas cerradas para mostrar.</div>
                         ) : (
                             <div className='ah-table-scroll custom-scrollbar'>
                                 <table className='ah-table'>
@@ -889,7 +907,7 @@ export default function ClosedCompaniesPage() {
                                                     onClick={() => void handleClosedCompanyClick(row)}
                                                     className={`transition-colors ${
                                                         row.empresaId
-                                                            ? 'hover:bg-white/5 cursor-pointer'
+                                                            ? 'hover:bg-[var(--hover-bg)] cursor-pointer'
                                                             : 'opacity-80'
                                                     } ${loadingCompanyDetail ? 'cursor-wait' : ''}`}
                                                     title={row.empresaId ? 'Ver detalle completo de empresa' : 'Empresa sin vínculo directo'}
@@ -913,16 +931,18 @@ export default function ClosedCompaniesPage() {
                                                         <p className='font-black text-sm text-[var(--text-primary)]'>{row.empresaNombre}</p>
                                                     </td>
                                                     <td className='px-6 py-4 text-center'>
-                                                        <span className='inline-flex min-w-[44px] justify-center rounded-lg border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-xs font-black text-blue-200'>
+                                                        <span
+                                                            className={`inline-flex min-w-[44px] justify-center rounded-lg px-2 py-1 text-xs font-black ${toneChipClassName}`}
+                                                            style={toneVars('blue')}
+                                                        >
                                                             {row.wonLeadsCount}
                                                         </span>
                                                     </td>
                                                     <td className='px-6 py-4 text-center'>
-                                                        <span className={`inline-flex min-w-[44px] justify-center rounded-lg border px-2 py-1 text-xs font-black ${
-                                                            row.activeProjectsCount > 0
-                                                                ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
-                                                                : 'border-white/10 bg-white/5 text-white/60'
-                                                        }`}>
+                                                        <span
+                                                            className={`inline-flex min-w-[44px] justify-center rounded-lg px-2 py-1 text-xs font-black ${toneChipClassName}`}
+                                                            style={toneVars(row.activeProjectsCount > 0 ? 'emerald' : 'slate')}
+                                                        >
                                                             {row.activeProjectsCount}
                                                         </span>
                                                     </td>
@@ -973,7 +993,7 @@ export default function ClosedCompaniesPage() {
                                             className={`flex-1 h-9 rounded-lg text-[10px] font-black uppercase tracking-[0.12em] transition-all cursor-pointer ${
                                                 lossPeriodPreset === preset
                                                     ? 'bg-[#2048FF] text-white shadow-lg shadow-blue-500/20'
-                                                    : 'text-[var(--text-secondary)] hover:bg-white/60 dark:hover:bg-white/5'
+                                                    : 'text-[var(--text-secondary)] hover:bg-[var(--card-bg)]'
                                             }`}
                                         >
                                             {label}
@@ -1052,7 +1072,7 @@ export default function ClosedCompaniesPage() {
                                         setLossReasonFilter('all')
                                         setLossSubreasonFilter('all')
                                     }}
-                                    className='h-[58px] rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] hover:bg-white/60 dark:hover:bg-white/10 transition-colors cursor-pointer'
+                                    className='h-[58px] rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)] hover:bg-[var(--card-bg)] transition-colors cursor-pointer'
                                 >
                                     Limpiar filtros
                                 </button>
@@ -1074,32 +1094,56 @@ export default function ClosedCompaniesPage() {
                             ) : (
                                 <>
                                     <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3'>
-                                        <div className='rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4' title={LOSS_ANALYTICS_METRICS.lostCount.shortHelp}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-rose-700 dark:text-rose-200'>{LOSS_ANALYTICS_METRICS.lostCount.label}</p>
-                                            <p className='mt-1 text-2xl font-black text-[var(--text-primary)]'>{lossAnalyticsKpis.lostCount}</p>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('rose')}
+                                            title={LOSS_ANALYTICS_METRICS.lostCount.shortHelp}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>{LOSS_ANALYTICS_METRICS.lostCount.label}</p>
+                                            <p className='mt-1 text-2xl font-black' style={{ color: 'var(--text-primary)' }}>{lossAnalyticsKpis.lostCount}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4' title={LOSS_ANALYTICS_METRICS.monthlyLostValue.shortHelp}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200'>{LOSS_ANALYTICS_METRICS.monthlyLostValue.label}</p>
-                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.monthlyLostValue)}</p>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('amber')}
+                                            title={LOSS_ANALYTICS_METRICS.monthlyLostValue.shortHelp}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>{LOSS_ANALYTICS_METRICS.monthlyLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black' style={{ color: 'var(--text-primary)' }}>{formatCurrency(lossAnalyticsKpis.monthlyLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-orange-400/20 bg-orange-500/10 p-4' title={LOSS_ANALYTICS_METRICS.implementationLostValue.shortHelp}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-orange-700 dark:text-orange-200'>{LOSS_ANALYTICS_METRICS.implementationLostValue.label}</p>
-                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.implementationLostValue)}</p>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('orange')}
+                                            title={LOSS_ANALYTICS_METRICS.implementationLostValue.shortHelp}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>{LOSS_ANALYTICS_METRICS.implementationLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black' style={{ color: 'var(--text-primary)' }}>{formatCurrency(lossAnalyticsKpis.implementationLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4' title={LOSS_ANALYTICS_METRICS.totalLostValue.shortHelp}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-blue-700 dark:text-blue-200'>{LOSS_ANALYTICS_METRICS.totalLostValue.label}</p>
-                                            <p className='mt-1 text-xl font-black text-[var(--text-primary)]'>{formatCurrency(lossAnalyticsKpis.totalLostValue)}</p>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('blue')}
+                                            title={LOSS_ANALYTICS_METRICS.totalLostValue.shortHelp}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>{LOSS_ANALYTICS_METRICS.totalLostValue.label}</p>
+                                            <p className='mt-1 text-xl font-black' style={{ color: 'var(--text-primary)' }}>{formatCurrency(lossAnalyticsKpis.totalLostValue)}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-4' title={LOSS_ANALYTICS_METRICS.topReason.shortHelp}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-fuchsia-700 dark:text-fuchsia-200'>{LOSS_ANALYTICS_METRICS.topReason.label}</p>
-                                            <p className='mt-1 text-sm font-black text-[var(--text-primary)] line-clamp-2'>{lossAnalyticsKpis.topReasonLabel}</p>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('fuchsia')}
+                                            title={LOSS_ANALYTICS_METRICS.topReason.shortHelp}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>{LOSS_ANALYTICS_METRICS.topReason.label}</p>
+                                            <p className='mt-1 text-sm font-black line-clamp-2' style={{ color: 'var(--text-primary)' }}>{lossAnalyticsKpis.topReasonLabel}</p>
                                         </div>
-                                        <div className='rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4' title={`${LOSS_ANALYTICS_METRICS.unclassifiedPct.shortHelp} ${LOSS_ANALYTICS_METRICS.avgCycleDays.shortHelp}`}>
-                                            <p className='text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-200'>Calidad / ciclo</p>
-                                            <p className='mt-1 text-sm font-black text-[var(--text-primary)]'>
+                                        <div
+                                            className={`rounded-2xl p-4 ${tonePanelClassName} shadow-[0_10px_26px_-22px_var(--tone-shadow)]`}
+                                            style={toneVars('cyan')}
+                                            title={`${LOSS_ANALYTICS_METRICS.unclassifiedPct.shortHelp} ${LOSS_ANALYTICS_METRICS.avgCycleDays.shortHelp}`}
+                                        >
+                                            <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--tone-panel-text)' }}>Calidad / ciclo</p>
+                                            <p className='mt-1 text-sm font-black' style={{ color: 'var(--text-primary)' }}>
                                                 {formatPercent(lossAnalyticsKpis.unclassifiedPct)} sin clasificar
                                             </p>
-                                            <p className='text-[11px] font-bold text-[var(--text-secondary)] mt-1'>
+                                            <p className='mt-1 text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>
                                                 Ciclo prom.: {lossAnalyticsKpis.avgCycleDays == null ? '—' : `${Math.round(lossAnalyticsKpis.avgCycleDays)} días`}
                                             </p>
                                         </div>
@@ -1151,25 +1195,25 @@ export default function ClosedCompaniesPage() {
                                         </div>
                                     )}
 
-                                    <div className='mt-4 rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                        <div className='px-4 py-3 border-b border-white/10 flex items-center justify-between gap-2'>
-                                            <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Tendencia mensual (filtro actual)</p>
-                                            <span className='text-[10px] font-black uppercase tracking-[0.12em] text-white/40'>Últimos 6 meses</span>
+                                    <div className='mt-4 rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                        <div className='px-4 py-3 border-b flex items-center justify-between gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                            <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Tendencia mensual (filtro actual)</p>
+                                            <span className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>Últimos 6 meses</span>
                                         </div>
                                         <div className='p-3'>
                                             {lossAnalyticsMonthlyTrend.length === 0 ? (
-                                                <div className='py-4 text-center text-white/55 font-bold text-sm'>Sin datos para tendencia.</div>
+                                                <div className='py-4 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin datos para tendencia.</div>
                                             ) : (
                                                 <div className='space-y-2'>
                                                     {(() => {
                                                         const maxCount = Math.max(1, ...lossAnalyticsMonthlyTrend.map((row) => row.lostCount))
                                                         return lossAnalyticsMonthlyTrend.map((row) => (
-                                                            <div key={row.monthKey} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5'>
+                                                            <div key={row.monthKey} className='rounded-xl border px-3 py-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                                                 <div className='flex items-center justify-between gap-3 text-xs font-bold'>
-                                                                    <span className='text-white'>{row.label}</span>
-                                                                    <span className='text-white/70'>{row.lostCount} perdidos · {formatCurrency(row.totalLostValue)}</span>
+                                                                    <span style={{ color: 'var(--text-primary)' }}>{row.label}</span>
+                                                                    <span style={{ color: 'var(--text-secondary)' }}>{row.lostCount} perdidos · {formatCurrency(row.totalLostValue)}</span>
                                                                 </div>
-                                                                <div className='mt-2 h-2 rounded-full bg-black/30 overflow-hidden'>
+                                                                <div className='mt-2 h-2 rounded-full overflow-hidden' style={{ background: 'var(--card-border)' }}>
                                                                     <div
                                                                         className='h-full rounded-full'
                                                                         style={{
@@ -1187,23 +1231,23 @@ export default function ClosedCompaniesPage() {
                                     </div>
 
                                     <div className='mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5'>
-                                        <div className='rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                            <div className='px-4 py-3 border-b border-white/10 flex items-center gap-2'>
-                                                <BarChart3 size={14} className='text-amber-300' />
-                                                <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Top motivos de pérdida</p>
+                                        <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                            <div className='px-4 py-3 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                <BarChart3 size={14} style={{ color: 'color-mix(in srgb, #f59e0b 72%, var(--text-primary))' }} />
+                                                <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Top motivos de pérdida</p>
                                             </div>
                                             <div className='p-3'>
                                                 {topLossReasons.length === 0 ? (
-                                                    <div className='py-6 text-center text-white/55 font-bold text-sm'>Sin datos en este filtro.</div>
+                                                    <div className='py-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin datos en este filtro.</div>
                                                 ) : (
                                                     <div className='space-y-2'>
                                                         {topLossReasons.map((row) => (
-                                                            <div key={row.label} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5'>
+                                                            <div key={row.label} className='rounded-xl border px-3 py-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                                                 <div className='flex items-center justify-between gap-3'>
-                                                                    <p className='text-sm font-black text-white truncate'>{row.label}</p>
-                                                                    <span className='text-xs font-black text-white/80'>{row.count}</span>
+                                                                    <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }}>{row.label}</p>
+                                                                    <span className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{row.count}</span>
                                                                 </div>
-                                                                <div className='mt-1 flex items-center justify-between gap-2 text-[11px] font-bold text-white/65'>
+                                                                <div className='mt-1 flex items-center justify-between gap-2 text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>
                                                                     <span>{formatPercent(row.sharePct)} del total</span>
                                                                     <span>{formatCurrency(row.totalValue)}</span>
                                                                 </div>
@@ -1214,26 +1258,26 @@ export default function ClosedCompaniesPage() {
                                             </div>
                                         </div>
 
-                                        <div className='rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                            <div className='px-4 py-3 border-b border-white/10 flex items-center gap-2'>
-                                                <BarChart3 size={14} className='text-fuchsia-300' />
-                                                <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Top submotivos de pérdida</p>
+                                        <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                            <div className='px-4 py-3 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                <BarChart3 size={14} style={{ color: 'color-mix(in srgb, #d946ef 72%, var(--text-primary))' }} />
+                                                <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Top submotivos de pérdida</p>
                                             </div>
                                             <div className='p-3'>
                                                 {topLossSubreasons.length === 0 ? (
-                                                    <div className='py-6 text-center text-white/55 font-bold text-sm'>Sin datos en este filtro.</div>
+                                                    <div className='py-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin datos en este filtro.</div>
                                                 ) : (
                                                     <div className='space-y-2'>
                                                         {topLossSubreasons.map((row) => (
-                                                            <div key={`${row.reasonLabel}-${row.label}`} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5'>
+                                                            <div key={`${row.reasonLabel}-${row.label}`} className='rounded-xl border px-3 py-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                                                 <div className='flex items-center justify-between gap-3'>
                                                                     <div className='min-w-0'>
-                                                                        <p className='text-sm font-black text-white truncate'>{row.label}</p>
-                                                                        <p className='text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 truncate'>{row.reasonLabel}</p>
+                                                                        <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }}>{row.label}</p>
+                                                                        <p className='text-[10px] font-bold uppercase tracking-[0.12em] truncate' style={{ color: 'var(--text-secondary)' }}>{row.reasonLabel}</p>
                                                                     </div>
-                                                                    <span className='text-xs font-black text-white/80'>{row.count}</span>
+                                                                    <span className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{row.count}</span>
                                                                 </div>
-                                                                <div className='mt-1 text-right text-[11px] font-bold text-white/65'>{formatCurrency(row.totalValue)}</div>
+                                                                <div className='mt-1 text-right text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>{formatCurrency(row.totalValue)}</div>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1243,27 +1287,27 @@ export default function ClosedCompaniesPage() {
                                     </div>
 
                                     <div className='mt-5 grid grid-cols-1 xl:grid-cols-2 gap-5'>
-                                        <div className='rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                            <div className='px-4 py-3 border-b border-white/10 flex items-center gap-2'>
-                                                <ShieldCheck size={14} className='text-blue-300' />
-                                                <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Pérdidas por vendedor</p>
+                                        <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                            <div className='px-4 py-3 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                <ShieldCheck size={14} style={{ color: 'color-mix(in srgb, #3b82f6 72%, var(--text-primary))' }} />
+                                                <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Pérdidas por vendedor</p>
                                             </div>
                                             <div className='p-3'>
                                                 {lossBySeller.length === 0 ? (
-                                                    <div className='py-6 text-center text-white/55 font-bold text-sm'>Sin datos en este filtro.</div>
+                                                    <div className='py-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin datos en este filtro.</div>
                                                 ) : (
                                                     <div className='space-y-2'>
                                                         {lossBySeller.map((row) => (
-                                                            <div key={`${row.sellerId || row.name}`} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 flex items-center justify-between gap-3'>
+                                                            <div key={`${row.sellerId || row.name}`} className='rounded-xl border px-3 py-2.5 flex items-center justify-between gap-3' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                                                 <div className='flex items-center gap-3 min-w-0'>
                                                                     <TableEmployeeAvatar name={row.name} avatarUrl={row.avatarUrl} size='sm' />
                                                                     <div className='min-w-0'>
-                                                                        <p className='text-sm font-black text-white truncate'>{row.name}</p>
-                                                                        <p className='text-[10px] font-bold uppercase tracking-[0.12em] text-white/45'>{row.count} perdidos</p>
+                                                                        <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }}>{row.name}</p>
+                                                                        <p className='text-[10px] font-bold uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>{row.count} perdidos</p>
                                                                     </div>
                                                                 </div>
                                                                 <div className='text-right'>
-                                                                    <p className='text-xs font-black text-white'>{formatCurrency(row.totalValue)}</p>
+                                                                    <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{formatCurrency(row.totalValue)}</p>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -1272,23 +1316,23 @@ export default function ClosedCompaniesPage() {
                                             </div>
                                         </div>
 
-                                        <div className='rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                            <div className='px-4 py-3 border-b border-white/10 flex items-center gap-2'>
-                                                <Building2 size={14} className='text-cyan-300' />
-                                                <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Pérdidas por industria</p>
+                                        <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                            <div className='px-4 py-3 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                                <Building2 size={14} style={{ color: 'color-mix(in srgb, #06b6d4 72%, var(--text-primary))' }} />
+                                                <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Pérdidas por industria</p>
                                             </div>
                                             <div className='p-3'>
                                                 {lossByIndustry.length === 0 ? (
-                                                    <div className='py-6 text-center text-white/55 font-bold text-sm'>Sin datos en este filtro.</div>
+                                                    <div className='py-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin datos en este filtro.</div>
                                                 ) : (
                                                     <div className='space-y-2'>
                                                         {lossByIndustry.map((row) => (
-                                                            <div key={row.label} className='rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 flex items-center justify-between gap-3'>
+                                                            <div key={row.label} className='rounded-xl border px-3 py-2.5 flex items-center justify-between gap-3' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                                                 <div className='min-w-0'>
-                                                                    <p className='text-sm font-black text-white truncate'>{row.label}</p>
-                                                                    <p className='text-[10px] font-bold uppercase tracking-[0.12em] text-white/45'>{row.count} perdidos</p>
+                                                                    <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }}>{row.label}</p>
+                                                                    <p className='text-[10px] font-bold uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>{row.count} perdidos</p>
                                                                 </div>
-                                                                <p className='text-xs font-black text-white'>{formatCurrency(row.totalValue)}</p>
+                                                                <p className='text-xs font-black' style={{ color: 'var(--text-primary)' }}>{formatCurrency(row.totalValue)}</p>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1297,18 +1341,18 @@ export default function ClosedCompaniesPage() {
                                         </div>
                                     </div>
 
-                                    <div className='mt-5 rounded-2xl border border-white/10 bg-black/20 overflow-hidden'>
-                                        <div className='px-4 py-3 border-b border-white/10 flex items-center justify-between gap-2'>
+                                    <div className='mt-5 rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                                        <div className='px-4 py-3 border-b flex items-center justify-between gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                                             <div className='flex items-center gap-2'>
-                                                <XCircle size={14} className='text-rose-300' />
-                                                <p className='text-[11px] font-black uppercase tracking-[0.14em] text-white/80'>Detalle de cerrados perdidos (drill-down)</p>
+                                                <XCircle size={14} style={{ color: 'color-mix(in srgb, #fb7185 72%, var(--text-primary))' }} />
+                                                <p className='text-[11px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>Detalle de cerrados perdidos (drill-down)</p>
                                             </div>
-                                            <span className='text-[10px] font-black uppercase tracking-[0.12em] text-white/45'>
+                                            <span className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
                                                 {lossAnalyticsDetailRows.length} mostrados
                                             </span>
                                         </div>
                                         {lossAnalyticsDetailRows.length === 0 ? (
-                                            <div className='p-6 text-center text-white/55 font-bold text-sm'>Sin leads perdidos para este filtro.</div>
+                                            <div className='p-6 text-center font-bold text-sm' style={{ color: 'var(--text-secondary)' }}>Sin leads perdidos para este filtro.</div>
                                         ) : (
                                             <div className='ah-table-scroll custom-scrollbar'>
                                                 <table className='ah-table'>
@@ -1328,7 +1372,7 @@ export default function ClosedCompaniesPage() {
                                                             <tr
                                                                 key={`loss-analytics-${row.lead_id}`}
                                                                 onClick={() => handleOpenLossLeadDetail(row.lead_id)}
-                                                                className='hover:bg-white/5 transition-colors cursor-pointer'
+                                                                className='hover:bg-[var(--hover-bg)] transition-colors cursor-pointer'
                                                                 title='Abrir ficha del lead'
                                                             >
                                                                 <td className='px-4 py-3'>
@@ -1348,7 +1392,7 @@ export default function ClosedCompaniesPage() {
                                                                     <p className='text-[11px] font-bold text-[var(--text-secondary)]'>{row.nombre || '-'}</p>
                                                                 </td>
                                                                 <td className='px-4 py-3'>
-                                                                    <span className='rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white/80'>
+                                                                    <span className={`rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`} style={toneVars('slate')}>
                                                                         {row.loss_reason_label || 'Sin clasificar'}
                                                                     </span>
                                                                 </td>
@@ -1381,34 +1425,35 @@ export default function ClosedCompaniesPage() {
                         </div>
                     </section>
 
-                    <section className='mt-6 rounded-2xl border border-white/10 bg-black/10 overflow-hidden'>
+                    <section className='mt-6 rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                         <button
                             type='button'
                             onClick={() => setLostLeadsOpen((v) => !v)}
-                            className='w-full px-5 py-4 flex items-center justify-between text-left hover:bg-white/5 transition-colors cursor-pointer'
+                            className='w-full px-5 py-4 flex items-center justify-between text-left hover:bg-[var(--hover-bg)] transition-colors cursor-pointer'
                         >
                             <div className='flex items-center gap-2'>
-                                <XCircle size={16} className='text-rose-300' />
+                                <XCircle size={16} style={{ color: 'color-mix(in srgb, #fb7185 72%, var(--text-primary))' }} />
                                 <div>
-                                <p className='text-xs font-black uppercase tracking-[0.16em] text-white/80'>Cierres perdidos</p>
-                                    <p className='text-[11px] font-semibold text-white/55'>Tabla secundaria para revisión histórica</p>
+                                <p className='text-xs font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-primary)' }}>Cierres perdidos</p>
+                                    <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>Tabla secundaria para revisión histórica</p>
                                 </div>
                             </div>
                             <div className='flex items-center gap-3'>
-                                <span className='text-xs font-black rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/70'>
+                                <span className={`text-xs font-black rounded-lg px-2 py-1 ${toneChipClassName}`} style={toneVars('slate')}>
                                     {filteredLostLeads.length}
                                 </span>
                                 <ChevronDown
                                     size={16}
-                                    className={`text-white/70 transition-transform ${lostLeadsOpen ? 'rotate-180' : ''}`}
+                                    className={`transition-transform ${lostLeadsOpen ? 'rotate-180' : ''}`}
+                                    style={{ color: 'var(--text-secondary)' }}
                                 />
                             </div>
                         </button>
 
                         {lostLeadsOpen && (
-                            <div className='border-t border-white/10'>
+                            <div className='border-t' style={{ borderColor: 'var(--card-border)' }}>
                                 {filteredLostLeads.length === 0 ? (
-                                    <div className='p-6 text-center text-white/60'>No hay leads cerrados perdidos.</div>
+                                    <div className='p-6 text-center' style={{ color: 'var(--text-secondary)' }}>No hay leads cerrados perdidos.</div>
                                 ) : (
                                     <div className='ah-table-scroll custom-scrollbar'>
                                         <table className='ah-table'>
@@ -1428,7 +1473,7 @@ export default function ClosedCompaniesPage() {
                                                     const ownerProfile = ownerId ? sellerProfilesById[ownerId] : undefined
                                                     const sellerName = ownerProfile?.fullName || formatSellerDisplayName(lead?.owner_username)
                                                     return (
-                                                        <tr key={`lost-${lead.id}`} className='hover:bg-white/5 transition-colors'>
+                                                        <tr key={`lost-${lead.id}`} className='hover:bg-[var(--hover-bg)] transition-colors'>
                                                             <td className='px-6 py-4'>
                                                                 <div className='flex items-center gap-3'>
                                                                     <TableEmployeeAvatar

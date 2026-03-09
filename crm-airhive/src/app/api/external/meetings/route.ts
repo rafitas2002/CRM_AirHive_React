@@ -12,7 +12,19 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { lead_id, seller_id, title, start_time, duration_minutes, meeting_type, notes } = body
+        const {
+            lead_id,
+            seller_id,
+            title,
+            start_time,
+            duration_minutes,
+            meeting_type,
+            notes,
+            attendees,
+            primary_company_contact_id,
+            primary_company_contact_name,
+            external_participants
+        } = body
 
         if (!lead_id || !seller_id || !title || !start_time) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -31,6 +43,10 @@ export async function POST(request: Request) {
                 duration_minutes: duration_minutes || 60,
                 meeting_type: meeting_type || 'llamada',
                 notes,
+                attendees: Array.isArray(attendees) ? attendees : null,
+                primary_company_contact_id: primary_company_contact_id || null,
+                primary_company_contact_name: primary_company_contact_name || null,
+                external_participants: Array.isArray(external_participants) ? external_participants : null,
                 status: 'scheduled',
                 meeting_status: 'scheduled'
             }])

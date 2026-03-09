@@ -67,6 +67,7 @@ import {
     Receipt,
     PiggyBank,
     Wallet,
+    PackageOpen,
     Sailboat,
     Train,
     Bus,
@@ -198,7 +199,7 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
     { keywords: ['energia', 'petroleo', 'oil', 'gas'], icons: [Battery, Flame, Plug, Wind, Sun] },
     { keywords: ['finanzas', 'banca', 'seguros', 'credito'], icons: [Landmark, Banknote, Coins, PiggyBank, Wallet] },
     { keywords: ['gobierno', 'publico'], icons: [Landmark, Scale, Shield, FileText, Gavel] },
-    { keywords: ['logistica', 'transporte', 'transportes', 'movilidad'], icons: [Truck, Train, Bus, Sailboat, Workflow] },
+    { keywords: ['logistica', 'transporte', 'transportes', 'movilidad', 'paqueter', 'mensajer', 'courier', 'autocarga', 'trailer', 'tractocam'], icons: [Truck, Train, Bus, Sailboat, Workflow] },
     { keywords: ['manufactura', 'industrial', 'fabrica'], icons: [Factory, Cog, Wrench, Workflow, Hammer] },
     { keywords: ['marketing', 'publicidad', 'medios'], icons: [Megaphone, Camera, Film, Radio, ChartLine] },
     { keywords: ['mineria', 'metal'], icons: [Mountain, PickaxeIcon(), Flame, HardHat, Factory] },
@@ -213,6 +214,13 @@ const SEMANTIC_ICON_RULES: Array<{ keywords: string[]; icons: LucideIcon[] }> = 
 ]
 
 const FIXED_INDUSTRY_VISUAL_RULES: Array<{ keywords: string[]; icon: LucideIcon; colorClass: string; coreBorderColorClassName?: string; accentCoreBorderColorHex?: string }> = [
+    {
+        keywords: ['paqueteria', 'paquetería', 'mensajeria', 'mensajería', 'courier'],
+        icon: PackageOpen,
+        colorClass: 'bg-gradient-to-br from-[#f59e0b] to-[#b45309]',
+        coreBorderColorClassName: '!border-[#fcd34d]',
+        accentCoreBorderColorHex: '#fcd34d'
+    },
     {
         keywords: ['salud farmaceut', 'farmaceutica', 'farmacéutica', 'pharma'],
         icon: Pill,

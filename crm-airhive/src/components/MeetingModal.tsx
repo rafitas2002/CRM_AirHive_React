@@ -9,9 +9,10 @@ import UserSelect from './UserSelect'
 import { FriendlyDateTimePicker } from './FriendlyDatePickers'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { Building2, CalendarDays, Phone, Sparkles, Video, X, PencilLine, Link2 } from 'lucide-react'
+import { Building2, CalendarDays, Link2, PencilLine, Phone, Plus, Sparkles, Trash2, Video, X } from 'lucide-react'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
+type CompanyContactRow = Database['public']['Tables']['company_contacts']['Row']
 
 interface MeetingModalProps {
     isOpen: boolean
@@ -21,6 +22,185 @@ interface MeetingModalProps {
     sellerId: string
     initialData?: any
     mode?: 'create' | 'edit'
+    leadContactSeed?: {
+        contactName?: string | null
+        contactEmail?: string | null
+        contactPhone?: string | null
+        companyId?: string | null
+        companyName?: string | null
+        leadName?: string | null
+    }
+}
+
+type ContactOption = {
+    key: string
+    id: string | null
+    name: string
+    email: string | null
+    phone: string | null
+    source: 'company' | 'lead'
+    isPrimary: boolean
+}
+
+type ManualParticipant = {
+    id: string
+    name: string
+    email: string
+    phone: string
+}
+
+type LeadContext = {
+    leadName: string
+    companyName: string
+    companyId: string | null
+    leadContactName: string
+    leadEmail: string
+    leadPhone: string
+}
+
+const OTHER_CONTACT_KEY = '__OTHER_CONTACT__'
+
+function normalizeText(value: string | null | undefined) {
+    return String(value || '').trim().toLowerCase()
+}
+
+function normalizePhone(value: string | null | undefined) {
+    return String(value || '').replace(/\D/g, '')
+}
+
+function createTempId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID()
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function buildParticipantLabel(name: string, email?: string | null, phone?: string | null) {
+    const safeName = String(name || '').trim()
+    if (!safeName) return ''
+
+    const safeEmail = String(email || '').trim()
+    if (safeEmail) return `${safeName} <${safeEmail}>`
+
+    const safePhone = String(phone || '').trim()
+    if (safePhone) return `${safeName} [${safePhone}]`
+
+    return safeName
+}
+
+function parseParticipantLabel(label: string) {
+    const raw = String(label || '').trim()
+    const emailMatch = /<([^<>]+)>/.exec(raw)
+    const phoneMatch = /\[([^\]]+)\]/.exec(raw)
+    const name = raw
+        .replace(/<[^<>]+>/g, '')
+        .replace(/\[[^\]]+\]/g, '')
+        .trim()
+
+    return {
+        name,
+        email: emailMatch?.[1]?.trim() || '',
+        phone: phoneMatch?.[1]?.trim() || ''
+    }
+}
+
+function dedupeParticipantLabels(labels: string[]) {
+    const seen = new Set<string>()
+    const out: string[] = []
+
+    labels.forEach((label) => {
+        const normalized = normalizeText(label)
+        if (!normalized || seen.has(normalized)) return
+        seen.add(normalized)
+        out.push(label)
+    })
+
+    return out
+}
+
+function buildContactOptions(
+    companyContacts: CompanyContactRow[],
+    companyLeads: Array<{ id: number; nombre?: string | null; contacto: string | null; email: string | null; telefono: string | null }>,
+    leadFallback: { contacto?: string | null; email?: string | null; telefono?: string | null } | null
+): ContactOption[] {
+    const map = new Map<string, ContactOption>()
+
+    const upsertOption = (payload: {
+        id?: string | null
+        name?: string | null
+        email?: string | null
+        phone?: string | null
+        source: 'company' | 'lead'
+        isPrimary?: boolean
+    }) => {
+        const name = String(payload.name || '').trim()
+        if (!name) return
+
+        const email = String(payload.email || '').trim() || null
+        const phone = String(payload.phone || '').trim() || null
+
+        const dedupeKey = `${normalizeText(name)}|${normalizeText(email || '')}|${normalizePhone(phone || '')}`
+        const existing = map.get(dedupeKey)
+        if (existing) {
+            if (!existing.id && payload.id) existing.id = payload.id
+            if (!existing.email && email) existing.email = email
+            if (!existing.phone && phone) existing.phone = phone
+            if (payload.isPrimary) existing.isPrimary = true
+            if (existing.source !== 'company' && payload.source === 'company') existing.source = 'company'
+            if (payload.id && payload.source === 'company') existing.key = `company:${payload.id}`
+            map.set(dedupeKey, existing)
+            return
+        }
+
+        const option: ContactOption = {
+            key: payload.id && payload.source === 'company'
+                ? `company:${payload.id}`
+                : `lead:${dedupeKey}`,
+            id: payload.id || null,
+            name,
+            email,
+            phone,
+            source: payload.source,
+            isPrimary: !!payload.isPrimary
+        }
+
+        map.set(dedupeKey, option)
+    }
+
+    companyContacts.forEach((contact) => {
+        if (!contact.is_active) return
+        upsertOption({
+            id: contact.id,
+            name: contact.full_name,
+            email: contact.email,
+            phone: contact.phone,
+            source: 'company',
+            isPrimary: contact.is_primary
+        })
+    })
+
+    companyLeads.forEach((lead) => {
+        upsertOption({
+            name: lead.contacto || lead.nombre || null,
+            email: lead.email,
+            phone: lead.telefono,
+            source: 'lead'
+        })
+    })
+
+    if (leadFallback) {
+        upsertOption({
+            name: leadFallback.contacto || null,
+            email: leadFallback.email || null,
+            phone: leadFallback.telefono || null,
+            source: 'lead'
+        })
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+        if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1
+        return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
+    })
 }
 
 export default function MeetingModal({
@@ -30,10 +210,12 @@ export default function MeetingModal({
     leadId,
     sellerId,
     initialData,
-    mode = 'create'
+    mode = 'create',
+    leadContactSeed
 }: MeetingModalProps) {
     useBodyScrollLock(isOpen)
     const { theme } = useTheme()
+
     const [formData, setFormData] = useState({
         title: '',
         start_time: '',
@@ -43,18 +225,48 @@ export default function MeetingModal({
         attendees: [] as string[],
         calendar_provider: null as 'google' | 'outlook' | null
     })
+
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isGoogleConnected, setIsGoogleConnected] = useState(false)
+    const [contactsLoading, setContactsLoading] = useState(false)
+    const [meetingSequencePreview, setMeetingSequencePreview] = useState<number | null>(null)
+
+    const [leadContext, setLeadContext] = useState<LeadContext>({
+        leadName: '',
+        companyName: '',
+        companyId: null,
+        leadContactName: '',
+        leadEmail: '',
+        leadPhone: ''
+    })
+
+    const [contactOptions, setContactOptions] = useState<ContactOption[]>([])
+    const [primaryContactKey, setPrimaryContactKey] = useState('')
+    const [selectedExternalKeys, setSelectedExternalKeys] = useState<string[]>([])
+    const [manualExternalParticipants, setManualExternalParticipants] = useState<ManualParticipant[]>([])
+    const [newExternalParticipant, setNewExternalParticipant] = useState({ name: '', email: '', phone: '' })
+    const [newPrimaryContact, setNewPrimaryContact] = useState({ name: '', email: '', phone: '' })
 
     // Sync Fail Modal State
     const [showSyncFailModal, setShowSyncFailModal] = useState(false)
     const [pendingMeetingData, setPendingMeetingData] = useState<MeetingInsert | null>(null)
 
     useEffect(() => {
-        const init = async () => {
-            if (!isOpen) return
+        if (!isOpen) return
 
-            // 1. Initial form state from data or defaults
+        let isActive = true
+
+        const init = async () => {
+            const supabase = createClient()
+            setContactsLoading(true)
+            setContactOptions([])
+            setPrimaryContactKey('')
+            setSelectedExternalKeys([])
+            setManualExternalParticipants([])
+            setNewExternalParticipant({ name: '', email: '', phone: '' })
+            setNewPrimaryContact({ name: '', email: '', phone: '' })
+            setMeetingSequencePreview(mode === 'edit' ? Number(initialData?.meeting_sequence_number || 0) || null : null)
+
             if (initialData) {
                 setFormData({
                     title: initialData.title || '',
@@ -77,30 +289,284 @@ export default function MeetingModal({
                 })
             }
 
-            // 2. Check calendar status and apply default if create mode
             try {
-                const supabase = createClient()
-                const { data } = await supabase
-                    .from('google_integrations')
-                    .select('user_id')
-                    .eq('user_id', sellerId)
-                    .single()
+                try {
+                    const { data } = await supabase
+                        .from('google_integrations')
+                        .select('user_id')
+                        .eq('user_id', sellerId)
+                        .single()
 
-                const connected = !!data
-                setIsGoogleConnected(connected)
+                    const connected = !!data
+                    if (!isActive) return
 
-                if (connected && mode === 'create') {
-                    setFormData(prev => ({ ...prev, calendar_provider: 'google' }))
+                    setIsGoogleConnected(connected)
+                    if (connected && mode === 'create') {
+                        setFormData(prev => ({ ...prev, calendar_provider: 'google' }))
+                    }
+                } catch (error) {
+                    console.error('Error checking calendar status:', error)
                 }
-            } catch (error) {
-                console.error('Error checking calendar status:', error)
+
+                let leadRow: any = null
+                try {
+                    const { data } = await supabase
+                        .from('clientes')
+                        .select('id, nombre, empresa, empresa_id, contacto, email, telefono')
+                        .eq('id', leadId)
+                        .maybeSingle()
+
+                    leadRow = data || null
+                } catch (error) {
+                    console.error('Error fetching lead context for meeting modal:', error)
+                }
+
+                if (!isActive) return
+
+                const mergedLead = {
+                    ...leadRow,
+                    nombre: String(leadRow?.nombre || leadContactSeed?.leadName || '').trim() || null,
+                    empresa: String(leadRow?.empresa || leadContactSeed?.companyName || '').trim() || null,
+                    empresa_id: String(leadRow?.empresa_id || leadContactSeed?.companyId || '').trim() || null,
+                    contacto: String(leadRow?.contacto || leadContactSeed?.contactName || leadRow?.nombre || leadContactSeed?.leadName || '').trim() || null,
+                    email: String(leadRow?.email || leadContactSeed?.contactEmail || '').trim() || null,
+                    telefono: String(leadRow?.telefono || leadContactSeed?.contactPhone || '').trim() || null
+                }
+
+                const leadContactName = String(mergedLead?.contacto || '').trim()
+                const leadEmail = String(mergedLead?.email || '').trim()
+                const leadPhone = String(mergedLead?.telefono || '').trim()
+                const companyId = mergedLead?.empresa_id ? String(mergedLead.empresa_id) : null
+                const companyName = String(mergedLead?.empresa || '').trim()
+
+                setLeadContext({
+                    leadName: String(mergedLead?.nombre || '').trim(),
+                    companyName: String(mergedLead?.empresa || '').trim(),
+                    companyId,
+                    leadContactName,
+                    leadEmail,
+                    leadPhone
+                })
+
+                if (mode === 'create') {
+                    try {
+                        const { count } = await supabase
+                            .from('meetings')
+                            .select('id', { head: true, count: 'exact' })
+                            .eq('lead_id', leadId)
+
+                        if (isActive) setMeetingSequencePreview((count || 0) + 1)
+                    } catch (error) {
+                        console.error('Error calculating meeting sequence:', error)
+                    }
+                }
+
+                let options: ContactOption[] = []
+                if (companyId) {
+                    try {
+                        const [companyContactsRes, companyLeadsRes] = await Promise.all([
+                            supabase
+                                .from('company_contacts')
+                                .select('id, empresa_id, full_name, email, phone, job_title, is_primary, is_active, source, created_by, created_at, updated_at')
+                                .eq('empresa_id', companyId)
+                                .eq('is_active', true)
+                                .order('is_primary', { ascending: false })
+                                .order('created_at', { ascending: true }),
+                            supabase
+                                .from('clientes')
+                                .select('id, nombre, contacto, email, telefono')
+                                .eq('empresa_id', companyId)
+                                .order('created_at', { ascending: true })
+                        ])
+
+                        options = buildContactOptions(
+                            (companyContactsRes.data || []) as CompanyContactRow[],
+                            (companyLeadsRes.data || []) as Array<{ id: number; nombre?: string | null; contacto: string | null; email: string | null; telefono: string | null }>,
+                            mergedLead
+                        )
+                    } catch (error) {
+                        console.error('Error loading company contacts for meeting modal:', error)
+                        options = buildContactOptions([], [], mergedLead)
+                    }
+                } else if (companyName) {
+                    try {
+                        const { data: companyLeadsByName } = await supabase
+                            .from('clientes')
+                            .select('id, nombre, contacto, email, telefono')
+                            .eq('empresa', companyName)
+                            .order('created_at', { ascending: true })
+
+                        options = buildContactOptions(
+                            [],
+                            (companyLeadsByName || []) as Array<{ id: number; nombre?: string | null; contacto: string | null; email: string | null; telefono: string | null }>,
+                            mergedLead
+                        )
+                    } catch (error) {
+                        console.error('Error loading company contacts by company name for meeting modal:', error)
+                        options = buildContactOptions([], [], mergedLead)
+                    }
+                } else {
+                    options = buildContactOptions([], [], mergedLead)
+                }
+
+                // Hard guarantee: always expose at least the lead/company contact in selector.
+                if (options.length === 0 && leadContactName) {
+                    options = buildContactOptions(
+                        [],
+                        [{
+                            id: leadId,
+                            nombre: leadContactName,
+                            contacto: leadContactName,
+                            email: leadEmail || null,
+                            telefono: leadPhone || null
+                        }],
+                        mergedLead
+                    )
+                }
+
+                if (!isActive) return
+
+                setContactOptions(options)
+
+                let defaultPrimaryKey = ''
+                if (leadContactName) {
+                    defaultPrimaryKey = options.find((option) => normalizeText(option.name) === normalizeText(leadContactName))?.key || ''
+                }
+                if (!defaultPrimaryKey) {
+                    defaultPrimaryKey = options.find(option => option.isPrimary)?.key || options[0]?.key || ''
+                }
+
+                let nextPrimaryKey = defaultPrimaryKey
+                let nextSelectedKeys = defaultPrimaryKey ? [defaultPrimaryKey] : []
+                let nextManualParticipants: ManualParticipant[] = []
+                let nextPrimaryContactDraft = { name: '', email: '', phone: '' }
+
+                if (mode === 'edit' && initialData) {
+                    const primaryById = String(initialData.primary_company_contact_id || '').trim()
+                    const primaryByName = String(initialData.primary_company_contact_name || '').trim()
+
+                    if (primaryById) {
+                        const match = options.find(option => option.id === primaryById)
+                        if (match) nextPrimaryKey = match.key
+                    }
+
+                    if (!nextPrimaryKey && primaryByName) {
+                        const match = options.find(option => normalizeText(option.name) === normalizeText(primaryByName))
+                        if (match) nextPrimaryKey = match.key
+                    }
+
+                    if (!nextPrimaryKey && primaryByName) {
+                        nextPrimaryKey = OTHER_CONTACT_KEY
+                        nextPrimaryContactDraft = { name: primaryByName, email: '', phone: '' }
+                    }
+
+                    const selectedSet = new Set<string>()
+                    const savedParticipants = Array.isArray(initialData.external_participants)
+                        ? initialData.external_participants
+                        : []
+
+                    savedParticipants.forEach((rawLabel: string) => {
+                        const parsed = parseParticipantLabel(rawLabel)
+                        const email = normalizeText(parsed.email)
+                        const name = normalizeText(parsed.name)
+                        const phone = normalizePhone(parsed.phone)
+
+                        const byEmail = email
+                            ? options.find(option => normalizeText(option.email) === email)
+                            : null
+                        const byName = name
+                            ? options.find(option => normalizeText(option.name) === name)
+                            : null
+                        const byPhone = phone
+                            ? options.find(option => normalizePhone(option.phone) === phone)
+                            : null
+
+                        const matched = byEmail || byName || byPhone || null
+                        if (matched) {
+                            selectedSet.add(matched.key)
+                            return
+                        }
+
+                        if (parsed.name) {
+                            nextManualParticipants.push({
+                                id: createTempId(),
+                                name: parsed.name,
+                                email: parsed.email,
+                                phone: parsed.phone
+                            })
+                        }
+                    })
+
+                    if (nextPrimaryKey && nextPrimaryKey !== OTHER_CONTACT_KEY) {
+                        selectedSet.add(nextPrimaryKey)
+                    }
+
+                    nextSelectedKeys = Array.from(selectedSet)
+                }
+
+                setNewPrimaryContact(nextPrimaryContactDraft)
+                setPrimaryContactKey(nextPrimaryKey)
+                setSelectedExternalKeys(Array.from(new Set(nextSelectedKeys)))
+                setManualExternalParticipants(nextManualParticipants)
+            } finally {
+                if (isActive) setContactsLoading(false)
             }
         }
 
-        init()
-    }, [isOpen, sellerId, initialData, mode])
+        void init()
 
+        return () => {
+            isActive = false
+        }
+    }, [isOpen, sellerId, leadId, initialData, mode])
 
+    const sequenceNumber = mode === 'edit'
+        ? (initialData?.meeting_sequence_number || null)
+        : meetingSequencePreview
+
+    const sequenceText = sequenceNumber == null
+        ? 'Calculando número de junta...'
+        : sequenceNumber === 1
+            ? 'Primera junta con este cliente'
+            : `Junta #${sequenceNumber} con este cliente`
+
+    const toggleExternalParticipant = (key: string) => {
+        setSelectedExternalKeys((prev) => {
+            if (prev.includes(key)) return prev.filter((item) => item !== key)
+            return [...prev, key]
+        })
+    }
+
+    const addManualExternalParticipant = () => {
+        const name = newExternalParticipant.name.trim()
+        if (!name) {
+            alert('Escribe el nombre del participante externo')
+            return
+        }
+
+        setManualExternalParticipants((prev) => ([
+            ...prev,
+            {
+                id: createTempId(),
+                name,
+                email: newExternalParticipant.email.trim(),
+                phone: newExternalParticipant.phone.trim()
+            }
+        ]))
+
+        setNewExternalParticipant({ name: '', email: '', phone: '' })
+    }
+
+    const removeManualExternalParticipant = (id: string) => {
+        setManualExternalParticipants(prev => prev.filter(item => item.id !== id))
+    }
+
+    const getSelectedExternalContactLabels = () => {
+        return selectedExternalKeys
+            .map((key) => contactOptions.find(option => option.key === key))
+            .filter(Boolean)
+            .map((option) => buildParticipantLabel(option!.name, option!.email, option!.phone))
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -108,11 +574,103 @@ export default function MeetingModal({
             alert('Selecciona la fecha y hora de la reunión')
             return
         }
+
+        if (!primaryContactKey && mode === 'create') {
+            alert('Selecciona la persona principal con la que tomarás la junta')
+            return
+        }
+
+        if (primaryContactKey === OTHER_CONTACT_KEY && !newPrimaryContact.name.trim()) {
+            alert('Escribe el nombre del nuevo contacto principal')
+            return
+        }
+
         setIsSubmitting(true)
 
         try {
-            // Import actions dynamically to avoid bundle issues if not needed
+            const supabase = createClient()
             const { createGoogleEventAction, updateGoogleEventAction } = await import('@/app/actions/google-calendar')
+
+            let resolvedPrimaryContact: {
+                id: string | null
+                name: string
+                email: string | null
+                phone: string | null
+            } | null = null
+
+            if (!primaryContactKey && mode === 'edit') {
+                const existingName = String(initialData?.primary_company_contact_name || '').trim()
+                if (existingName) {
+                    resolvedPrimaryContact = {
+                        id: String(initialData?.primary_company_contact_id || '').trim() || null,
+                        name: existingName,
+                        email: null,
+                        phone: null
+                    }
+                }
+            } else if (primaryContactKey === OTHER_CONTACT_KEY) {
+                const name = newPrimaryContact.name.trim()
+                const email = newPrimaryContact.email.trim() || null
+                const phone = newPrimaryContact.phone.trim() || null
+
+                resolvedPrimaryContact = {
+                    id: null,
+                    name,
+                    email,
+                    phone
+                }
+
+                if (leadContext.companyId) {
+                    const { data: createdContact, error: createContactError } = await (supabase
+                        .from('company_contacts') as any)
+                        .insert({
+                            empresa_id: leadContext.companyId,
+                            full_name: name,
+                            email,
+                            phone,
+                            is_primary: contactOptions.length === 0,
+                            source: 'manual',
+                            created_by: sellerId
+                        })
+                        .select('id, full_name, email, phone')
+                        .single()
+
+                    if (createContactError) {
+                        console.error('No se pudo registrar el nuevo contacto en company_contacts:', createContactError)
+                    } else {
+                        resolvedPrimaryContact = {
+                            id: createdContact?.id || null,
+                            name: createdContact?.full_name || name,
+                            email: createdContact?.email || null,
+                            phone: createdContact?.phone || null
+                        }
+                    }
+                }
+            } else {
+                const selectedPrimary = contactOptions.find(option => option.key === primaryContactKey) || null
+                if (!selectedPrimary) {
+                    throw new Error('No se encontró el contacto principal seleccionado')
+                }
+
+                resolvedPrimaryContact = {
+                    id: selectedPrimary.id,
+                    name: selectedPrimary.name,
+                    email: selectedPrimary.email,
+                    phone: selectedPrimary.phone
+                }
+            }
+
+            const selectedContacts = selectedExternalKeys
+                .map((key) => contactOptions.find(option => option.key === key))
+                .filter((option): option is ContactOption => !!option)
+
+            const participantLabels = dedupeParticipantLabels([
+                ...(resolvedPrimaryContact
+                    ? [buildParticipantLabel(resolvedPrimaryContact.name, resolvedPrimaryContact.email, resolvedPrimaryContact.phone)]
+                    : []),
+                ...selectedContacts.map((option) => buildParticipantLabel(option.name, option.email, option.phone)),
+                ...manualExternalParticipants.map((participant) => buildParticipantLabel(participant.name, participant.email, participant.phone))
+            ].filter(Boolean))
 
             const meetingData: MeetingInsert = {
                 lead_id: leadId,
@@ -123,33 +681,27 @@ export default function MeetingModal({
                 meeting_type: formData.meeting_type,
                 notes: formData.notes || null,
                 attendees: formData.attendees.length > 0 ? formData.attendees : null,
+                primary_company_contact_id: resolvedPrimaryContact?.id || null,
+                primary_company_contact_name: resolvedPrimaryContact?.name || null,
+                external_participants: participantLabels.length > 0 ? participantLabels : null,
                 calendar_provider: formData.calendar_provider,
                 status: 'scheduled'
             }
 
-            // If editing and has google provider, we might need to sync updates
+            const leadNameForCalendar = leadContext.leadName || leadContext.companyName || 'Cliente'
+
             if (mode === 'edit' && initialData?.calendar_event_id && formData.calendar_provider === 'google') {
-                // Update in Google Calendar via Server Action
                 const result = await updateGoogleEventAction(
                     initialData.calendar_event_id,
                     meetingData,
-                    'Cliente' // Ideally pass real lead name if available
+                    leadNameForCalendar
                 )
                 if (!result.success) console.error('Failed to update Google Event', result.error)
-            }
-            // If creating and google provider is selected
-            else if (mode === 'create' && formData.calendar_provider === 'google') {
-                // We typically need to save the meeting first to get ID, or sync after.
-                // But the current flow in MeetingModal calls onSave which saves to DB.
-                // We need to intercept or pass the google event ID to onSave.
-                // However, onSave usually just inserts into DB. 
-                // Let's create the Google Event first to get the ID.
-
-                const result = await createGoogleEventAction(meetingData, 'Cliente') // We need lead name here really
+            } else if (mode === 'create' && formData.calendar_provider === 'google') {
+                const result = await createGoogleEventAction(meetingData, leadNameForCalendar)
 
                 if (result.success && result.eventId) {
                     meetingData.calendar_event_id = result.eventId
-                    // Save Meet link in notes if available
                     if (result.hangoutLink) {
                         const meetMarker = `[MEET_LINK]:${result.hangoutLink}`
                         meetingData.notes = meetingData.notes
@@ -169,7 +721,7 @@ export default function MeetingModal({
             onClose()
         } catch (error) {
             console.error('Error saving meeting:', error)
-            alert('Error al guardar la reunión')
+            alert(error instanceof Error ? error.message : 'Error al guardar la reunión')
         } finally {
             setIsSubmitting(false)
         }
@@ -191,6 +743,9 @@ export default function MeetingModal({
             border: 'rgba(255,255,255,0.08)'
         }
     }[theme]
+
+    const selectedExternalLabels = getSelectedExternalContactLabels()
+    const selectedPrimaryOption = contactOptions.find(option => option.key === primaryContactKey) || null
 
     return (
         <div className='ah-modal-overlay'>
@@ -214,9 +769,14 @@ export default function MeetingModal({
                 {/* Body */}
                 <div className='p-6 overflow-y-auto custom-scrollbar space-y-4'>
                     <form id='meeting-form' onSubmit={handleSubmit} className='space-y-4'>
+                        <div className='ah-required-note' role='note'>
+                            <span className='ah-required-note-dot' aria-hidden='true' />
+                            Campos obligatorios: marcados con * y resaltados en rojo
+                        </div>
+
                         {/* Título */}
                         <div className='space-y-1.5'>
-                            <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                            <label className='block text-sm font-bold ah-required-label' style={{ color: 'var(--text-primary)' }}>
                                 Título de la Reunión <span className='text-red-500'>*</span>
                             </label>
                             <input
@@ -230,17 +790,36 @@ export default function MeetingModal({
                             />
                         </div>
 
+                        {/* Contador de junta */}
+                        <div
+                            className='rounded-xl border p-3'
+                            style={{
+                                background: 'color-mix(in srgb, #2048FF 8%, var(--card-bg))',
+                                borderColor: 'color-mix(in srgb, #2048FF 26%, var(--card-border))'
+                            }}
+                        >
+                            <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'color-mix(in srgb, #2048FF 72%, var(--text-secondary))' }}>
+                                Contador de Junta
+                            </p>
+                            <p className='text-sm font-black mt-1' style={{ color: 'var(--text-primary)' }}>
+                                {sequenceText}
+                            </p>
+                            <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>
+                                Este número es informativo y se asigna automáticamente según el historial del cliente.
+                            </p>
+                        </div>
+
                         {/* Fecha y Hora + Duración */}
-                        <div className='grid grid-cols-2 gap-4'>
+                        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                             <div className='space-y-1.5'>
-                                <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                                <label className='block text-sm font-bold ah-required-label' style={{ color: 'var(--text-primary)' }}>
                                     Fecha y Hora <span className='text-red-500'>*</span>
                                 </label>
                                 <FriendlyDateTimePicker
                                     value={formData.start_time}
                                     onChange={(next) => setFormData({ ...formData, start_time: next })}
                                     minuteStep={5}
-                                    className='w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer'
+                                    className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer'
                                 />
                             </div>
 
@@ -288,14 +867,243 @@ export default function MeetingModal({
                             </div>
                         </div>
 
-                        {/* Asistentes */}
+                        {/* Contacto principal */}
+                        <div className='space-y-1.5'>
+                            <label className='block text-sm font-bold ah-required-label' style={{ color: 'var(--text-primary)' }}>
+                                Persona principal de la empresa <span className='text-red-500'>*</span>
+                            </label>
+                            <select
+                                required={mode === 'create'}
+                                value={primaryContactKey}
+                                onChange={(e) => {
+                                    const nextKey = e.target.value
+                                    setPrimaryContactKey(nextKey)
+                                    if (nextKey && nextKey !== OTHER_CONTACT_KEY) {
+                                        setSelectedExternalKeys(prev => Array.from(new Set([...prev, nextKey])))
+                                    }
+                                }}
+                                className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            >
+                                <option value=''>Seleccionar contacto...</option>
+                                {contactOptions.map((option) => (
+                                    <option key={option.key} value={option.key}>
+                                        {option.name}
+                                        {option.email ? ` · ${option.email}` : ''}
+                                        {option.phone ? ` · ${option.phone}` : ''}
+                                        {option.isPrimary ? ' · Principal' : ''}
+                                    </option>
+                                ))}
+                                <option value={OTHER_CONTACT_KEY}>Otro/a (registrar nuevo contacto)</option>
+                            </select>
+                            <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>
+                                {contactsLoading
+                                    ? 'Cargando contactos vinculados a la empresa...'
+                                    : 'Contactos disponibles vinculados a la empresa. Puedes elegir “Otro/a” para registrar uno nuevo.'}
+                            </p>
+                            {selectedPrimaryOption && primaryContactKey !== OTHER_CONTACT_KEY && (
+                                <div
+                                    className='rounded-lg border px-3 py-2 text-xs space-y-1'
+                                    style={{
+                                        background: 'color-mix(in srgb, #2048FF 7%, var(--card-bg))',
+                                        borderColor: 'color-mix(in srgb, #2048FF 22%, var(--card-border))',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <p className='font-black uppercase tracking-[0.1em]' style={{ color: 'color-mix(in srgb, #2048FF 72%, var(--text-secondary))' }}>
+                                        Datos del contacto seleccionado
+                                    </p>
+                                    <p className='font-semibold'>{selectedPrimaryOption.name}</p>
+                                    <p style={{ color: 'var(--text-secondary)' }}>
+                                        {selectedPrimaryOption.email || 'Sin correo'} · {selectedPrimaryOption.phone || 'Sin teléfono'}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Nuevo contacto principal */}
+                        {primaryContactKey === OTHER_CONTACT_KEY && (
+                            <div
+                                className='rounded-xl border p-3 space-y-2'
+                                style={{
+                                    background: 'color-mix(in srgb, #f59e0b 8%, var(--card-bg))',
+                                    borderColor: 'color-mix(in srgb, #f59e0b 24%, var(--card-border))'
+                                }}
+                            >
+                                <p className='text-xs font-black uppercase tracking-[0.12em]' style={{ color: 'color-mix(in srgb, #d97706 72%, var(--text-primary))' }}>
+                                    Registrar nuevo contacto (Otro/a)
+                                </p>
+                                <div className='grid grid-cols-1 md:grid-cols-3 gap-2'>
+                                    <input
+                                        type='text'
+                                        required
+                                        value={newPrimaryContact.name}
+                                        onChange={(e) => setNewPrimaryContact(prev => ({ ...prev, name: e.target.value }))}
+                                        placeholder='Nombre completo *'
+                                        className='ah-required-control px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    />
+                                    <input
+                                        type='email'
+                                        value={newPrimaryContact.email}
+                                        onChange={(e) => setNewPrimaryContact(prev => ({ ...prev, email: e.target.value }))}
+                                        placeholder='Correo (opcional)'
+                                        className='px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    />
+                                    <input
+                                        type='text'
+                                        value={newPrimaryContact.phone}
+                                        onChange={(e) => setNewPrimaryContact(prev => ({ ...prev, phone: e.target.value }))}
+                                        placeholder='Teléfono (opcional)'
+                                        className='px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Participantes internos */}
                         <div className='space-y-1.5'>
                             <UserSelect
-                                label='Asistentes (Usuarios Internos)'
+                                label='Participantes internos (tu equipo)'
                                 value={formData.attendees}
                                 onChange={(newAttendees) => setFormData({ ...formData, attendees: newAttendees })}
                                 placeholder='Seleccionar compañeros...'
                             />
+                        </div>
+
+                        {/* Participantes externos */}
+                        <div className='space-y-2'>
+                            <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                                Participantes externos (empresa cliente)
+                            </label>
+                            <div
+                                className='rounded-xl border p-3 max-h-44 overflow-y-auto custom-scrollbar space-y-2'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}
+                            >
+                                {contactOptions.length === 0 ? (
+                                    <p className='text-xs' style={{ color: 'var(--text-secondary)' }}>
+                                        No hay contactos disponibles todavía. Usa “Otro/a” o agrega participantes manuales.
+                                    </p>
+                                ) : (
+                                    contactOptions.map((option) => (
+                                        <label
+                                            key={option.key}
+                                            className='flex items-start gap-2 p-2 rounded-lg border cursor-pointer'
+                                            style={{
+                                                borderColor: selectedExternalKeys.includes(option.key)
+                                                    ? 'color-mix(in srgb, #2048FF 40%, var(--card-border))'
+                                                    : 'var(--card-border)',
+                                                background: selectedExternalKeys.includes(option.key)
+                                                    ? 'color-mix(in srgb, #2048FF 8%, var(--card-bg))'
+                                                    : 'var(--card-bg)'
+                                            }}
+                                        >
+                                            <input
+                                                type='checkbox'
+                                                checked={selectedExternalKeys.includes(option.key)}
+                                                onChange={() => toggleExternalParticipant(option.key)}
+                                                className='mt-0.5 accent-[#2048FF]'
+                                            />
+                                            <span className='text-xs font-semibold' style={{ color: 'var(--text-primary)' }}>
+                                                {option.name}
+                                                {option.email ? ` · ${option.email}` : ''}
+                                                {option.phone ? ` · ${option.phone}` : ''}
+                                            </span>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+
+                            {selectedExternalLabels.length > 0 && (
+                                <div className='flex flex-wrap gap-2'>
+                                    {selectedExternalLabels.map((label) => (
+                                        <span
+                                            key={label}
+                                            className='inline-flex items-center px-2 py-1 rounded-full text-[11px] font-bold border'
+                                            style={{
+                                                background: 'color-mix(in srgb, #3b82f6 10%, var(--card-bg))',
+                                                borderColor: 'color-mix(in srgb, #3b82f6 25%, var(--card-border))',
+                                                color: 'color-mix(in srgb, #2563eb 75%, var(--text-primary))'
+                                            }}
+                                        >
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Participante externo manual */}
+                        <div className='space-y-2'>
+                            <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                                Agregar participante externo adicional
+                            </label>
+                            <div className='grid grid-cols-1 md:grid-cols-4 gap-2'>
+                                <input
+                                    type='text'
+                                    value={newExternalParticipant.name}
+                                    onChange={(e) => setNewExternalParticipant(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder='Nombre *'
+                                    className='px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    type='email'
+                                    value={newExternalParticipant.email}
+                                    onChange={(e) => setNewExternalParticipant(prev => ({ ...prev, email: e.target.value }))}
+                                    placeholder='Correo'
+                                    className='px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                />
+                                <input
+                                    type='text'
+                                    value={newExternalParticipant.phone}
+                                    onChange={(e) => setNewExternalParticipant(prev => ({ ...prev, phone: e.target.value }))}
+                                    placeholder='Teléfono'
+                                    className='px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                />
+                                <button
+                                    type='button'
+                                    onClick={addManualExternalParticipant}
+                                    className='px-3 py-2 rounded-lg border font-black text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2'
+                                    style={{
+                                        background: 'color-mix(in srgb, #2048FF 8%, var(--card-bg))',
+                                        borderColor: 'color-mix(in srgb, #2048FF 25%, var(--card-border))',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <Plus size={14} /> Agregar
+                                </button>
+                            </div>
+
+                            {manualExternalParticipants.length > 0 && (
+                                <div className='flex flex-wrap gap-2'>
+                                    {manualExternalParticipants.map((participant) => (
+                                        <span
+                                            key={participant.id}
+                                            className='inline-flex items-center gap-2 px-2 py-1 rounded-full text-[11px] font-bold border'
+                                            style={{
+                                                background: 'color-mix(in srgb, #f59e0b 10%, var(--card-bg))',
+                                                borderColor: 'color-mix(in srgb, #f59e0b 28%, var(--card-border))',
+                                                color: 'color-mix(in srgb, #b45309 80%, var(--text-primary))'
+                                            }}
+                                        >
+                                            {buildParticipantLabel(participant.name, participant.email, participant.phone)}
+                                            <button
+                                                type='button'
+                                                onClick={() => removeManualExternalParticipant(participant.id)}
+                                                className='cursor-pointer'
+                                                title='Quitar participante'
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Notas */}
@@ -313,7 +1121,7 @@ export default function MeetingModal({
                             />
                         </div>
 
-                        {/* Integración con Calendario - More prominent */}
+                        {/* Integración con Calendario */}
                         <div className='pt-2'>
                             {isGoogleConnected ? (
                                 <div className='p-5 rounded-2xl border-2 shadow-sm' style={{ background: 'color-mix(in srgb, #10b981 10%, var(--card-bg))', borderColor: 'color-mix(in srgb, #10b981 32%, var(--card-border))' }}>
@@ -341,7 +1149,7 @@ export default function MeetingModal({
                                     </div>
                                     <p className='text-xs leading-snug' style={{ color: 'color-mix(in srgb, #059669 75%, var(--text-primary))' }}>
                                         {formData.calendar_provider === 'google'
-                                            ? 'Esta reunión se agendará automáticamente en Google Calendar y se enviarán invitaciones a los asistentes.'
+                                            ? 'Esta reunión se agendará automáticamente en Google Calendar y se enviarán invitaciones a los asistentes con correo.'
                                             : 'Esta reunión se guardará de forma local en el CRM solamente.'}
                                     </p>
                                     {formData.meeting_type === 'video' && formData.calendar_provider === 'google' && (
@@ -356,7 +1164,7 @@ export default function MeetingModal({
                                 <div className='p-5 rounded-2xl border-2 border-dashed' style={{ background: 'color-mix(in srgb, #3b82f6 7%, var(--card-bg))', borderColor: 'color-mix(in srgb, #3b82f6 28%, var(--card-border))' }}>
                                     <p className='text-sm font-bold mb-2 flex items-center gap-2' style={{ color: 'color-mix(in srgb, #2563eb 70%, var(--text-primary))' }}><Link2 size={14} /> Integración con Calendario</p>
                                     <p className='text-xs leading-relaxed' style={{ color: 'color-mix(in srgb, #2563eb 72%, var(--text-secondary))' }}>
-                                        Para que tus juntas se agreguen a Google Calendar automáticamente, primero **conecta tu cuenta** en la sección principal del Calendario.
+                                        Para que tus juntas se agreguen a Google Calendar automáticamente, primero conecta tu cuenta en la sección principal del Calendario.
                                     </p>
                                 </div>
                             )}

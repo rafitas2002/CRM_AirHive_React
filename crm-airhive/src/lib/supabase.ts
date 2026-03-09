@@ -86,6 +86,14 @@ export type Database = {
                     converted_at: string | null
                     converted_by: string | null
                     closed_at_real: string | null
+                    prospect_role_catalog_id: string | null
+                    prospect_role_custom: string | null
+                    prospect_age_exact: number | null
+                    prospect_age_range_id: string | null
+                    prospect_decision_role: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
+                    prospect_preferred_contact_channel: 'whatsapp' | 'llamada' | 'email' | 'video' | 'presencial' | 'sin_preferencia' | null
+                    prospect_linkedin_url: string | null
+                    prospect_is_family_member: boolean | null
                 }
                 Insert: {
                     id?: number
@@ -134,6 +142,14 @@ export type Database = {
                     converted_at?: string | null
                     converted_by?: string | null
                     closed_at_real?: string | null
+                    prospect_role_catalog_id?: string | null
+                    prospect_role_custom?: string | null
+                    prospect_age_exact?: number | null
+                    prospect_age_range_id?: string | null
+                    prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
+                    prospect_preferred_contact_channel?: 'whatsapp' | 'llamada' | 'email' | 'video' | 'presencial' | 'sin_preferencia' | null
+                    prospect_linkedin_url?: string | null
+                    prospect_is_family_member?: boolean | null
                 }
                 Update: {
                     id?: number
@@ -182,6 +198,87 @@ export type Database = {
                     converted_at?: string | null
                     converted_by?: string | null
                     closed_at_real?: string | null
+                    prospect_role_catalog_id?: string | null
+                    prospect_role_custom?: string | null
+                    prospect_age_exact?: number | null
+                    prospect_age_range_id?: string | null
+                    prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
+                    prospect_preferred_contact_channel?: 'whatsapp' | 'llamada' | 'email' | 'video' | 'presencial' | 'sin_preferencia' | null
+                    prospect_linkedin_url?: string | null
+                    prospect_is_family_member?: boolean | null
+                }
+            }
+            lead_prospect_roles_catalog: {
+                Row: {
+                    id: string
+                    code: string
+                    label: string
+                    description: string | null
+                    sort_order: number
+                    is_active: boolean
+                    created_by: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    code: string
+                    label: string
+                    description?: string | null
+                    sort_order?: number
+                    is_active?: boolean
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    code?: string
+                    label?: string
+                    description?: string | null
+                    sort_order?: number
+                    is_active?: boolean
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
+            lead_age_ranges_catalog: {
+                Row: {
+                    id: string
+                    code: string
+                    label: string
+                    min_age: number | null
+                    max_age: number | null
+                    sort_order: number
+                    is_active: boolean
+                    created_by: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    code: string
+                    label: string
+                    min_age?: number | null
+                    max_age?: number | null
+                    sort_order?: number
+                    is_active?: boolean
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    code?: string
+                    label?: string
+                    min_age?: number | null
+                    max_age?: number | null
+                    sort_order?: number
+                    is_active?: boolean
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
                 }
             }
             pre_leads: {
@@ -294,11 +391,15 @@ export type Database = {
                     lead_id: number
                     seller_id: string
                     title: string
+                    meeting_sequence_number: number | null
                     start_time: string
                     duration_minutes: number
                     meeting_type: 'presencial' | 'llamada' | 'video'
                     notes: string | null
                     attendees: string[] | null
+                    primary_company_contact_id: string | null
+                    primary_company_contact_name: string | null
+                    external_participants: string[] | null
                     calendar_event_id: string | null
                     calendar_provider: 'google' | 'outlook' | null
                     status: 'scheduled' | 'completed' | 'cancelled'
@@ -307,6 +408,9 @@ export type Database = {
                     confirmation_timestamp: string | null
                     confirmed_by: string | null
                     confirmation_notes: string | null
+                    not_held_reason: string | null
+                    not_held_reason_id: string | null
+                    not_held_responsibility: 'propia' | 'ajena' | null
                     created_at: string
                     updated_at: string
                 }
@@ -315,11 +419,15 @@ export type Database = {
                     lead_id: number
                     seller_id: string
                     title: string
+                    meeting_sequence_number?: number | null
                     start_time: string
                     duration_minutes?: number
                     meeting_type: 'presencial' | 'llamada' | 'video'
                     notes?: string | null
                     attendees?: string[] | null
+                    primary_company_contact_id?: string | null
+                    primary_company_contact_name?: string | null
+                    external_participants?: string[] | null
                     calendar_event_id?: string | null
                     calendar_provider?: 'google' | 'outlook' | null
                     status?: 'scheduled' | 'completed' | 'cancelled'
@@ -328,6 +436,9 @@ export type Database = {
                     confirmation_timestamp?: string | null
                     confirmed_by?: string | null
                     confirmation_notes?: string | null
+                    not_held_reason?: string | null
+                    not_held_reason_id?: string | null
+                    not_held_responsibility?: 'propia' | 'ajena' | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -336,11 +447,15 @@ export type Database = {
                     lead_id?: number
                     seller_id?: string
                     title?: string
+                    meeting_sequence_number?: number | null
                     start_time?: string
                     duration_minutes?: number
                     meeting_type?: 'presencial' | 'llamada' | 'video'
                     notes?: string | null
                     attendees?: string[] | null
+                    primary_company_contact_id?: string | null
+                    primary_company_contact_name?: string | null
+                    external_participants?: string[] | null
                     calendar_event_id?: string | null
                     calendar_provider?: 'google' | 'outlook' | null
                     status?: 'scheduled' | 'completed' | 'cancelled'
@@ -349,6 +464,91 @@ export type Database = {
                     confirmation_timestamp?: string | null
                     confirmed_by?: string | null
                     confirmation_notes?: string | null
+                    not_held_reason?: string | null
+                    not_held_reason_id?: string | null
+                    not_held_responsibility?: 'propia' | 'ajena' | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
+            meeting_cancellation_reasons: {
+                Row: {
+                    id: string
+                    code: string
+                    label: string
+                    description: string | null
+                    is_active: boolean
+                    is_default: boolean
+                    sort_order: number
+                    created_by: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    code: string
+                    label: string
+                    description?: string | null
+                    is_active?: boolean
+                    is_default?: boolean
+                    sort_order?: number
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    code?: string
+                    label?: string
+                    description?: string | null
+                    is_active?: boolean
+                    is_default?: boolean
+                    sort_order?: number
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
+            company_contacts: {
+                Row: {
+                    id: string
+                    empresa_id: string
+                    full_name: string
+                    email: string | null
+                    phone: string | null
+                    job_title: string | null
+                    is_primary: boolean
+                    is_active: boolean
+                    source: 'manual' | 'lead_sync'
+                    created_by: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    empresa_id: string
+                    full_name: string
+                    email?: string | null
+                    phone?: string | null
+                    job_title?: string | null
+                    is_primary?: boolean
+                    is_active?: boolean
+                    source?: 'manual' | 'lead_sync'
+                    created_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    empresa_id?: string
+                    full_name?: string
+                    email?: string | null
+                    phone?: string | null
+                    job_title?: string | null
+                    is_primary?: boolean
+                    is_active?: boolean
+                    source?: 'manual' | 'lead_sync'
+                    created_by?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -398,6 +598,9 @@ export type Database = {
                     confirmed_by: string
                     was_held: boolean
                     confirmation_notes: string | null
+                    not_held_reason: string | null
+                    not_held_reason_id: string | null
+                    not_held_responsibility: 'propia' | 'ajena' | null
                     snapshot_created: boolean
                     snapshot_id: string | null
                     created_at: string
@@ -408,6 +611,9 @@ export type Database = {
                     confirmed_by: string
                     was_held: boolean
                     confirmation_notes?: string | null
+                    not_held_reason?: string | null
+                    not_held_reason_id?: string | null
+                    not_held_responsibility?: 'propia' | 'ajena' | null
                     snapshot_created?: boolean
                     snapshot_id?: string | null
                     created_at?: string
@@ -418,6 +624,9 @@ export type Database = {
                     confirmed_by?: string
                     was_held?: boolean
                     confirmation_notes?: string | null
+                    not_held_reason?: string | null
+                    not_held_reason_id?: string | null
+                    not_held_responsibility?: 'propia' | 'ajena' | null
                     snapshot_created?: boolean
                     snapshot_id?: string | null
                     created_at?: string

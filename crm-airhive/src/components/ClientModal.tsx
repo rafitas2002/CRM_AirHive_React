@@ -14,7 +14,7 @@ export type ClientData = {
     empresa: string
     nombre: string
     etapa: string
-    valor_estimado: number
+    valor_estimado: number | null
     valor_real_cierre?: number | null
     valor_implementacion_estimado?: number | null
     valor_implementacion_real_cierre?: number | null
@@ -40,6 +40,14 @@ export type ClientData = {
     loss_notes?: string | null
     loss_recorded_at?: string | null
     loss_recorded_by?: string | null
+    prospect_role_catalog_id?: string | null
+    prospect_role_custom?: string | null
+    prospect_age_exact?: number | null
+    prospect_age_range_id?: string | null
+    prospect_decision_role?: 'decision_maker' | 'influencer' | 'evaluator' | 'user' | 'gatekeeper' | 'unknown' | null
+    prospect_preferred_contact_channel?: 'whatsapp' | 'llamada' | 'email' | 'video' | 'presencial' | 'sin_preferencia' | null
+    prospect_linkedin_url?: string | null
+    prospect_is_family_member?: boolean | null
 }
 
 function formatCurrencyInputNumber(value: number | null | undefined): string {
@@ -110,6 +118,58 @@ type LossSubreasonCatalogItem = {
     is_active?: boolean
 }
 
+type ProspectRoleCatalogItem = {
+    id: string
+    code: string
+    label: string
+    description?: string | null
+    sort_order?: number | null
+    is_active?: boolean
+}
+
+type AgeRangeCatalogItem = {
+    id: string
+    code: string
+    label: string
+    min_age?: number | null
+    max_age?: number | null
+    sort_order?: number | null
+    is_active?: boolean
+}
+
+const CUSTOM_PROSPECT_ROLE_OPTION = '__custom_prospect_role__'
+
+const PROSPECT_DECISION_ROLE_OPTIONS: Array<{ value: NonNullable<ClientData['prospect_decision_role']>; label: string }> = [
+    { value: 'decision_maker', label: 'Tomador/a de decisión' },
+    { value: 'influencer', label: 'Influenciador/a' },
+    { value: 'evaluator', label: 'Evaluador/a técnico/comercial' },
+    { value: 'user', label: 'Usuario/a final' },
+    { value: 'gatekeeper', label: 'Filtro / Compras' },
+    { value: 'unknown', label: 'Rol en decisión no especificado' }
+]
+
+const PREFERRED_CONTACT_CHANNEL_OPTIONS: Array<{ value: NonNullable<ClientData['prospect_preferred_contact_channel']>; label: string }> = [
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'llamada', label: 'Llamada' },
+    { value: 'email', label: 'Email' },
+    { value: 'video', label: 'Video' },
+    { value: 'presencial', label: 'Presencial' },
+    { value: 'sin_preferencia', label: 'Sin preferencia declarada' }
+]
+
+function findAgeRangeIdForAge(age: number | null | undefined, ranges: AgeRangeCatalogItem[]): string | null {
+    if (age == null || !Number.isFinite(age)) return null
+    for (const range of ranges) {
+        const minAge = range.min_age == null ? null : Number(range.min_age)
+        const maxAge = range.max_age == null ? null : Number(range.max_age)
+        if (minAge == null) continue
+        if (age >= minAge && (maxAge == null || age <= maxAge)) {
+            return range.id
+        }
+    }
+    return null
+}
+
 export default function ClientModal({
     isOpen,
     onClose,
@@ -146,7 +206,15 @@ export default function ClientModal({
         loss_subreason_id: null,
         loss_notes: '',
         loss_recorded_at: null,
-        loss_recorded_by: null
+        loss_recorded_by: null,
+        prospect_role_catalog_id: null,
+        prospect_role_custom: '',
+        prospect_age_exact: null,
+        prospect_age_range_id: null,
+        prospect_decision_role: null,
+        prospect_preferred_contact_channel: null,
+        prospect_linkedin_url: '',
+        prospect_is_family_member: false
     })
     const [phoneError, setPhoneError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -169,8 +237,17 @@ export default function ClientModal({
     const [lossSubreasonsCatalog, setLossSubreasonsCatalog] = useState<LossSubreasonCatalogItem[]>([])
     const [lossCatalogLoading, setLossCatalogLoading] = useState(false)
     const [lossCatalogError, setLossCatalogError] = useState<string | null>(null)
+    const [prospectRolesCatalog, setProspectRolesCatalog] = useState<ProspectRoleCatalogItem[]>([])
+    const [prospectRolesCatalogLoading, setProspectRolesCatalogLoading] = useState(false)
+    const [prospectRolesCatalogError, setProspectRolesCatalogError] = useState<string | null>(null)
+    const [ageRangesCatalog, setAgeRangesCatalog] = useState<AgeRangeCatalogItem[]>([])
+    const [ageRangesCatalogLoading, setAgeRangesCatalogLoading] = useState(false)
+    const [ageRangesCatalogError, setAgeRangesCatalogError] = useState<string | null>(null)
+    const [selectedProspectRoleOption, setSelectedProspectRoleOption] = useState<string>('')
     const areRealCloseValueFieldsLockedInForm = true
     const lastLoadedProjectsCompanyRef = useRef<string | null>(null)
+    const lastManualEstimatedValueRef = useRef<number | null>(null)
+    const lastManualImplementationEstimatedValueRef = useRef<number | null>(null)
 
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
@@ -178,7 +255,7 @@ export default function ClientModal({
                 setFormData({
                     ...initialData,
                     valor_real_cierre: initialData.valor_real_cierre ?? null,
-                    valor_implementacion_estimado: (initialData as any).valor_implementacion_estimado ?? 0,
+                    valor_implementacion_estimado: (initialData as any).valor_implementacion_estimado ?? null,
                     valor_implementacion_real_cierre: (initialData as any).valor_implementacion_real_cierre ?? null,
                     forecast_close_date: initialData.forecast_close_date ?? null,
                     closed_at_real: initialData.closed_at_real ?? null,
@@ -195,12 +272,29 @@ export default function ClientModal({
                     loss_subreason_id: (initialData as any).loss_subreason_id ?? null,
                     loss_notes: (initialData as any).loss_notes ?? '',
                     loss_recorded_at: (initialData as any).loss_recorded_at ?? null,
-                    loss_recorded_by: (initialData as any).loss_recorded_by ?? null
+                    loss_recorded_by: (initialData as any).loss_recorded_by ?? null,
+                    prospect_role_catalog_id: (initialData as any).prospect_role_catalog_id ?? null,
+                    prospect_role_custom: (initialData as any).prospect_role_custom ?? '',
+                    prospect_age_exact: (initialData as any).prospect_age_exact ?? null,
+                    prospect_age_range_id: (initialData as any).prospect_age_range_id ?? null,
+                    prospect_decision_role: (initialData as any).prospect_decision_role ?? null,
+                    prospect_preferred_contact_channel: (initialData as any).prospect_preferred_contact_channel ?? null,
+                    prospect_linkedin_url: (initialData as any).prospect_linkedin_url ?? '',
+                    prospect_is_family_member: (initialData as any).prospect_is_family_member ?? false
                 })
+                if ((initialData as any).prospect_role_catalog_id) {
+                    setSelectedProspectRoleOption(String((initialData as any).prospect_role_catalog_id))
+                } else if (String((initialData as any).prospect_role_custom || '').trim()) {
+                    setSelectedProspectRoleOption(CUSTOM_PROSPECT_ROLE_OPTION)
+                } else {
+                    setSelectedProspectRoleOption('')
+                }
                 if (mode === 'edit') {
                     checkProbabilityEditability()
                 }
             } else {
+                lastManualEstimatedValueRef.current = null
+                lastManualImplementationEstimatedValueRef.current = null
                 setFormData({
                     empresa: '',
                     nombre: '',
@@ -227,8 +321,17 @@ export default function ClientModal({
                     loss_subreason_id: null,
                     loss_notes: '',
                     loss_recorded_at: null,
-                    loss_recorded_by: null
+                    loss_recorded_by: null,
+                    prospect_role_catalog_id: null,
+                    prospect_role_custom: '',
+                    prospect_age_exact: null,
+                    prospect_age_range_id: null,
+                    prospect_decision_role: null,
+                    prospect_preferred_contact_channel: null,
+                    prospect_linkedin_url: '',
+                    prospect_is_family_member: false
                 })
+                setSelectedProspectRoleOption('')
                 setPhoneError('')
                 setIsProbEditable(true)
                 setEditabilityReason('')
@@ -236,12 +339,25 @@ export default function ClientModal({
             setShowCloseLeadPanel(false)
             setPendingCloseOutcome('won')
             setPendingCloseDate((initialData as any)?.closed_at_real || todayDateOnly())
-            setPendingCloseRealValue(initialData?.valor_real_cierre ?? initialData?.valor_estimado ?? null)
-            setPendingCloseImplementationRealValue((initialData as any)?.valor_implementacion_real_cierre ?? (initialData as any)?.valor_implementacion_estimado ?? null)
+            setPendingCloseRealValue(initialData?.valor_real_cierre ?? null)
+            setPendingCloseImplementationRealValue((initialData as any)?.valor_implementacion_real_cierre ?? null)
             fetchCurrentUser()
         }
         wasOpen.current = isOpen
     }, [isOpen, initialData, mode])
+
+    useEffect(() => {
+        if (formData.valor_estimado != null && formData.valor_estimado > 0) {
+            lastManualEstimatedValueRef.current = formData.valor_estimado
+        }
+    }, [formData.valor_estimado])
+
+    useEffect(() => {
+        const value = (formData as any).valor_implementacion_estimado
+        if (value != null && Number(value) > 0) {
+            lastManualImplementationEstimatedValueRef.current = Number(value)
+        }
+    }, [(formData as any).valor_implementacion_estimado])
 
     useEffect(() => {
         if (!isOpen) return
@@ -339,24 +455,111 @@ export default function ClientModal({
     }, [isOpen, supabase])
 
     useEffect(() => {
-        if (formData.etapa === 'Cerrado Ganado' && (formData.valor_real_cierre === null || formData.valor_real_cierre === undefined)) {
-            setFormData((prev) => ({ ...prev, valor_real_cierre: prev.valor_estimado || 0 }))
+        if (!isOpen) return
+        let cancelled = false
+
+        const loadProspectRolesCatalog = async () => {
+            setProspectRolesCatalogLoading(true)
+            setProspectRolesCatalogError(null)
+
+            const { data, error } = await (supabase.from('lead_prospect_roles_catalog') as any)
+                .select('id, code, label, description, sort_order, is_active')
+                .eq('is_active', true)
+                .order('sort_order', { ascending: true })
+                .order('label', { ascending: true })
+
+            if (error) {
+                const rawMessage = String(error?.message || 'No se pudo cargar el catálogo de puestos del prospecto.')
+                const normalized = rawMessage.toLowerCase()
+                const isMissingCatalog = normalized.includes('lead_prospect_roles_catalog') || normalized.includes('does not exist') || normalized.includes('42p01')
+                if (!cancelled) {
+                    setProspectRolesCatalog([])
+                    setProspectRolesCatalogError(
+                        isMissingCatalog
+                            ? 'El catálogo de puestos del prospecto aún no está disponible en esta base de datos. Ejecuta la migración 085.'
+                            : rawMessage
+                    )
+                    setProspectRolesCatalogLoading(false)
+                }
+                return
+            }
+
+            if (!cancelled) {
+                setProspectRolesCatalog(Array.isArray(data) ? data.map((row: any) => ({
+                    id: String(row.id),
+                    code: String(row.code || ''),
+                    label: String(row.label || 'Puesto'),
+                    description: row.description == null ? null : String(row.description),
+                    sort_order: row.sort_order == null ? null : Number(row.sort_order),
+                    is_active: !!row.is_active
+                })) : [])
+                setProspectRolesCatalogLoading(false)
+            }
         }
-    }, [formData.etapa, formData.valor_estimado, formData.valor_real_cierre])
+
+        void loadProspectRolesCatalog()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, supabase])
 
     useEffect(() => {
-        if (formData.etapa === 'Cerrado Ganado' && ((formData as any).valor_implementacion_real_cierre === null || (formData as any).valor_implementacion_real_cierre === undefined)) {
-            setFormData((prev) => ({ ...prev, valor_implementacion_real_cierre: (prev as any).valor_implementacion_estimado || 0 }))
+        if (!isOpen) return
+        let cancelled = false
+
+        const loadAgeRangesCatalog = async () => {
+            setAgeRangesCatalogLoading(true)
+            setAgeRangesCatalogError(null)
+
+            const { data, error } = await (supabase.from('lead_age_ranges_catalog') as any)
+                .select('id, code, label, min_age, max_age, sort_order, is_active')
+                .eq('is_active', true)
+                .order('sort_order', { ascending: true })
+                .order('label', { ascending: true })
+
+            if (error) {
+                const rawMessage = String(error?.message || 'No se pudo cargar el catálogo de rangos de edad.')
+                const normalized = rawMessage.toLowerCase()
+                const isMissingCatalog = normalized.includes('lead_age_ranges_catalog') || normalized.includes('does not exist') || normalized.includes('42p01')
+                if (!cancelled) {
+                    setAgeRangesCatalog([])
+                    setAgeRangesCatalogError(
+                        isMissingCatalog
+                            ? 'El catálogo de rangos de edad aún no está disponible. Ejecuta la migración 086.'
+                            : rawMessage
+                    )
+                    setAgeRangesCatalogLoading(false)
+                }
+                return
+            }
+
+            if (!cancelled) {
+                setAgeRangesCatalog(Array.isArray(data) ? data.map((row: any) => ({
+                    id: String(row.id),
+                    code: String(row.code || ''),
+                    label: String(row.label || 'Rango'),
+                    min_age: row.min_age == null ? null : Number(row.min_age),
+                    max_age: row.max_age == null ? null : Number(row.max_age),
+                    sort_order: row.sort_order == null ? null : Number(row.sort_order),
+                    is_active: !!row.is_active
+                })) : [])
+                setAgeRangesCatalogLoading(false)
+            }
         }
-    }, [formData.etapa, (formData as any).valor_implementacion_estimado, (formData as any).valor_implementacion_real_cierre])
+
+        void loadAgeRangesCatalog()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, supabase])
 
     useEffect(() => {
         if (showCloseLeadPanel) {
             setPendingCloseDate(formData.closed_at_real || todayDateOnly())
-            setPendingCloseRealValue(formData.valor_real_cierre ?? formData.valor_estimado ?? null)
-            setPendingCloseImplementationRealValue((formData as any).valor_implementacion_real_cierre ?? (formData as any).valor_implementacion_estimado ?? null)
+            setPendingCloseRealValue(formData.valor_real_cierre ?? null)
+            setPendingCloseImplementationRealValue((formData as any).valor_implementacion_real_cierre ?? null)
         }
-    }, [showCloseLeadPanel, formData.closed_at_real, formData.valor_real_cierre, formData.valor_estimado, (formData as any).valor_implementacion_real_cierre, (formData as any).valor_implementacion_estimado])
+    }, [showCloseLeadPanel, formData.closed_at_real, formData.valor_real_cierre, (formData as any).valor_implementacion_real_cierre])
 
     const fetchCurrentUser = async () => {
         const { data: { user } } = await supabase.auth.getUser()
@@ -495,6 +698,24 @@ export default function ClientModal({
         () => [...projectsCatalog].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
         [projectsCatalog]
     )
+    const sortedProspectRolesCatalog = useMemo(
+        () => [...prospectRolesCatalog].sort((a, b) => {
+            const leftOrder = a.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(a.sort_order)
+            const rightOrder = b.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(b.sort_order)
+            if (leftOrder !== rightOrder) return leftOrder - rightOrder
+            return a.label.localeCompare(b.label, 'es')
+        }),
+        [prospectRolesCatalog]
+    )
+    const sortedAgeRangesCatalog = useMemo(
+        () => [...ageRangesCatalog].sort((a, b) => {
+            const leftOrder = a.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(a.sort_order)
+            const rightOrder = b.sort_order == null ? Number.MAX_SAFE_INTEGER : Number(b.sort_order)
+            if (leftOrder !== rightOrder) return leftOrder - rightOrder
+            return a.label.localeCompare(b.label, 'es')
+        }),
+        [ageRangesCatalog]
+    )
     const filteredLossSubreasons = useMemo(() => {
         const reasonId = (formData as any).loss_reason_id || null
         if (!reasonId) return []
@@ -543,6 +764,14 @@ export default function ClientModal({
             String(formData.nombre || '') === String(initialData.nombre || '') &&
             String(formData.email || '') === String(initialData.email || '') &&
             String(formData.telefono || '') === String(initialData.telefono || '') &&
+            norm((formData as any).prospect_role_catalog_id) === norm((initialData as any).prospect_role_catalog_id) &&
+            String((formData as any).prospect_role_custom || '') === String((initialData as any).prospect_role_custom || '') &&
+            asNum((formData as any).prospect_age_exact) === asNum((initialData as any).prospect_age_exact) &&
+            norm((formData as any).prospect_age_range_id) === norm((initialData as any).prospect_age_range_id) &&
+            norm((formData as any).prospect_decision_role) === norm((initialData as any).prospect_decision_role) &&
+            norm((formData as any).prospect_preferred_contact_channel) === norm((initialData as any).prospect_preferred_contact_channel) &&
+            String((formData as any).prospect_linkedin_url || '') === String((initialData as any).prospect_linkedin_url || '') &&
+            Boolean((formData as any).prospect_is_family_member) === Boolean((initialData as any).prospect_is_family_member) &&
             String(formData.etapa || '') === String(initialData.etapa || '') &&
             asNum(formData.valor_estimado) === asNum(initialData.valor_estimado) &&
             asNum(formData.valor_real_cierre) === asNum(initialData.valor_real_cierre) &&
@@ -585,6 +814,50 @@ export default function ClientModal({
             ...prev,
             empresa: company.nombre,
             empresa_id: company.id
+        }))
+    }
+
+    const handleProspectRoleSelect = (nextValue: string) => {
+        setSelectedProspectRoleOption(nextValue)
+        if (!nextValue) {
+            setFormData((prev) => ({
+                ...prev,
+                prospect_role_catalog_id: null,
+                prospect_role_custom: ''
+            }))
+            return
+        }
+        if (nextValue === CUSTOM_PROSPECT_ROLE_OPTION) {
+            setFormData((prev) => ({
+                ...prev,
+                prospect_role_catalog_id: null
+            }))
+            return
+        }
+        setFormData((prev) => ({
+            ...prev,
+            prospect_role_catalog_id: nextValue,
+            prospect_role_custom: ''
+        }))
+    }
+
+    const handleProspectAgeExactChange = (rawValue: string) => {
+        const trimmed = String(rawValue || '').trim()
+        if (!trimmed) {
+            setFormData((prev) => ({
+                ...prev,
+                prospect_age_exact: null
+            }))
+            return
+        }
+        const parsed = Number(trimmed)
+        if (!Number.isFinite(parsed)) return
+        const normalizedAge = Math.max(0, Math.round(parsed))
+        const inferredRangeId = findAgeRangeIdForAge(normalizedAge, sortedAgeRangesCatalog)
+        setFormData((prev) => ({
+            ...prev,
+            prospect_age_exact: normalizedAge,
+            prospect_age_range_id: inferredRangeId || prev.prospect_age_range_id || null
         }))
     }
 
@@ -676,6 +949,46 @@ export default function ClientModal({
             return
         }
 
+        const trimmedCustomProspectRole = String((formData as any).prospect_role_custom || '').trim()
+        if (selectedProspectRoleOption === CUSTOM_PROSPECT_ROLE_OPTION && !trimmedCustomProspectRole) {
+            alert('Si seleccionas “Otro (especificar)”, escribe el puesto del prospecto.')
+            return
+        }
+        if (prospectRolesCatalogError && selectedProspectRoleOption && selectedProspectRoleOption !== CUSTOM_PROSPECT_ROLE_OPTION) {
+            alert('No se pudo validar el catálogo de puestos. Ejecuta la migración 085 o elige “Otro (especificar)”.')
+            return
+        }
+        if (ageRangesCatalogError && (formData as any).prospect_age_range_id) {
+            alert('No se pudo validar el catálogo de rangos de edad. Ejecuta la migración 086 o limpia el rango de edad.')
+            return
+        }
+
+        const normalizedProspectAgeExactRaw = (formData as any).prospect_age_exact
+        const normalizedProspectAgeExact = normalizedProspectAgeExactRaw == null || normalizedProspectAgeExactRaw === ''
+            ? null
+            : Math.round(Number(normalizedProspectAgeExactRaw))
+
+        if (normalizedProspectAgeExact != null && (!Number.isFinite(normalizedProspectAgeExact) || normalizedProspectAgeExact < 16 || normalizedProspectAgeExact > 100)) {
+            alert('La edad del prospecto debe estar entre 16 y 100 años.')
+            return
+        }
+
+        const inferredAgeRangeId = findAgeRangeIdForAge(normalizedProspectAgeExact, sortedAgeRangesCatalog)
+        const normalizedProspectAgeRangeId = inferredAgeRangeId || ((formData as any).prospect_age_range_id || null)
+        const normalizedProspectDecisionRole = ((formData as any).prospect_decision_role || null)
+        const normalizedPreferredContactChannel = ((formData as any).prospect_preferred_contact_channel || null)
+        const normalizedLinkedin = String((formData as any).prospect_linkedin_url || '').trim() || null
+
+        const normalizedFormData: ClientData = {
+            ...formData,
+            prospect_age_exact: normalizedProspectAgeExact,
+            prospect_age_range_id: normalizedProspectAgeRangeId,
+            prospect_decision_role: normalizedProspectDecisionRole,
+            prospect_preferred_contact_channel: normalizedPreferredContactChannel,
+            prospect_linkedin_url: normalizedLinkedin,
+            prospect_is_family_member: Boolean((formData as any).prospect_is_family_member)
+        }
+
         if (isWonStageLocal(formData.etapa)) {
             if (!formData.closed_at_real) {
                 alert('Debes registrar la fecha real de cierre del lead ganado.')
@@ -704,7 +1017,7 @@ export default function ClientModal({
 
         setIsSubmitting(true)
         try {
-            await onSave(formData)
+            await onSave(normalizedFormData)
             onClose()
         } catch (error) {
             console.error('Error saving client:', error)
@@ -714,6 +1027,9 @@ export default function ClientModal({
     }
 
     if (!isOpen) return null
+
+    const estimatedValueUnavailable = formData.valor_estimado == null
+    const implementationEstimatedValueUnavailable = (formData as any).valor_implementacion_estimado == null
 
     const currentStageLabel = isWonStageLocal(formData.etapa)
         ? 'Cerrado Ganado'
@@ -739,9 +1055,9 @@ export default function ClientModal({
             ...prev,
             etapa: pendingCloseOutcome === 'won' ? 'Cerrado Ganado' : 'Cerrado Perdido',
             closed_at_real: pendingCloseDate,
-            valor_real_cierre: pendingCloseOutcome === 'won' ? (pendingCloseRealValue ?? prev.valor_estimado ?? 0) : null,
+            valor_real_cierre: pendingCloseOutcome === 'won' ? (pendingCloseRealValue ?? null) : null,
             valor_implementacion_real_cierre: pendingCloseOutcome === 'won'
-                ? (pendingCloseImplementationRealValue ?? (prev as any).valor_implementacion_estimado ?? 0)
+                ? (pendingCloseImplementationRealValue ?? null)
                 : null
         }))
         setShowCloseLeadPanel(false)
@@ -780,6 +1096,11 @@ export default function ClientModal({
 
                 {/* Form Body style match with Pre-Lead */}
                 <form onSubmit={handleSubmit} className='flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8'>
+                    <div className='ah-required-note' role='note'>
+                        <span className='ah-required-note-dot' aria-hidden='true' />
+                        Campos obligatorios: marcados con * y resaltados en rojo
+                    </div>
+
                     {/* Sección Empresa */}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                         <div className='space-y-2'>
@@ -834,7 +1155,7 @@ export default function ClientModal({
                             )}
                         </div>
 
-                        <div className='space-y-2'>
+                        <div className='space-y-4'>
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Nombre del Prospecto *</label>
                             <input
                                 required
@@ -845,6 +1166,180 @@ export default function ClientModal({
                                 style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                 placeholder="Nombre completo"
                             />
+
+                            <div className='space-y-3'>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                    Puesto del Prospecto (Opcional)
+                                </label>
+                                <select
+                                    value={selectedProspectRoleOption}
+                                    onChange={(e) => handleProspectRoleSelect(e.target.value)}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
+                                    style={{
+                                        background: 'var(--background)',
+                                        borderColor: 'var(--card-border)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <option value=''>Seleccionar puesto...</option>
+                                    {sortedProspectRolesCatalog.map((role) => (
+                                        <option key={role.id} value={role.id}>
+                                            {role.label}
+                                        </option>
+                                    ))}
+                                    <option value={CUSTOM_PROSPECT_ROLE_OPTION}>Otro (especificar)</option>
+                                </select>
+
+                                {selectedProspectRoleOption === CUSTOM_PROSPECT_ROLE_OPTION && (
+                                    <input
+                                        type='text'
+                                        value={(formData as any).prospect_role_custom || ''}
+                                        onChange={(e) => setFormData({ ...formData, prospect_role_custom: e.target.value })}
+                                        className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='Ej. Gerente de Planta'
+                                    />
+                                )}
+
+                                {prospectRolesCatalogLoading && (
+                                    <p className='text-[11px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                        Cargando catálogo de puestos...
+                                    </p>
+                                )}
+
+                                {prospectRolesCatalogError && (
+                                    <p className='text-[11px] font-bold' style={{ color: '#f59e0b' }}>
+                                        {prospectRolesCatalogError}
+                                    </p>
+                                )}
+
+                                {!prospectRolesCatalogError && (
+                                    <p className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                        Usa categorías generales para mantener consistencia en correlaciones (ej. “Gerencia” en lugar de variantes por área).
+                                    </p>
+                                )}
+
+                                <label className='inline-flex items-center gap-2 text-[11px] font-bold cursor-pointer select-none' style={{ color: 'var(--text-secondary)' }}>
+                                    <input
+                                        type='checkbox'
+                                        checked={Boolean((formData as any).prospect_is_family_member)}
+                                        onChange={(e) => setFormData({ ...formData, prospect_is_family_member: e.target.checked })}
+                                        className='h-4 w-4 rounded border border-[var(--card-border)] accent-blue-600 cursor-pointer'
+                                    />
+                                    Es familiar de la empresa (hijo/a, nieto/a u otro vínculo familiar)
+                                </label>
+
+                                <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1'>
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                            Edad Exacta (Opcional)
+                                        </label>
+                                        <input
+                                            type='number'
+                                            min={16}
+                                            max={100}
+                                            value={(formData as any).prospect_age_exact ?? ''}
+                                            onChange={(e) => handleProspectAgeExactChange(e.target.value)}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                            placeholder='Ej. 37'
+                                        />
+                                    </div>
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                            Rango de Edad (Opcional)
+                                        </label>
+                                        <select
+                                            value={(formData as any).prospect_age_range_id || ''}
+                                            onChange={(e) => setFormData({ ...formData, prospect_age_range_id: e.target.value || null })}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
+                                            style={{
+                                                background: 'var(--background)',
+                                                borderColor: 'var(--card-border)',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        >
+                                            <option value=''>Seleccionar rango...</option>
+                                            {sortedAgeRangesCatalog.map((range) => (
+                                                <option key={range.id} value={range.id}>
+                                                    {range.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {ageRangesCatalogLoading && (
+                                            <p className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                Cargando rangos...
+                                            </p>
+                                        )}
+                                        {ageRangesCatalogError && (
+                                            <p className='text-[10px] font-semibold' style={{ color: '#f59e0b' }}>
+                                                {ageRangesCatalogError}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className='space-y-2 sm:col-span-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                            Rol en la Decisión de Compra (Opcional)
+                                        </label>
+                                        <select
+                                            value={(formData as any).prospect_decision_role || ''}
+                                            onChange={(e) => setFormData({ ...formData, prospect_decision_role: (e.target.value || null) as any })}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
+                                            style={{
+                                                background: 'var(--background)',
+                                                borderColor: 'var(--card-border)',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        >
+                                            <option value=''>Seleccionar rol de decisión...</option>
+                                            {PROSPECT_DECISION_ROLE_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className='space-y-2 sm:col-span-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                            Canal de Contacto Preferido (Opcional)
+                                        </label>
+                                        <select
+                                            value={(formData as any).prospect_preferred_contact_channel || ''}
+                                            onChange={(e) => setFormData({ ...formData, prospect_preferred_contact_channel: (e.target.value || null) as any })}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
+                                            style={{
+                                                background: 'var(--background)',
+                                                borderColor: 'var(--card-border)',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        >
+                                            <option value=''>Seleccionar canal...</option>
+                                            {PREFERRED_CONTACT_CHANNEL_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className='space-y-2 sm:col-span-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                            LinkedIn del Prospecto (Opcional)
+                                        </label>
+                                        <input
+                                            type='text'
+                                            value={(formData as any).prospect_linkedin_url || ''}
+                                            onChange={(e) => setFormData({ ...formData, prospect_linkedin_url: e.target.value })}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                            placeholder='https://www.linkedin.com/in/...'
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1307,6 +1802,26 @@ export default function ClientModal({
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
                                 Mensualidad Estimada
                             </label>
+                            <label className='inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider cursor-pointer select-none' style={{ color: 'var(--text-secondary)' }}>
+                                <input
+                                    type='checkbox'
+                                    checked={estimatedValueUnavailable}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked
+                                        setFormData((prev) => {
+                                            if (checked) {
+                                                if (prev.valor_estimado != null && prev.valor_estimado > 0) {
+                                                    lastManualEstimatedValueRef.current = prev.valor_estimado
+                                                }
+                                                return { ...prev, valor_estimado: null }
+                                            }
+                                            return { ...prev, valor_estimado: lastManualEstimatedValueRef.current ?? 0 }
+                                        })
+                                    }}
+                                    className='h-3.5 w-3.5 rounded border border-[var(--card-border)] accent-blue-600 cursor-pointer'
+                                />
+                                No disponible (sin comprometer forecast)
+                            </label>
                             <div className='relative'>
                                 <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                 <input
@@ -1316,15 +1831,21 @@ export default function ClientModal({
                                     value={formatCurrencyInputNumber(formData.valor_estimado)}
                                     onChange={(e) => {
                                         const next = parseCurrencyInputValue(e.target.value)
-                                        setFormData({ ...formData, valor_estimado: next ?? 0 })
+                                        if (next != null) {
+                                            lastManualEstimatedValueRef.current = next
+                                        }
+                                        setFormData({ ...formData, valor_estimado: next })
                                     }}
-                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                    disabled={estimatedValueUnavailable}
+                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs disabled:opacity-60 disabled:cursor-not-allowed'
                                     style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                                    placeholder='0'
+                                    placeholder={estimatedValueUnavailable ? 'No disponible' : '0'}
                                 />
                             </div>
                             <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
-                                Pronóstico de mensualidad para el lead.
+                                {estimatedValueUnavailable
+                                    ? 'Sin pronóstico de mensualidad. No contará para confiabilidad de valor hasta capturarlo.'
+                                    : 'Pronóstico de mensualidad para el lead.'}
                             </p>
                         </div>
 
@@ -1332,24 +1853,54 @@ export default function ClientModal({
                             <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
                                 Valor de Implementación (Pronóstico)
                             </label>
+                            <label className='inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider cursor-pointer select-none' style={{ color: 'var(--text-secondary)' }}>
+                                <input
+                                    type='checkbox'
+                                    checked={implementationEstimatedValueUnavailable}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked
+                                        setFormData((prev) => {
+                                            const currentValue = (prev as any).valor_implementacion_estimado
+                                            if (checked) {
+                                                if (currentValue != null && Number(currentValue) > 0) {
+                                                    lastManualImplementationEstimatedValueRef.current = Number(currentValue)
+                                                }
+                                                return { ...prev, valor_implementacion_estimado: null }
+                                            }
+                                            return {
+                                                ...prev,
+                                                valor_implementacion_estimado: lastManualImplementationEstimatedValueRef.current ?? 0
+                                            }
+                                        })
+                                    }}
+                                    className='h-3.5 w-3.5 rounded border border-[var(--card-border)] accent-blue-600 cursor-pointer'
+                                />
+                                No disponible (sin comprometer forecast)
+                            </label>
                             <div className='relative'>
                                 <span className='absolute left-4 top-1/2 -translate-y-1/2 font-black' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>$</span>
                                 <input
                                     type='text'
                                     inputMode='numeric'
                                     pattern='[0-9,]*'
-                                    value={formatCurrencyInputNumber((formData as any).valor_implementacion_estimado ?? 0)}
+                                    value={formatCurrencyInputNumber((formData as any).valor_implementacion_estimado ?? null)}
                                     onChange={(e) => {
                                         const next = parseCurrencyInputValue(e.target.value)
-                                        setFormData({ ...formData, valor_implementacion_estimado: next ?? 0 })
+                                        if (next != null) {
+                                            lastManualImplementationEstimatedValueRef.current = next
+                                        }
+                                        setFormData({ ...formData, valor_implementacion_estimado: next })
                                     }}
-                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs'
+                                    disabled={implementationEstimatedValueUnavailable}
+                                    className='w-full pl-8 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs disabled:opacity-60 disabled:cursor-not-allowed'
                                     style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                                    placeholder='0'
+                                    placeholder={implementationEstimatedValueUnavailable ? 'No disponible' : '0'}
                                 />
                             </div>
                             <p className='text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)]/70'>
-                                Pronóstico de cuota única de implementación.
+                                {implementationEstimatedValueUnavailable
+                                    ? 'Sin pronóstico de implementación. No contará para confiabilidad de implementación hasta capturarlo.'
+                                    : 'Pronóstico de cuota única de implementación.'}
                             </p>
                         </div>
 
@@ -1541,7 +2092,7 @@ export default function ClientModal({
                                 )}
                             </>
                         )}
-                        <p className='text-[9px] font-black uppercase hidden md:block' style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>* Campos obligatorios</p>
+                        <p className='text-[10px] font-black uppercase tracking-wider' style={{ color: '#ef4444' }}>* Campos obligatorios</p>
                     </div>
 
                     <div className='flex gap-4'>

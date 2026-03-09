@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { getUpcomingMeetings, type MeetingWithUrgency, calculateMeetingUrgency } from '@/lib/confirmationService'
 import { getStageColor, getUrgencyColor } from '@/lib/confirmationService'
 import { useAuth } from '@/lib/auth'
@@ -158,6 +158,47 @@ export default function CalendarioPage() {
         return acc
     }, {} as Record<string, MeetingWithUrgency[]>)
 
+    const getUrgencyRibbonStyle = (level: MeetingWithUrgency['urgencyLevel']): CSSProperties => {
+        switch (level) {
+            case 'overdue':
+                return {
+                    background: 'color-mix(in srgb, #ef4444 24%, var(--card-bg))',
+                    color: 'color-mix(in srgb, var(--text-primary) 82%, #ef4444)',
+                    borderColor: 'color-mix(in srgb, #ef4444 45%, var(--card-border))'
+                }
+            case 'urgent':
+                return {
+                    background: 'color-mix(in srgb, #f59e0b 28%, var(--card-bg))',
+                    color: 'color-mix(in srgb, var(--text-primary) 80%, #b45309)',
+                    borderColor: 'color-mix(in srgb, #f59e0b 46%, var(--card-border))'
+                }
+            case 'today':
+                return {
+                    background: 'color-mix(in srgb, #eab308 22%, var(--card-bg))',
+                    color: 'color-mix(in srgb, var(--text-primary) 80%, #854d0e)',
+                    borderColor: 'color-mix(in srgb, #eab308 40%, var(--card-border))'
+                }
+            case 'soon':
+                return {
+                    background: 'color-mix(in srgb, #3b82f6 15%, var(--card-bg))',
+                    color: 'color-mix(in srgb, var(--text-primary) 82%, #1d4ed8)',
+                    borderColor: 'color-mix(in srgb, #3b82f6 38%, var(--card-border))'
+                }
+            case 'in_progress':
+                return {
+                    background: 'color-mix(in srgb, #2048FF 22%, var(--card-bg))',
+                    color: 'var(--text-primary)',
+                    borderColor: 'color-mix(in srgb, #2048FF 44%, var(--card-border))'
+                }
+            default:
+                return {
+                    background: 'color-mix(in srgb, var(--hover-bg) 80%, var(--card-bg))',
+                    color: 'var(--text-secondary)',
+                    borderColor: 'var(--card-border)'
+                }
+        }
+    }
+
     if (auth.loading && !auth.loggedIn) {
         return (
             <div className='h-full flex items-center justify-center' style={{ background: 'var(--background)' }}>
@@ -274,6 +315,7 @@ export default function CalendarioPage() {
                                                         const urgency = getUrgencyColor(currentUrgencyLevel || 'scheduled')
                                                         const stage = getStageColor(meeting.etapa || '')
                                                         const startTime = new Date(meeting.start_time)
+                                                        const urgencyRibbonStyle = getUrgencyRibbonStyle(currentUrgencyLevel || 'scheduled')
 
                                                         return (
                                                             <div
@@ -286,8 +328,8 @@ export default function CalendarioPage() {
                                                                 onClick={() => isEditMode ? handleEditMeeting(meeting) : null}
                                                             >
                                                                 {/* Status Ribbon */}
-                                                                <div className={`absolute top-0 right-10 px-4 py-1 rounded-b-2xl text-[8px] font-black uppercase tracking-widest text-white shadow-sm ${urgency.bg.replace('bg-', 'bg-').replace('-50', '-500')}`}
-                                                                    style={{ background: urgency.label === 'FINALIZADA' ? '#10b981' : urgency.label === 'EN CURSO' ? '#2048FF' : undefined }}
+                                                                <div className='absolute top-0 right-10 px-4 py-1 rounded-b-2xl text-[8px] font-black uppercase tracking-widest shadow-sm border'
+                                                                    style={urgencyRibbonStyle}
                                                                 >
                                                                     {urgency.label}
                                                                 </div>
