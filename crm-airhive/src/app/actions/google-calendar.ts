@@ -2,14 +2,66 @@
 
 import { getValidAccessToken } from '@/lib/google-utils'
 
+function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function extractEmailFromParticipantLabel(label: string): string | null {
+    const trimmed = String(label || '').trim()
+    if (!trimmed) return null
+
+    const angled = /<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>/.exec(trimmed)
+    if (angled?.[1] && isValidEmail(angled[1])) return angled[1].trim()
+    if (isValidEmail(trimmed)) return trimmed
+
+    return null
+}
+
+function collectInviteEmails(meeting: any): string[] {
+    const internal = Array.isArray(meeting?.attendees)
+        ? meeting.attendees
+            .map((value: any) => String(value || '').trim())
+            .filter((value: string) => isValidEmail(value))
+        : []
+
+    const external = Array.isArray(meeting?.external_participants)
+        ? meeting.external_participants
+            .map((value: any) => extractEmailFromParticipantLabel(String(value || '')))
+            .filter((value: string | null): value is string => !!value)
+        : []
+
+    return Array.from(new Set([...internal, ...external]))
+}
+
+function buildParticipantsDescription(meeting: any): string {
+    const sections: string[] = []
+    const primary = String(meeting?.primary_company_contact_name || '').trim()
+    const external = Array.isArray(meeting?.external_participants)
+        ? meeting.external_participants.map((value: any) => String(value || '').trim()).filter(Boolean)
+        : []
+
+    if (primary) sections.push(`Contacto principal: ${primary}`)
+    if (external.length > 0) sections.push(`Participantes externos: ${external.join(', ')}`)
+
+    return sections.join('\n')
+}
+
 export async function createGoogleEventAction(meeting: any, leadName: string) {
     try {
         const accessToken = await getValidAccessToken(meeting.seller_id)
         if (!accessToken) throw new Error('No Google connection found')
 
+        const inviteEmails = collectInviteEmails(meeting)
+        const participantsDescription = buildParticipantsDescription(meeting)
+        const noteBlock = meeting.notes || ''
+
         const event = {
             summary: meeting.title,
-            description: `Lead: ${leadName}\nNotas: ${meeting.notes || ''}`,
+            description: [
+                `Lead: ${leadName}`,
+                participantsDescription,
+                `Notas: ${noteBlock}`
+            ].filter(Boolean).join('\n'),
             start: {
                 dateTime: meeting.start_time,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -18,7 +70,7 @@ export async function createGoogleEventAction(meeting: any, leadName: string) {
                 dateTime: new Date(new Date(meeting.start_time).getTime() + meeting.duration_minutes * 60000).toISOString(),
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             },
-            attendees: meeting.attendees?.map((email: string) => ({ email })),
+            attendees: inviteEmails.length > 0 ? inviteEmails.map((email: string) => ({ email })) : undefined,
             conferenceData: meeting.meeting_type === 'video' ? {
                 createRequest: { requestId: Math.random().toString(36).substring(7) },
             } : undefined,
@@ -55,9 +107,17 @@ export async function updateGoogleEventAction(eventId: string, meeting: any, lea
         const accessToken = await getValidAccessToken(meeting.seller_id)
         if (!accessToken) throw new Error('No Google connection found')
 
+        const inviteEmails = collectInviteEmails(meeting)
+        const participantsDescription = buildParticipantsDescription(meeting)
+        const noteBlock = meeting.notes || ''
+
         const event = {
             summary: meeting.title,
-            description: `Lead: ${leadName}\nNotas: ${meeting.notes || ''}`,
+            description: [
+                `Lead: ${leadName}`,
+                participantsDescription,
+                `Notas: ${noteBlock}`
+            ].filter(Boolean).join('\n'),
             start: {
                 dateTime: meeting.start_time,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -66,7 +126,7 @@ export async function updateGoogleEventAction(eventId: string, meeting: any, lea
                 dateTime: new Date(new Date(meeting.start_time).getTime() + meeting.duration_minutes * 60000).toISOString(),
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             },
-            attendees: meeting.attendees?.map((email: string) => ({ email })),
+            attendees: inviteEmails.length > 0 ? inviteEmails.map((email: string) => ({ email })) : undefined,
         }
 
         const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {

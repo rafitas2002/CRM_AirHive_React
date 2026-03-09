@@ -4,6 +4,7 @@ import { Database } from './supabase'
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type MeetingAlert = Database['public']['Tables']['meeting_alerts']['Row']
 type MeetingConfirmation = Database['public']['Tables']['meeting_confirmations']['Insert']
+type MeetingCancellationReason = Database['public']['Tables']['meeting_cancellation_reasons']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
 
 const supabase = createClient()
@@ -20,11 +21,104 @@ const supabase = createClient()
 export async function confirmMeeting(
     meetingId: string,
     wasHeld: boolean,
-    notes: string,
+    payload: {
+        notes: string
+        notHeldReasonId?: string | null
+        notHeldReasonCustom?: string | null
+        notHeldResponsibility?: 'propia' | 'ajena' | null
+    },
     userId: string
 ): Promise<{ success: boolean; snapshotCreated: boolean; snapshotId?: string }> {
     try {
         console.log('🚀 Starting confirmMeeting:', { meetingId, wasHeld, userId })
+        const notes = String(payload.notes || '').trim()
+        const notHeldReasonId = wasHeld ? null : String(payload.notHeldReasonId || '').trim()
+        const notHeldReasonCustom = wasHeld ? null : String(payload.notHeldReasonCustom || '').trim()
+        const notHeldResponsibility = wasHeld ? null : payload.notHeldResponsibility || null
+        let notHeldReasonLabel: string | null = null
+        let notHeldReasonCatalogId: string | null = null
+
+        if (!wasHeld) {
+            if (notHeldResponsibility !== 'propia' && notHeldResponsibility !== 'ajena') {
+                throw new Error('Debes indicar si la cancelación fue propia o ajena.')
+            }
+
+            if (!notHeldReasonId && !notHeldReasonCustom) {
+                throw new Error('Debes seleccionar un motivo de cancelación.')
+            }
+
+            if (notHeldReasonId) {
+                const { data: reasonById, error: reasonByIdError } = await (supabase
+                    .from('meeting_cancellation_reasons') as any)
+                    .select('id, label')
+                    .eq('id', notHeldReasonId)
+                    .maybeSingle()
+
+                if (reasonByIdError?.code === '42P01') {
+                    throw new Error('Falta ejecutar la migración de motivos de cancelación para confirmar juntas no realizadas.')
+                }
+
+                if (reasonByIdError || !reasonById) {
+                    throw new Error('El motivo de cancelación seleccionado no existe o ya no está disponible.')
+                }
+
+                notHeldReasonCatalogId = reasonById.id
+                notHeldReasonLabel = String(reasonById.label || '').trim() || null
+            } else if (notHeldReasonCustom) {
+                const customLabel = notHeldReasonCustom
+                const { data: existingReason, error: existingReasonError } = await (supabase
+                    .from('meeting_cancellation_reasons') as any)
+                    .select('id, label')
+                    .ilike('label', customLabel)
+                    .limit(1)
+                    .maybeSingle()
+
+                if (existingReasonError?.code === '42P01') {
+                    notHeldReasonCatalogId = null
+                    notHeldReasonLabel = customLabel
+                } else if (existingReason?.id) {
+                    notHeldReasonCatalogId = existingReason.id
+                    notHeldReasonLabel = String(existingReason.label || customLabel).trim()
+                } else {
+                    const slug = customLabel
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-z0-9]+/g, '_')
+                        .replace(/^_+|_+$/g, '')
+                        .slice(0, 42)
+                    const fallbackSlug = slug || 'motivo'
+                    const code = `custom_${fallbackSlug}_${Date.now().toString().slice(-6)}`
+
+                    const { data: createdReason, error: createReasonError } = await (supabase
+                        .from('meeting_cancellation_reasons') as any)
+                        .insert({
+                            code,
+                            label: customLabel,
+                            is_active: true,
+                            is_default: false,
+                            sort_order: 999,
+                            created_by: userId
+                        })
+                        .select('id, label')
+                        .single()
+
+                    if (createReasonError?.code === '42P01') {
+                        notHeldReasonCatalogId = null
+                        notHeldReasonLabel = customLabel
+                    } else if (createReasonError || !createdReason) {
+                        throw new Error(`No se pudo registrar el motivo de cancelación: ${createReasonError?.message || 'Error desconocido'}`)
+                    } else {
+                        notHeldReasonCatalogId = createdReason.id
+                        notHeldReasonLabel = String(createdReason.label || customLabel).trim()
+                    }
+                }
+            }
+
+            if (!notHeldReasonLabel) {
+                throw new Error('Debes indicar la razón por la que no se realizó la junta.')
+            }
+        }
 
         // 1. Get meeting with frozen probability
         const { data: meeting, error: meetingError } = await (supabase
@@ -158,7 +252,10 @@ export async function confirmMeeting(
                 meeting_status: wasHeld ? 'held' : 'not_held',
                 confirmation_timestamp: new Date().toISOString(),
                 confirmed_by: userId,
-                confirmation_notes: notes
+                confirmation_notes: notes,
+                not_held_reason: notHeldReasonLabel,
+                not_held_reason_id: notHeldReasonCatalogId,
+                not_held_responsibility: notHeldResponsibility
             })
             .eq('id', meetingId)
 
@@ -174,6 +271,9 @@ export async function confirmMeeting(
             confirmed_by: userId,
             was_held: wasHeld,
             confirmation_notes: notes,
+            not_held_reason: notHeldReasonLabel,
+            not_held_reason_id: notHeldReasonCatalogId,
+            not_held_responsibility: notHeldResponsibility,
             snapshot_created: snapshotCreated,
             snapshot_id: snapshotId
         }
@@ -250,17 +350,41 @@ export async function confirmMeeting(
     }
 }
 
+export async function getMeetingCancellationReasons(): Promise<MeetingCancellationReason[]> {
+    try {
+        const { data, error } = await (supabase
+            .from('meeting_cancellation_reasons') as any)
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true })
+            .order('label', { ascending: true })
+
+        if (error) {
+            console.error('Error loading meeting cancellation reasons:', error)
+            return []
+        }
+
+        return (data || []) as MeetingCancellationReason[]
+    } catch (error) {
+        console.error('Exception loading meeting cancellation reasons:', error)
+        return []
+    }
+}
+
 // ============================================
 // Pending Confirmations
 // ============================================
 
 export async function getPendingConfirmations(userId: string) {
     try {
+        const nowIso = new Date().toISOString()
         const { data: meetings, error: meetingsError } = await (supabase
             .from('meetings') as any)
             .select('*')
             .eq('seller_id', userId)
-            .or('meeting_status.eq.pending_confirmation,and(status.eq.scheduled,start_time.lt.' + new Date().toISOString() + ')')
+            .eq('status', 'scheduled')
+            .in('meeting_status', ['scheduled', 'pending_confirmation'])
+            .lt('start_time', nowIso)
             .order('start_time', { ascending: true })
 
         if (meetingsError) {
@@ -275,7 +399,7 @@ export async function getPendingConfirmations(userId: string) {
             const start = new Date(m.start_time)
             const durationMs = (m.duration_minutes || 60) * 60 * 1000
             const end = new Date(start.getTime() + durationMs)
-            return now > end || m.meeting_status === 'pending_confirmation'
+            return now >= end
         })
 
         if (historicalMeetings.length === 0) return []

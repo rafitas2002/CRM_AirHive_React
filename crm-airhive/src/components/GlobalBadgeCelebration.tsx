@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { Sparkles, Trophy, Award, Shield, Flame, Gem, Calendar, Building2, Flag, Layers, Ruler, MessageSquareQuote, ThumbsUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import { getNormalizedSpecialBadgeDisplayLabel } from '@/lib/specialBadgeLabels'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
 
@@ -39,6 +40,12 @@ type CelebrationEvent = {
     badgeKey?: string
 }
 
+const normalizeCelebrationEventType = (value: unknown): 'unlocked' | 'upgraded' | null => {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (normalized === 'unlocked' || normalized === 'upgraded') return normalized
+    return null
+}
+
 export default function GlobalBadgeCelebration() {
     const auth = useAuth()
     const userId = auth.user?.id || null
@@ -47,12 +54,14 @@ export default function GlobalBadgeCelebration() {
     const [queue, setQueue] = useState<CelebrationEvent[]>([])
     const [isExiting, setIsExiting] = useState(false)
     const shownIds = useRef<Set<string>>(new Set())
-    const recentLiveSpecialByBadge = useRef<Map<string, number>>(new Map())
+    const shownSignatures = useRef<Set<string>>(new Set())
+    const persistedShownSignatures = useRef<Set<string>>(new Set())
     const industryCatalogRef = useRef<Array<{ id: string, name: string, is_active?: boolean }>>([])
 
     const current = queue[0] || null
     const seenStorageKey = userId ? `airhive_seen_badge_events_${userId}` : ''
     const badgeLevelSnapshotKey = userId ? `airhive_badge_level_snapshot_${userId}` : ''
+    const seenSignatureStorageKey = userId ? `airhive_seen_badge_signatures_${userId}` : ''
 
     const readSeenEventIds = () => {
         if (typeof window === 'undefined' || !seenStorageKey) return new Set<string>()
@@ -72,6 +81,27 @@ export default function GlobalBadgeCelebration() {
             localStorage.setItem(seenStorageKey, JSON.stringify(Array.from(ids).slice(-200)))
         } catch {
             // no-op for storage failures
+        }
+    }
+
+    const readSeenSignatures = () => {
+        if (typeof window === 'undefined' || !seenSignatureStorageKey) return new Set<string>()
+        try {
+            const raw = localStorage.getItem(seenSignatureStorageKey)
+            const parsed = raw ? JSON.parse(raw) : []
+            if (!Array.isArray(parsed)) return new Set<string>()
+            return new Set(parsed.map((x) => String(x)))
+        } catch {
+            return new Set<string>()
+        }
+    }
+
+    const persistSeenSignatures = (signatures: Set<string>) => {
+        if (typeof window === 'undefined' || !seenSignatureStorageKey) return
+        try {
+            localStorage.setItem(seenSignatureStorageKey, JSON.stringify(Array.from(signatures).slice(-500)))
+        } catch {
+            // no-op
         }
     }
 
@@ -102,6 +132,51 @@ export default function GlobalBadgeCelebration() {
             : []
         return buildIndustryBadgeVisualMap([...industryCatalog, ...extras])
     }, [industryCatalog, current])
+
+    useEffect(() => {
+        shownIds.current.clear()
+        shownSignatures.current.clear()
+        persistedShownSignatures.current = readSeenSignatures()
+        for (const signature of persistedShownSignatures.current) {
+            shownSignatures.current.add(signature)
+        }
+        setQueue([])
+        setIsExiting(false)
+    }, [userId])
+
+    const normalizeSignaturePart = (value: string | null | undefined) =>
+        String(value || '').trim().toLowerCase()
+
+    const getCelebrationSignature = (event: CelebrationEvent) => {
+        if (event.sourceType === 'industry') {
+            const industryKey = normalizeSignaturePart(event.industria_id || event.industryName || event.badgeLabel)
+            return `industry:${industryKey}:L${Math.max(0, Number(event.level || 0))}`
+        }
+        const typeKey = normalizeSignaturePart(event.badgeType)
+        const badgeKey = normalizeSignaturePart(event.badgeKey || event.badgeLabel)
+        return `special:${typeKey}:${badgeKey}:L${Math.max(0, Number(event.level || 0))}`
+    }
+
+    const enqueueCelebrationEvent = (event: CelebrationEvent) => {
+        const normalizedEvent: CelebrationEvent = event.level <= 1 && event.eventType === 'upgraded'
+            ? { ...event, eventType: 'unlocked' }
+            : event
+
+        const signature = getCelebrationSignature(normalizedEvent)
+        if (!signature || shownSignatures.current.has(signature)) return false
+        shownSignatures.current.add(signature)
+        if (!persistedShownSignatures.current.has(signature)) {
+            persistedShownSignatures.current.add(signature)
+            persistSeenSignatures(persistedShownSignatures.current)
+        }
+        setQueue((prev) => {
+            if (prev.some((item) => getCelebrationSignature(item) === signature || item.id === normalizedEvent.id)) {
+                return prev
+            }
+            return [...prev, normalizedEvent]
+        })
+        return true
+    }
 
     useEffect(() => {
         industryCatalogRef.current = industryCatalog
@@ -146,6 +221,8 @@ export default function GlobalBadgeCelebration() {
             }
 
             if (error || !data?.id || !data?.industria_id || !data?.level) return
+            const safeEventType = normalizeCelebrationEventType(data?.event_type)
+            if (!safeEventType) return
 
             shownIds.current.add(scopedId)
             const seen = readSeenEventIds()
@@ -153,21 +230,17 @@ export default function GlobalBadgeCelebration() {
             persistSeenEventIds(seen)
 
             const industryName = (data as { industrias?: { name?: string } | null })?.industrias?.name || 'Industria'
-            const safeEventType = (data.event_type === 'upgraded' ? 'upgraded' : 'unlocked') as 'upgraded' | 'unlocked'
 
-            setQueue((prev) => [
-                ...prev,
-                {
-                    id: scopedId,
-                    sourceType: 'industry',
-                    industria_id: data.industria_id,
-                    industryName,
-                    badgeLabel: industryName,
-                    level: data.level,
-                    eventType: safeEventType,
-                    progressCount: data.closures_count || 0
-                }
-            ])
+            enqueueCelebrationEvent({
+                id: scopedId,
+                sourceType: 'industry',
+                industria_id: data.industria_id,
+                industryName,
+                badgeLabel: industryName,
+                level: data.level,
+                eventType: safeEventType,
+                progressCount: data.closures_count || 0
+            })
         }
 
         const enqueueSpecialEvent = async (eventId: string) => {
@@ -189,28 +262,31 @@ export default function GlobalBadgeCelebration() {
             }
 
             if (error || !data?.id || !data?.badge_type || !data?.level) return
+            const safeEventType = normalizeCelebrationEventType(data?.event_type)
+            if (!safeEventType) return
 
             shownIds.current.add(scopedId)
             const seen = readSeenEventIds()
             seen.add(scopedId)
             persistSeenEventIds(seen)
 
-            const safeEventType = (data.event_type === 'upgraded' ? 'upgraded' : 'unlocked') as 'upgraded' | 'unlocked'
             const specialData = data as SpecialBadgeEventRow
+            const displayLabel = getNormalizedSpecialBadgeDisplayLabel({
+                badgeType: specialData.badge_type,
+                badgeKey: specialData.badge_key,
+                badgeLabel: specialData.badge_label
+            })
 
-            setQueue((prev) => [
-                ...prev,
-                {
-                    id: scopedId,
-                    sourceType: 'special',
-                    badgeType: specialData.badge_type,
-                    badgeKey: specialData.badge_key || undefined,
-                    badgeLabel: specialData.badge_label || 'Badge especial',
-                    level: specialData.level,
-                    eventType: safeEventType,
-                    progressCount: specialData.progress_count || 0
-                }
-            ])
+            enqueueCelebrationEvent({
+                id: scopedId,
+                sourceType: 'special',
+                badgeType: specialData.badge_type,
+                badgeKey: specialData.badge_key || undefined,
+                badgeLabel: displayLabel,
+                level: specialData.level,
+                eventType: safeEventType,
+                progressCount: specialData.progress_count || 0
+            })
         }
 
         const hydrateRecentSpecialEvents = async () => {
@@ -219,6 +295,7 @@ export default function GlobalBadgeCelebration() {
                 .from('seller_special_badge_events')
                 .select('id, badge_type, badge_key, badge_label, level, event_type, progress_count, created_at')
                 .eq('seller_id', currentUserId)
+                .in('event_type', ['unlocked', 'upgraded'])
                 .order('created_at', { ascending: false })
                 .limit(8))
 
@@ -233,6 +310,8 @@ export default function GlobalBadgeCelebration() {
             const scoped = new Set(seen)
             const hydrated: CelebrationEvent[] = []
             for (const row of fresh) {
+                const safeEventType = normalizeCelebrationEventType(row?.event_type)
+                if (!safeEventType) continue
                 const scopedId = `special:${row.id}`
                 if (shownIds.current.has(scopedId)) continue
                 shownIds.current.add(scopedId)
@@ -242,15 +321,21 @@ export default function GlobalBadgeCelebration() {
                     sourceType: 'special',
                     badgeType: row.badge_type,
                     badgeKey: row.badge_key || undefined,
-                    badgeLabel: row.badge_label || 'Badge especial',
+                    badgeLabel: getNormalizedSpecialBadgeDisplayLabel({
+                        badgeType: row.badge_type,
+                        badgeKey: row.badge_key,
+                        badgeLabel: row.badge_label
+                    }),
                     level: row.level,
-                    eventType: (row.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
+                    eventType: safeEventType,
                     progressCount: row.progress_count || 0
                 })
             }
 
             if (hydrated.length > 0) {
-                setQueue((prev) => [...prev, ...hydrated.slice(0, 4)])
+                hydrated.slice(0, 4).forEach((event) => {
+                    enqueueCelebrationEvent(event)
+                })
                 persistSeenEventIds(scoped)
             }
         }
@@ -261,6 +346,7 @@ export default function GlobalBadgeCelebration() {
                 .from('seller_badge_events')
                 .select('id, industria_id, level, event_type, closures_count, created_at, industrias(name)')
                 .eq('seller_id', currentUserId)
+                .in('event_type', ['unlocked', 'upgraded'])
                 .order('created_at', { ascending: false })
                 .limit(8))
 
@@ -275,6 +361,8 @@ export default function GlobalBadgeCelebration() {
             const scoped = new Set(seen)
             const hydrated: CelebrationEvent[] = []
             for (const row of fresh) {
+                const safeEventType = normalizeCelebrationEventType(row?.event_type)
+                if (!safeEventType) continue
                 const scopedId = `industry:${row.id}`
                 if (shownIds.current.has(scopedId)) continue
                 shownIds.current.add(scopedId)
@@ -286,13 +374,15 @@ export default function GlobalBadgeCelebration() {
                     industryName: String(row?.industrias?.name || 'Industria'),
                     badgeLabel: String(row?.industrias?.name || 'Industria'),
                     level: Number(row.level || 0),
-                    eventType: (row.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
+                    eventType: safeEventType,
                     progressCount: Number(row.closures_count || 0)
                 })
             }
 
             if (hydrated.length > 0) {
-                setQueue((prev) => [...prev, ...hydrated.slice(0, 4)])
+                hydrated.slice(0, 4).forEach((event) => {
+                    enqueueCelebrationEvent(event)
+                })
                 persistSeenEventIds(scoped)
             }
         }
@@ -315,7 +405,6 @@ export default function GlobalBadgeCelebration() {
             const specials = Array.isArray(specialRes?.data) ? specialRes.data : []
             const previous = readBadgeLevelSnapshot()
             const isFirstSnapshot = Object.keys(previous).length === 0
-            const nowMs = Date.now()
             const nextSnapshot: Record<string, { level: number, unlockedAt: string }> = {}
             const derivedEvents: CelebrationEvent[] = []
 
@@ -326,14 +415,11 @@ export default function GlobalBadgeCelebration() {
                 if (level <= 0) continue
                 const key = `lvl:industry:${industriaId}`
                 const unlockedAt = String(row?.unlocked_at || '')
-                const unlockedAtMs = unlockedAt ? new Date(unlockedAt).getTime() : 0
                 const prevLevel = Number(previous[key]?.level || 0)
                 const prevUnlockedAt = String(previous[key]?.unlockedAt || '')
                 nextSnapshot[key] = { level, unlockedAt }
                 const levelIncreased = level > prevLevel
-                const unlockedAtChanged = level > 0 && unlockedAt && prevUnlockedAt && unlockedAt !== prevUnlockedAt
-                const recentUnlockOnFirstSnapshot = isFirstSnapshot && level > 0 && unlockedAtMs > 0 && (nowMs - unlockedAtMs) <= 120000
-                if (levelIncreased || unlockedAtChanged || recentUnlockOnFirstSnapshot) {
+                if (!isFirstSnapshot && levelIncreased) {
                     const scopedId = `derived-industry:${industriaId}:L${level}`
                     derivedEvents.push({
                         id: scopedId,
@@ -356,21 +442,22 @@ export default function GlobalBadgeCelebration() {
                 if (level <= 0) continue
                 const key = `lvl:special:${badgeType}:${badgeKey}`
                 const unlockedAt = String(row?.unlocked_at || '')
-                const unlockedAtMs = unlockedAt ? new Date(unlockedAt).getTime() : 0
                 const prevLevel = Number(previous[key]?.level || 0)
                 const prevUnlockedAt = String(previous[key]?.unlockedAt || '')
                 nextSnapshot[key] = { level, unlockedAt }
                 const levelIncreased = level > prevLevel
-                const unlockedAtChanged = level > 0 && unlockedAt && prevUnlockedAt && unlockedAt !== prevUnlockedAt
-                const recentUnlockOnFirstSnapshot = isFirstSnapshot && level > 0 && unlockedAtMs > 0 && (nowMs - unlockedAtMs) <= 120000
-                if (levelIncreased || unlockedAtChanged || recentUnlockOnFirstSnapshot) {
+                if (!isFirstSnapshot && levelIncreased) {
                     const scopedId = `derived-special:${badgeType}:${badgeKey}:L${level}`
                     derivedEvents.push({
                         id: scopedId,
                         sourceType: 'special',
                         badgeType,
                         badgeKey,
-                        badgeLabel: String(row?.badge_label || 'Badge especial'),
+                        badgeLabel: getNormalizedSpecialBadgeDisplayLabel({
+                            badgeType,
+                            badgeKey,
+                            badgeLabel: String(row?.badge_label || 'Badge especial')
+                        }),
                         level,
                         eventType: prevLevel === 0 ? 'unlocked' : 'upgraded',
                         progressCount: Number(row?.progress_count || 0)
@@ -380,7 +467,9 @@ export default function GlobalBadgeCelebration() {
 
             persistBadgeLevelSnapshot(nextSnapshot)
             if (derivedEvents.length === 0) return
-            setQueue((prev) => [...prev, ...derivedEvents.slice(0, 4)])
+            derivedEvents.slice(0, 4).forEach((event) => {
+                enqueueCelebrationEvent(event)
+            })
         }
 
         const hydrateAllRecentEvents = async () => {
@@ -406,24 +495,23 @@ export default function GlobalBadgeCelebration() {
                     const eventId = String(row?.id || '')
                     const scopedId = `industry:${eventId}`
                     if (!eventId || shownIds.current.has(scopedId)) return
+                    const safeEventType = normalizeCelebrationEventType(row?.event_type)
+                    if (!safeEventType) return
                     shownIds.current.add(scopedId)
                     const seen = readSeenEventIds()
                     seen.add(scopedId)
                     persistSeenEventIds(seen)
                     const industryName = industryCatalogRef.current.find((i) => i.id === String(row?.industria_id || ''))?.name || 'Industria'
-                    setQueue((prev) => [
-                        ...prev,
-                        {
-                            id: scopedId,
-                            sourceType: 'industry',
-                            industria_id: String(row?.industria_id || ''),
-                            industryName,
-                            badgeLabel: industryName,
-                            level: Number(row?.level || 1),
-                            eventType: (row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
-                            progressCount: Number(row?.closures_count || 0)
-                        }
-                    ])
+                    enqueueCelebrationEvent({
+                        id: scopedId,
+                        sourceType: 'industry',
+                        industria_id: String(row?.industria_id || ''),
+                        industryName,
+                        badgeLabel: industryName,
+                        level: Number(row?.level || 1),
+                        eventType: safeEventType,
+                        progressCount: Number(row?.closures_count || 0)
+                    })
                 }
             )
             .on(
@@ -439,31 +527,31 @@ export default function GlobalBadgeCelebration() {
                     const eventId = String(row?.id || '')
                     const scopedId = `special:${eventId}`
                     if (!eventId || shownIds.current.has(scopedId)) return
+                    const safeEventType = normalizeCelebrationEventType(row?.event_type)
+                    if (!safeEventType) return
 
                     const badgeType = String(row?.badge_type || 'special')
                     const badgeKey = String(row?.badge_key || '')
                     const level = Number(row?.level || 1)
-                    const liveSig = `${badgeType}:${badgeKey}:L${level}`
-                    const liveSeenAt = recentLiveSpecialByBadge.current.get(liveSig) || 0
-                    if (Date.now() - liveSeenAt < 4000) return
 
                     shownIds.current.add(scopedId)
                     const seen = readSeenEventIds()
                     seen.add(scopedId)
                     persistSeenEventIds(seen)
-                    setQueue((prev) => [
-                        ...prev,
-                        {
-                            id: scopedId,
-                            sourceType: 'special',
+                    enqueueCelebrationEvent({
+                        id: scopedId,
+                        sourceType: 'special',
+                        badgeType,
+                        badgeKey,
+                        badgeLabel: getNormalizedSpecialBadgeDisplayLabel({
                             badgeType,
                             badgeKey,
-                            badgeLabel: String(row?.badge_label || 'Badge especial'),
-                            level,
-                            eventType: (row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked'),
-                            progressCount: Number(row?.progress_count || 0)
-                        }
-                    ])
+                            badgeLabel: String(row?.badge_label || 'Badge especial')
+                        }),
+                        level,
+                        eventType: safeEventType,
+                        progressCount: Number(row?.progress_count || 0)
+                    })
                 }
             )
             .on(
@@ -486,36 +574,7 @@ export default function GlobalBadgeCelebration() {
                     table: 'seller_special_badges',
                     filter: `seller_id=eq.${currentUserId}`
                 },
-                (payload: { eventType?: string, new?: any, old?: any }) => {
-                    const eventType = String(payload?.eventType || '').toUpperCase()
-                    const nextRow = payload?.new || {}
-                    const prevRow = payload?.old || {}
-
-                    const nextLevel = Number(nextRow?.level || 0)
-                    const prevLevel = Number(prevRow?.level || 0)
-                    const badgeType = String(nextRow?.badge_type || prevRow?.badge_type || '')
-                    const badgeKey = String(nextRow?.badge_key || prevRow?.badge_key || '')
-
-                    if (badgeType && badgeKey && ((eventType === 'INSERT' && nextLevel > 0) || (eventType === 'UPDATE' && nextLevel > prevLevel && nextLevel > 0))) {
-                        const scopedId = `special-live:${badgeType}:${badgeKey}:L${nextLevel}:U${String(nextRow?.updated_at || Date.now())}`
-                        if (!shownIds.current.has(scopedId)) {
-                            shownIds.current.add(scopedId)
-                            recentLiveSpecialByBadge.current.set(`${badgeType}:${badgeKey}:L${nextLevel}`, Date.now())
-                            setQueue((prev) => [
-                                ...prev,
-                                {
-                                    id: scopedId,
-                                    sourceType: 'special',
-                                    badgeType,
-                                    badgeKey,
-                                    badgeLabel: String(nextRow?.badge_label || prevRow?.badge_label || 'Badge especial'),
-                                    level: nextLevel,
-                                    eventType: prevLevel > 0 ? 'upgraded' : 'unlocked',
-                                    progressCount: Number(nextRow?.progress_count || 0)
-                                }
-                            ])
-                        }
-                    }
+                () => {
                     void hydrateBadgeLevelDeltaFallback()
                 }
             )
@@ -570,6 +629,13 @@ export default function GlobalBadgeCelebration() {
     const industryLevelVisual = current.sourceType === 'industry'
         ? getIndustryBadgeLevelMedallionVisual(current.level, industryVisual || undefined)
         : null
+    const displayBadgeLabel = current.sourceType === 'special'
+        ? getNormalizedSpecialBadgeDisplayLabel({
+            badgeType: current.badgeType,
+            badgeKey: current.badgeKey,
+            badgeLabel: current.badgeLabel
+        })
+        : String(current.industryName || current.badgeLabel || 'Industria')
     const isUnlocked = current.eventType === 'unlocked'
     const specialBadgeOverlay = getSpecialBadgeOverlayNumber(current.badgeType, current.badgeKey, current.badgeLabel)
     const closeCta = isUnlocked ? 'Recibir Reconocimiento' : 'Seguir Sumando'
@@ -613,7 +679,9 @@ export default function GlobalBadgeCelebration() {
 
                 <div className='px-6 md:px-8 py-6 border-b flex items-start justify-between gap-4 bg-gradient-to-r from-[#2048FF] via-[#2e5bff] to-[#0f2a7a] border-white/10'>
                     <div>
-                        <p className='text-[11px] font-black uppercase tracking-[0.2em] text-blue-100/90'>Badge desbloqueado</p>
+                        <p className='text-[11px] font-black uppercase tracking-[0.2em] text-blue-100/90'>
+                            {isUnlocked ? 'Badge desbloqueado' : 'Badge evolucionado'}
+                        </p>
                         <h4 className='text-white font-black text-2xl md:text-[32px] leading-tight mt-1'>
                             {isUnlocked ? 'Felicidades, lograste un nuevo badge' : 'Excelente, tu badge subió de nivel'}
                         </h4>
@@ -626,7 +694,7 @@ export default function GlobalBadgeCelebration() {
                 <div className='p-6 md:p-8'>
                     <div className='flex items-center gap-5 md:gap-6'>
                         <BadgeInfoTooltip
-                            title={current.sourceType === 'industry' ? String(current.industryName || 'Industria') : String(current.badgeLabel || 'Badge especial')}
+                            title={displayBadgeLabel}
                             subtitle={current.sourceType === 'industry' ? 'Badge de industria' : 'Badge especial'}
                             rows={[
                                 { label: 'Nivel', value: String(current.level) },
@@ -660,7 +728,7 @@ export default function GlobalBadgeCelebration() {
                                 {current.sourceType === 'industry' ? 'Industria' : 'Badge especial'}
                             </p>
                             <p className='text-xl md:text-2xl font-black leading-tight text-[var(--text-primary)] truncate'>
-                                {current.sourceType === 'industry' ? current.industryName : current.badgeLabel}
+                                {displayBadgeLabel}
                             </p>
                             <div className='mt-3 flex items-center gap-2.5 flex-wrap'>
                                 <span className='inline-flex items-center gap-1.5 text-[12px] font-black px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30'>

@@ -303,6 +303,68 @@ body {
   background: rgb(255 255 255 / 0.22);
 }
 
+.ah-modal-field::placeholder,
+.ah-modal-textarea::placeholder {
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--card-bg));
+  opacity: 1;
+}
+
+.ah-modal-select option {
+  background: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.ah-required-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #ef4444 44%, var(--card-border));
+  background: color-mix(in srgb, #ef4444 12%, var(--card-bg));
+  color: color-mix(in srgb, #ef4444 74%, var(--text-primary));
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ah-required-note-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.2);
+}
+
+.ah-modal-panel :is(.space-y-1\.5, .space-y-2, .space-y-3, .space-y-4):has(input[required], select[required], textarea[required]) > label,
+.ah-modal-panel .ah-required-label {
+  color: color-mix(in srgb, #ef4444 82%, var(--text-primary)) !important;
+  opacity: 1 !important;
+}
+
+.ah-modal-panel label :is(.text-red-500, .text-rose-600),
+.ah-modal-panel .ah-required-asterisk {
+  color: #ef4444 !important;
+  font-weight: 900;
+}
+
+.ah-modal-panel :is(input, select, textarea)[required],
+.ah-modal-panel .ah-required-control {
+  border-color: color-mix(in srgb, #ef4444 52%, var(--input-border)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #ef4444 26%, transparent);
+}
+
+.ah-modal-panel :is(input, select, textarea)[required]:focus,
+.ah-modal-panel .ah-required-control:focus,
+.ah-modal-panel .ah-required-control:focus-visible {
+  border-color: #ef4444 !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #ef4444 44%, transparent),
+    0 0 0 4px color-mix(in srgb, #ef4444 18%, transparent) !important;
+}
+
 .ah-badge-tooltip {
   position: relative;
   display: inline-flex;

@@ -7,11 +7,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, ShieldCheck, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
+import { Bell, Building2, UsersRound, Target, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, Boxes, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
+import { getNormalizedSpecialBadgeDisplayLabel } from '@/lib/specialBadgeLabels'
 import { useTheme, type Theme } from '@/lib/ThemeContext'
+
+const normalizeBadgeCelebrationEventType = (value: unknown): 'unlocked' | 'upgraded' | null => {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (normalized === 'unlocked' || normalized === 'upgraded') return normalized
+    return null
+}
 
 export default function TopBar() {
     const pathname = usePathname()
@@ -297,12 +304,14 @@ export default function TopBar() {
                     .from('seller_badge_events')
                     .select('id, industria_id, level, event_type, created_at, industrias(name)')
                     .eq('seller_id', userId)
+                    .in('event_type', ['unlocked', 'upgraded'])
                     .order('created_at', { ascending: false })
                     .limit(10) as any),
                 (supabase
                     .from('seller_special_badge_events')
                     .select('id, badge_type, badge_key, badge_label, level, event_type, created_at')
                     .eq('seller_id', userId)
+                    .in('event_type', ['unlocked', 'upgraded'])
                     .order('created_at', { ascending: false })
                     .limit(10) as any),
                 (supabase
@@ -331,28 +340,44 @@ export default function TopBar() {
                     .filter((x: string) => x !== ':')
             )
 
-            const normalizedIndustry = industryRows.map((row: any) => ({
-                id: `industry:${String(row?.id || '')}`,
-                badgeRef: String(row?.industria_id || ''),
-                label: String(row?.industrias?.name || 'Industria'),
-                level: Number(row?.level || 1),
-                event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
-                created_at: String(row?.created_at || ''),
-                sourceType: 'industry' as const,
-                industriaId: String(row?.industria_id || '')
-            }))
+            const normalizedIndustry = industryRows
+                .map((row: any) => {
+                    const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
+                    if (!eventType) return null
+                    return {
+                        id: `industry:${String(row?.id || '')}`,
+                        badgeRef: String(row?.industria_id || ''),
+                        label: String(row?.industrias?.name || 'Industria'),
+                        level: Number(row?.level || 1),
+                        event_type: eventType,
+                        created_at: String(row?.created_at || ''),
+                        sourceType: 'industry' as const,
+                        industriaId: String(row?.industria_id || '')
+                    }
+                })
+                .filter((item: any): item is NonNullable<typeof item> => !!item)
 
-            const normalizedSpecial = specialRows.map((row: any) => ({
-                id: `special:${String(row?.id || '')}`,
-                badgeRef: `${String(row?.badge_type || '')}:${String(row?.badge_key || '')}`,
-                label: String(row?.badge_label || 'Badge especial'),
-                level: Number(row?.level || 1),
-                event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
-                created_at: String(row?.created_at || ''),
-                sourceType: 'special' as const,
-                badgeType: String(row?.badge_type || ''),
-                badgeKey: String(row?.badge_key || '')
-            }))
+            const normalizedSpecial = specialRows
+                .map((row: any) => {
+                    const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
+                    if (!eventType) return null
+                    return {
+                        id: `special:${String(row?.id || '')}`,
+                        badgeRef: `${String(row?.badge_type || '')}:${String(row?.badge_key || '')}`,
+                        label: getNormalizedSpecialBadgeDisplayLabel({
+                            badgeType: String(row?.badge_type || ''),
+                            badgeKey: String(row?.badge_key || ''),
+                            badgeLabel: String(row?.badge_label || 'Badge especial')
+                        }),
+                        level: Number(row?.level || 1),
+                        event_type: eventType,
+                        created_at: String(row?.created_at || ''),
+                        sourceType: 'special' as const,
+                        badgeType: String(row?.badge_type || ''),
+                        badgeKey: String(row?.badge_key || '')
+                    }
+                })
+                .filter((item: any): item is NonNullable<typeof item> => !!item)
 
             const merged = [...normalizedIndustry, ...normalizedSpecial]
                 .filter((item) => item.id.endsWith(':') === false && item.created_at)
@@ -422,11 +447,13 @@ export default function TopBar() {
                     const row = payload?.new
                     const id = `industry:${String(row?.id || '')}`
                     if (id === 'industry:') return
+                    const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
+                    if (!eventType) return
                     pushRealtimeBadgeNotification({
                         id,
                         label: industryNameById.get(String(row?.industria_id || '')) || 'Industria',
                         level: Number(row?.level || 1),
-                        event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                        event_type: eventType,
                         created_at: String(row?.created_at || new Date().toISOString()),
                         sourceType: 'industry',
                         industriaId: String(row?.industria_id || '')
@@ -457,11 +484,17 @@ export default function TopBar() {
                     const row = payload?.new
                     const id = `special:${String(row?.id || '')}`
                     if (id === 'special:') return
+                    const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
+                    if (!eventType) return
                     pushRealtimeBadgeNotification({
                         id,
-                        label: String(row?.badge_label || 'Badge especial'),
+                        label: getNormalizedSpecialBadgeDisplayLabel({
+                            badgeType: String(row?.badge_type || ''),
+                            badgeKey: String(row?.badge_key || ''),
+                            badgeLabel: String(row?.badge_label || 'Badge especial')
+                        }),
                         level: Number(row?.level || 1),
-                        event_type: row?.event_type === 'upgraded' ? 'upgraded' : 'unlocked',
+                        event_type: eventType,
                         created_at: String(row?.created_at || new Date().toISOString()),
                         sourceType: 'special',
                         badgeType: String(row?.badge_type || ''),
@@ -590,7 +623,7 @@ export default function TopBar() {
                         <button
                             className={[
                                 'relative text-white font-semibold text-base px-2 py-2 group flex items-center gap-1.5 cursor-pointer',
-                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'active-customer' : ''
+                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos')) ? 'active-customer' : ''
                             ].join(' ')}
                         >
                             Customer
@@ -598,7 +631,7 @@ export default function TopBar() {
                                 className={[
                                     'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
                                     'transition-all duration-300 ease-out',
-                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos')) ? 'w-full opacity-100' : 'w-0 opacity-0',
                                     'group-hover:w-full group-hover:opacity-100'
                                 ].join(' ')}
                             />
@@ -608,10 +641,9 @@ export default function TopBar() {
                         <div className='absolute top-[100%] left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 min-w-[240px] translate-y-2 group-hover:translate-y-0'>
                             <div className='bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1.5'>
                                 {[
+                                    { href: '/clientes', label: 'Leads', icon: UsersRound },
+                                    { href: '/pre-leads', label: 'Pre leads', icon: Target },
                                     { href: '/empresas', label: 'Empresas', icon: Building2 },
-                                    { href: '/clientes', label: 'Negociaciones Activas', icon: UsersRound },
-                                    { href: '/cierres', label: 'Empresas Cerradas', icon: ShieldCheck },
-                                    { href: '/pre-leads', label: 'Empresas Objetivo', icon: Target },
                                     { href: '/proyectos', label: 'Proyectos', icon: Boxes }
                                 ].map((item) => {
                                     const Icon = item.icon as LucideIcon

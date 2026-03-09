@@ -197,7 +197,7 @@ export default function ClientsTable({ clientes, sellerProfilesById = {}, isEdit
                             {/* Valor */}
                             <td className='px-8 py-5'>
                                 <p className='font-black text-sm tabular-nums' style={{ color: 'var(--text-primary)' }}>
-                                    {cliente.valor_estimado ? `$${cliente.valor_estimado.toLocaleString()}` : '$0'}
+                                    {cliente.valor_estimado == null ? 'N/D' : `$${cliente.valor_estimado.toLocaleString()}`}
                                 </p>
                             </td>
 

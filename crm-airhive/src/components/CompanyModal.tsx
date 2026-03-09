@@ -381,6 +381,10 @@ export default function CompanyModal({
                 {/* Body */}
                 <div className='p-8 overflow-y-auto custom-scrollbar space-y-6'>
                     <form id='company-form' onSubmit={handleSubmit} className='space-y-6'>
+                        <div className='ah-required-note' role='note'>
+                            <span className='ah-required-note-dot' aria-hidden='true' />
+                            Campos obligatorios: marcados con * y resaltados en rojo
+                        </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                             {/* Logo Upload Section */}
@@ -418,8 +422,8 @@ export default function CompanyModal({
 
                             {/* Nombre with Autocomplete */}
                             <div className='space-y-1.5 relative' ref={wrapperRef}>
-                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
-                                    Nombre de la Empresa
+                                <label className='block text-sm font-medium text-[var(--text-primary)] ah-required-label'>
+                                    Nombre de la Empresa <span className='ah-required-asterisk'>*</span>
                                 </label>
                                 <input
                                     type='text'

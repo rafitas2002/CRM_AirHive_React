@@ -435,15 +435,32 @@ export default function AdminCompanyDetailView({
         try {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
-            const realClosureValue = isWon ? (leadData.valor_real_cierre ?? leadData.valor_estimado ?? 0) : null
-            const realImplementationValue = isWon ? (leadData.valor_implementacion_real_cierre ?? leadData.valor_implementacion_estimado ?? 0) : null
+            const realClosureValue = isWon ? (leadData.valor_real_cierre ?? null) : null
+            const realImplementationValue = isWon ? (leadData.valor_implementacion_real_cierre ?? null) : null
             const safeCreateStage = isWon ? 'Negociación' : leadData.etapa
+            const prospectRoleCatalogId = leadData.prospect_role_catalog_id || null
+            const prospectRoleCustom = prospectRoleCatalogId
+                ? null
+                : (String(leadData.prospect_role_custom || '').trim() || null)
+            const prospectAgeExactRaw = leadData.prospect_age_exact
+            const prospectAgeExact = prospectAgeExactRaw == null
+                ? null
+                : Math.round(Number(prospectAgeExactRaw))
             const payload: any = {
                 empresa: finalEmpresaName,
                 empresa_id: finalEmpresaId,
                 nombre: leadData.nombre,
+                contacto: leadData.nombre,
                 email: leadData.email || null,
                 telefono: leadData.telefono || null,
+                prospect_role_catalog_id: prospectRoleCatalogId,
+                prospect_role_custom: prospectRoleCustom,
+                prospect_age_exact: Number.isFinite(prospectAgeExact as number) ? prospectAgeExact : null,
+                prospect_age_range_id: leadData.prospect_age_range_id || null,
+                prospect_decision_role: leadData.prospect_decision_role || null,
+                prospect_preferred_contact_channel: leadData.prospect_preferred_contact_channel || null,
+                prospect_linkedin_url: String(leadData.prospect_linkedin_url || '').trim() || null,
+                prospect_is_family_member: Boolean(leadData.prospect_is_family_member),
                 etapa: safeCreateStage,
                 valor_estimado: leadData.valor_estimado ?? 0,
                 valor_real_cierre: isWon ? null : realClosureValue,
@@ -792,7 +809,15 @@ export default function AdminCompanyDetailView({
         loss_subreason_id: null,
         loss_notes: '',
         loss_recorded_at: null,
-        loss_recorded_by: null
+        loss_recorded_by: null,
+        prospect_role_catalog_id: null,
+        prospect_role_custom: '',
+        prospect_age_exact: null,
+        prospect_age_range_id: null,
+        prospect_decision_role: null,
+        prospect_preferred_contact_channel: null,
+        prospect_linkedin_url: '',
+        prospect_is_family_member: false
     }), [company.id, company.nombre, currentUserProfile?.id])
 
     const companyStats = useMemo(() => {
@@ -1653,6 +1678,16 @@ export default function AdminCompanyDetailView({
                     leadId={selectedMeetingLeadId}
                     sellerId={String(currentUserProfile?.id || '')}
                     mode='create'
+                    leadContactSeed={{
+                        contactName: clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.contacto
+                            || clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.nombre
+                            || null,
+                        contactEmail: clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.email || null,
+                        contactPhone: clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.telefono || null,
+                        companyId: company.id || null,
+                        companyName: company.nombre || null,
+                        leadName: clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.nombre || null
+                    }}
                 />
             )}
 

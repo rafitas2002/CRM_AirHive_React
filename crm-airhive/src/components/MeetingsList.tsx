@@ -147,6 +147,12 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
         return <span className='px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full'>Próxima</span>
     }
 
+    const getMeetingSequenceLabel = (meeting: Meeting) => {
+        const sequence = meeting.meeting_sequence_number
+        if (!sequence) return null
+        return sequence === 1 ? 'Primera junta' : `Junta #${sequence}`
+    }
+
     if (loading) {
         return (
             <div className='flex items-center justify-center py-8'>
@@ -187,6 +193,17 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                 <div className='flex items-center gap-2 mb-1'>
                                     <span style={{ color: 'var(--input-focus)' }}>{getMeetingIcon(meeting.meeting_type)}</span>
                                     <h3 className='font-bold' style={{ color: 'var(--text-primary)' }}>{meeting.title}</h3>
+                                    {getMeetingSequenceLabel(meeting) && (
+                                        <span className='px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded-full border'
+                                            style={{
+                                                background: 'color-mix(in srgb, #2048FF 8%, var(--card-bg))',
+                                                borderColor: 'color-mix(in srgb, #2048FF 24%, var(--card-border))',
+                                                color: 'color-mix(in srgb, #2048FF 78%, var(--text-primary))'
+                                            }}
+                                        >
+                                            {getMeetingSequenceLabel(meeting)}
+                                        </span>
+                                    )}
                                     {getMeetingStatusBadge(meeting)}
                                 </div>
 
@@ -213,6 +230,20 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                         <p className='flex items-center gap-2'>
                                             <Users size={14} className='font-semibold' />
                                             {meeting.attendees.join(', ')}
+                                        </p>
+                                    )}
+
+                                    {meeting.primary_company_contact_name && (
+                                        <p className='flex items-center gap-2'>
+                                            <Users size={14} className='font-semibold' />
+                                            Contacto principal: {meeting.primary_company_contact_name}
+                                        </p>
+                                    )}
+
+                                    {meeting.external_participants && meeting.external_participants.length > 0 && (
+                                        <p className='flex items-center gap-2'>
+                                            <Users size={14} className='font-semibold' />
+                                            Externos: {meeting.external_participants.join(', ')}
                                         </p>
                                     )}
 

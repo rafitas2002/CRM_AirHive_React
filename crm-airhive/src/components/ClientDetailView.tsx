@@ -18,7 +18,7 @@ type ClientData = {
     nombre: string
     contacto: string
     etapa: string
-    valor_estimado: number
+    valor_estimado: number | null
     oportunidad: string
     calificacion: number
     notas: string
@@ -422,8 +422,14 @@ export default function ClientDetailView({
                                 <div className='pt-6 border-t border-[var(--card-border)]'>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-1'>Valor del Negocio</label>
                                     <p className='text-3xl font-black text-[var(--text-primary)] tracking-tight'>
-                                        <span className='text-blue-600 mr-1'>$</span>
-                                        {client?.valor_estimado?.toLocaleString() || '0'}
+                                        {client?.valor_estimado == null
+                                            ? 'N/D'
+                                            : (
+                                                <>
+                                                    <span className='text-blue-600 mr-1'>$</span>
+                                                    {client.valor_estimado.toLocaleString()}
+                                                </>
+                                            )}
                                     </p>
                                 </div>
                             </div>
@@ -657,6 +663,14 @@ export default function ClientDetailView({
                     onSave={handleCreateMeeting}
                     leadId={client.id}
                     sellerId={client.owner_id || currentUser.id}
+                    leadContactSeed={{
+                        contactName: client.contacto || client.nombre || null,
+                        contactEmail: client.email || null,
+                        contactPhone: client.telefono || null,
+                        companyId: client.empresa_id || null,
+                        companyName: client.empresa || null,
+                        leadName: client.nombre || null
+                    }}
                 />
             )}
             <TaskModal

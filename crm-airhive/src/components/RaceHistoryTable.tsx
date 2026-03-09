@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { Trophy, Medal, RefreshCw, Pencil, Save, X } from 'lucide-react'
+import { Trophy, RefreshCw, Pencil, Save, X, Info } from 'lucide-react'
 import { getPastRaces, overrideRaceResult, recalculateAllRacePeriods, recalculateRacePeriod } from '@/app/actions/race'
 
 interface RaceResult {
@@ -13,6 +13,9 @@ interface RaceResult {
     total_sales: number
     rank: number
     medal: 'gold' | 'silver' | 'bronze' | null
+    is_manual_override?: boolean | null
+    override_note?: string | null
+    updated_at?: string | null
 }
 
 interface RaceHistoryTableProps {
@@ -113,6 +116,13 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
                     {recalculatingAll ? 'Recalculando Historial...' : 'Recalcular Todo'}
                 </button>
             </div>
+            <div className='rounded-xl border p-3 flex items-start gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
+                <Info className='w-4 h-4 mt-0.5 shrink-0' style={{ color: 'var(--text-secondary)' }} />
+                <p className='text-xs font-semibold leading-relaxed' style={{ color: 'var(--text-secondary)' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>Corregir</strong> aplica un ajuste manual solo en el historial de carrera de ese periodo.
+                    No modifica leads ni ventas reales en `clientes`. Para volver a la fuente real, usa <strong style={{ color: 'var(--text-primary)' }}>Recalcular Mes</strong>.
+                </p>
+            </div>
             {periods.map((period) => {
                 const results = localRaces[period]
                 const title = results[0]?.title || `Carrera de ${period}`
@@ -163,7 +173,17 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 font-bold" style={{ color: 'var(--text-primary)' }}>
-                                                {res.name}
+                                                <div className='flex flex-col gap-1'>
+                                                    <span>{res.name}</span>
+                                                    {res.is_manual_override ? (
+                                                        <span
+                                                            className='inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border w-fit'
+                                                            style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'var(--hover-bg)' }}
+                                                        >
+                                                            Ajuste manual
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 font-black" style={{ color: 'var(--text-primary)' }}>
                                                 {editingId === res.id ? (
@@ -194,7 +214,7 @@ export function RaceHistoryTable({ races }: RaceHistoryTableProps) {
                                                     </select>
                                                 ) : res.medal && (
                                                     <div className="flex items-center gap-1">
-                                                        <Medal className={`w-5 h-5 ${res.medal === 'gold' ? 'text-yellow-500' :
+                                                        <Trophy className={`w-5 h-5 ${res.medal === 'gold' ? 'text-yellow-500' :
                                                             res.medal === 'silver' ? 'text-slate-300' :
                                                                 'text-amber-700'
                                                             }`} />

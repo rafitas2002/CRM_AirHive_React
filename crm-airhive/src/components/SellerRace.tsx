@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Trophy, TrendingUp, Info, Sparkles, X } from 'lucide-react'
 import RaceInfoModal from './RaceInfoModal'
 import { rankRaceItems } from '@/lib/raceRanking'
+import { ensureRaceResultsUpToDate } from '@/app/actions/race'
 
 interface SellerRaceData {
     name: string
@@ -46,8 +47,22 @@ export default function SellerRace({
 }: SellerRaceProps) {
     const [isINFOOpen, setIsINFOOpen] = useState(false)
     const [isForecastOpen, setIsForecastOpen] = useState(false)
+    const hasTriggeredAutoSyncRef = useRef(false)
     const rankedSellers = rankRaceItems(sellers, (seller) => seller.value)
     const orderedSellers = rankedSellers.map((entry) => entry.item)
+
+    useEffect(() => {
+        if (!showInfoButton || hasTriggeredAutoSyncRef.current) return
+        hasTriggeredAutoSyncRef.current = true
+
+        void ensureRaceResultsUpToDate().then((res) => {
+            if (!res.success) {
+                console.warn('Race auto-sync warning:', res.error)
+            }
+        }).catch((error) => {
+            console.warn('Race auto-sync error:', error)
+        })
+    }, [showInfoButton])
 
     const sellerPositions = useMemo(() => {
         const positions = new Map<string, number>()

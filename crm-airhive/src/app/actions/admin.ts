@@ -98,7 +98,8 @@ export async function getAdminCorrelationData() {
             { data: reliabilityMetricsRows, error: reliabilityMetricsError },
             { data: companyProjectAssignments, error: companyProjectAssignmentsError },
             { data: sellerIndustryBadgesRows, error: sellerIndustryBadgesError },
-            { data: sellerSpecialBadgesRows, error: sellerSpecialBadgesError }
+            { data: sellerSpecialBadgesRows, error: sellerSpecialBadgesError },
+            { data: meetingCancellationReasonRows, error: meetingCancellationReasonRowsError }
         ] = await Promise.all([
             dbClient.from('profiles').select('id, full_name') as any,
             dbClient.from('employee_profiles').select('*') as any,
@@ -117,7 +118,8 @@ export async function getAdminCorrelationData() {
             dbClient.from('empresa_proyecto_asignaciones')
                 .select('proyecto_id, source_lead_id, assigned_by, assignment_stage') as any,
             dbClient.from('seller_industry_badges').select('seller_id, level').gt('level', 0) as any,
-            dbClient.from('seller_special_badges').select('seller_id, level').gt('level', 0) as any
+            dbClient.from('seller_special_badges').select('seller_id, level').gt('level', 0) as any,
+            dbClient.from('meeting_cancellation_reason_analytics_view').select('*') as any
         ])
 
         if (profError) throw profError
@@ -144,6 +146,9 @@ export async function getAdminCorrelationData() {
         }
         if (sellerSpecialBadgesError && sellerSpecialBadgesError.code !== '42P01') {
             throw sellerSpecialBadgesError
+        }
+        if (meetingCancellationReasonRowsError && meetingCancellationReasonRowsError.code !== '42P01') {
+            throw meetingCancellationReasonRowsError
         }
 
         const reliabilityMetricsByUser = new Map<string, any>(
@@ -262,8 +267,40 @@ export async function getAdminCorrelationData() {
             const userClients = (clients || []).filter((c: any) => c.owner_id === p.id)
             const closedWon = userClients.filter((c: any) => c.etapa === 'Cerrada Ganada')
 
+            const normalizeMeetingType = (meeting: any) => String(meeting?.meeting_type || '').trim().toLowerCase()
+            const normalizeMeetingStatus = (meeting: any) => String(meeting?.meeting_status || '').trim().toLowerCase()
+            const normalizeLifecycleStatus = (meeting: any) => String(meeting?.status || '').trim().toLowerCase()
+            const isHeldMeeting = (meeting: any) => {
+                const meetingStatus = normalizeMeetingStatus(meeting)
+                const lifecycleStatus = normalizeLifecycleStatus(meeting)
+                if (meetingStatus === 'held') return true
+                return lifecycleStatus === 'completed' && meetingStatus !== 'not_held' && meetingStatus !== 'cancelled'
+            }
+            const isPendingMeeting = (meeting: any) => {
+                const meetingStatus = normalizeMeetingStatus(meeting)
+                const lifecycleStatus = normalizeLifecycleStatus(meeting)
+                return lifecycleStatus === 'scheduled'
+                    && meetingStatus !== 'held'
+                    && meetingStatus !== 'not_held'
+                    && meetingStatus !== 'cancelled'
+            }
+            const meetingTypeBucket = (meeting: any): 'presencial' | 'llamada' | 'video' | 'other' => {
+                const mt = normalizeMeetingType(meeting)
+                if (mt.includes('presencial')) return 'presencial'
+                if (mt.includes('llamada') || mt.includes('call')) return 'llamada'
+                if (mt.includes('video') || mt.includes('zoom') || mt.includes('meet')) return 'video'
+                return 'other'
+            }
+
+            const heldMeetings = userMeetings.filter(isHeldMeeting)
+            const pendingMeetings = userMeetings.filter(isPendingMeeting)
+            const meetingsForMix = [...heldMeetings, ...pendingMeetings]
+            const meetingsPresencialCount = meetingsForMix.filter((meeting: any) => meetingTypeBucket(meeting) === 'presencial').length
+            const meetingsLlamadaCount = meetingsForMix.filter((meeting: any) => meetingTypeBucket(meeting) === 'llamada').length
+            const meetingsVideoCount = meetingsForMix.filter((meeting: any) => meetingTypeBucket(meeting) === 'video').length
+
             // Effort vs Success (Meetings per Close)
-            const meetingsPerClose = closedWon.length > 0 ? userMeetings.length / closedWon.length : userMeetings.length
+            const meetingsPerClose = closedWon.length > 0 ? heldMeetings.length / closedWon.length : heldMeetings.length
 
             // Forecast Accuracy (Error mean)
             let totalForecastError = 0
@@ -426,6 +463,11 @@ export async function getAdminCorrelationData() {
                 badgesAccumulated,
                 growth,
                 meetingsPerClose,
+                meetingsHeldCount: heldMeetings.length,
+                meetingsPendingCount: pendingMeetings.length,
+                meetingsPresencialCount,
+                meetingsLlamadaCount,
+                meetingsVideoCount,
                 forecastAccuracy,
                 forecastAccuracySamples: Number(persistedReliability?.probability_reliability_samples ?? closedWon.length ?? 0),
                 topIndustry,
@@ -597,7 +639,8 @@ export async function getAdminCorrelationData() {
                 analytics: {
                     correlationData,
                     correlations,
-                    postponeByCompanySize
+                    postponeByCompanySize,
+                    meetingCancellationReasons: meetingCancellationReasonRows || []
                 }
             }
         }
