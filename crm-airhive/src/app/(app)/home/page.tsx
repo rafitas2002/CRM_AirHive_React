@@ -124,12 +124,23 @@ const HOME_EXEC_METRICS = {
     sellersAtRisk7d: getCommercialMetricDefinition('sellers_at_risk_7d')
 } as const
 
-const HERO_DRONE_PATTERN = (() => {
+type HeroDronePatternItem = {
+    top: string
+    left: string
+    size: number
+    rotate: number
+    opacity: number
+}
+
+const HERO_DRONE_PATTERN: HeroDronePatternItem[] = (() => {
     const rowTops = [6, 16, 26, 36, 46, 56, 66, 76, 86]
-    const colLefts = [5, 14, 23, 32, 41, 50, 59, 68, 77, 86, 95]
+    const colLefts = [4, 13, 22, 31, 40, 49, 58, 67, 76, 85, 94]
+    const rowOffset = 4.5
 
     return rowTops.flatMap((top, rowIdx) =>
         colLefts.map((left, colIdx) => {
+            const shiftedLeft = left + (rowIdx % 2 === 0 ? 0 : rowOffset)
+            if (shiftedLeft > 98) return null
             const mod = (rowIdx + colIdx) % 3
             const size = mod === 0 ? 14 : mod === 1 ? 15 : 16
             const rotate = mod === 0 ? -6 : mod === 1 ? 0 : 6
@@ -137,12 +148,12 @@ const HERO_DRONE_PATTERN = (() => {
 
             return {
                 top: `${top}%`,
-                left: `${left}%`,
+                left: `${shiftedLeft}%`,
                 size,
                 rotate,
                 opacity
             }
-        })
+        }).filter((item): item is HeroDronePatternItem => item !== null)
     )
 })()
 

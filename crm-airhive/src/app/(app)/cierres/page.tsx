@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
-import { Building2, ChevronDown, Search, ShieldCheck, XCircle, TrendingDown, AlertTriangle, BarChart3 } from 'lucide-react'
+import { Handshake, Building2, ChevronDown, Search, ShieldCheck, XCircle, TrendingDown, AlertTriangle, BarChart3 } from 'lucide-react'
 import TableEmployeeAvatar from '@/components/TableEmployeeAvatar'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
@@ -747,6 +747,10 @@ export default function ClosedCompaniesPage() {
             const normalized = String(value ?? '').trim()
             return normalized ? normalized : null
         }
+        const normalizeIndustryIds = (ids: string[] | undefined, fallbackPrimary: string | undefined) =>
+            Array.from(new Set([...(ids || []), ...(fallbackPrimary ? [fallbackPrimary] : [])]))
+                .filter(Boolean)
+                .sort()
         const basePayload: any = {
             nombre: companyData.nombre,
             tamano: companyData.tamano,
@@ -763,9 +767,18 @@ export default function ClosedCompaniesPage() {
             ...basePayload,
             ...sizeAssessmentPayload
         }
+        const profileFieldsPayload: any = {
+            logo_url: normalizeOptionalText(companyData.logo_url),
+            descripcion: normalizeOptionalText(companyData.descripcion)
+        }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
         const candidates = (() => {
-            const corePayloadVariants = [basePayloadWithSizeAssessment, basePayload]
+            const corePayloadVariants = [
+                { ...basePayloadWithSizeAssessment, ...profileFieldsPayload },
+                { ...basePayload, ...profileFieldsPayload },
+                basePayloadWithSizeAssessment,
+                basePayload
+            ]
             const next: any[] = []
             for (const corePayload of corePayloadVariants) {
                 if (websiteValue !== null) {
@@ -798,11 +811,21 @@ export default function ClosedCompaniesPage() {
             return
         }
 
-        try {
-            await syncCompanyIndustries(String(selectedCompany.id), companyData)
-        } catch (industryError: any) {
-            console.error('Error updating company industries from /cierres:', industryError)
-            alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
+        const prevPrimaryIndustryId = String(selectedCompany.industria_id || '').trim()
+        const nextPrimaryIndustryId = String(companyData.industria_id || '').trim()
+        const prevIndustryIds = normalizeIndustryIds(selectedCompany.industria_ids, prevPrimaryIndustryId)
+        const nextIndustryIds = normalizeIndustryIds(companyData.industria_ids, nextPrimaryIndustryId)
+        const industriesChanged =
+            prevPrimaryIndustryId !== nextPrimaryIndustryId ||
+            prevIndustryIds.join('|') !== nextIndustryIds.join('|')
+
+        if (industriesChanged) {
+            try {
+                await syncCompanyIndustries(String(selectedCompany.id), companyData)
+            } catch (industryError: any) {
+                console.error('Error updating company industries from /cierres:', industryError)
+                alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
+            }
         }
 
         setSelectedCompany((prev) => (prev ? { ...prev, ...companyData } : prev))
@@ -814,12 +837,12 @@ export default function ClosedCompaniesPage() {
             <div className='flex flex-col md:flex-row md:items-center justify-between gap-6'>
                 <div className='flex items-center gap-6'>
                     <div className='ah-icon-card h-20 w-20 rounded-[30px] shrink-0'>
-                        <Building2 size={34} strokeWidth={2.1} />
+                        <Handshake size={34} strokeWidth={2.1} />
                     </div>
                     <div>
-                        <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Empresas Cerradas</h1>
+                        <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Proyectos Activos</h1>
                         <p className='text-sm font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)' }}>
-                            Control de empresas con operación activa y seguimiento de cierres perdidos
+                            Empresas con cierres ganados y operación activa, con seguimiento de cierres perdidos
                         </p>
                     </div>
                 </div>
@@ -828,8 +851,8 @@ export default function ClosedCompaniesPage() {
                     <div className='ah-count-chip'>
                         <span className='ah-count-chip-number'>{filteredClosedCompanies.length}</span>
                         <div className='ah-count-chip-meta'>
-                            <span className='ah-count-chip-title'>Empresas cerradas</span>
-                            <span className='ah-count-chip-subtitle'>clientes activos</span>
+                            <span className='ah-count-chip-title'>Empresas activas</span>
+                            <span className='ah-count-chip-subtitle'>con operación activa</span>
                         </div>
                     </div>
                     <div
@@ -873,14 +896,14 @@ export default function ClosedCompaniesPage() {
                         <div className='px-5 py-4 border-b flex items-center gap-2' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                             <ShieldCheck size={16} style={{ color: 'color-mix(in srgb, #10b981 76%, var(--text-primary))' }} />
                             <h2 className='text-xs font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-primary)' }}>
-                                Empresas cerradas (clientes activos)
+                                Empresas con proyectos activos
                             </h2>
                         </div>
 
                         {loading ? (
-                            <div className='p-8 text-center animate-pulse' style={{ color: 'var(--text-secondary)' }}>Cargando empresas cerradas...</div>
+                            <div className='p-8 text-center animate-pulse' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos activos...</div>
                         ) : filteredClosedCompanies.length === 0 ? (
-                            <div className='p-8 text-center' style={{ color: 'var(--text-secondary)' }}>No hay empresas cerradas para mostrar.</div>
+                            <div className='p-8 text-center' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos para mostrar.</div>
                         ) : (
                             <div className='ah-table-scroll custom-scrollbar'>
                                 <table className='ah-table'>

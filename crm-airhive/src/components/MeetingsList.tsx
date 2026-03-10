@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { Database } from '@/lib/supabase'
-import { getLeadMeetings, getLeadSnapshots, cancelMeeting } from '@/lib/meetingsService'
+import { createClient } from '@/lib/supabase'
+import { getLeadMeetings, getLeadSnapshots, cancelMeeting, getMeetingPostponeCancelForecastForLead, type MeetingPostponeCancelForecast } from '@/lib/meetingsService'
 import { deleteMeetingAction } from '@/app/actions/meetings'
 import ConfirmModal from './ConfirmModal'
-import { Building2, CalendarDays, Camera, CheckCircle2, Clock3, Hourglass, Phone, Video, Users } from 'lucide-react'
+import { Building2, CalendarDays, Camera, CheckCircle2, Clock3, Hourglass, Phone, TriangleAlert, Video, Users } from 'lucide-react'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
@@ -17,10 +18,13 @@ interface MeetingsListProps {
 }
 
 export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: MeetingsListProps) {
+    const [supabase] = useState(() => createClient())
     const [meetings, setMeetings] = useState<Meeting[]>([])
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+    const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null, username?: string | null }>>({})
     const [loading, setLoading] = useState(true)
     const [showSnapshots, setShowSnapshots] = useState(false)
+    const [meetingRiskForecast, setMeetingRiskForecast] = useState<MeetingPostponeCancelForecast | null>(null)
 
     // Modal State
     const [confirmConfig, setConfirmConfig] = useState<{
@@ -48,14 +52,41 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     const fetchData = async () => {
         setLoading(true)
         try {
-            const [meetingsData, snapshotsData] = await Promise.all([
+            const [meetingsData, snapshotsData, riskForecast] = await Promise.all([
                 getLeadMeetings(leadId),
-                getLeadSnapshots(leadId)
+                getLeadSnapshots(leadId),
+                getMeetingPostponeCancelForecastForLead(leadId)
             ])
-            setMeetings(meetingsData)
-            setSnapshots(snapshotsData)
+            const meetingsRows = (meetingsData || []) as Meeting[]
+            const snapshotRows = (snapshotsData || []) as Snapshot[]
+            setMeetings(meetingsRows)
+            setSnapshots(snapshotRows)
+            setMeetingRiskForecast(riskForecast)
+
+            const sellerIds = Array.from(new Set(
+                [...meetingsRows.map((meeting) => String(meeting?.seller_id || '').trim()), ...snapshotRows.map((snapshot) => String(snapshot?.seller_id || '').trim())]
+                    .filter(Boolean)
+            ))
+            if (sellerIds.length > 0) {
+                const { data: profiles } = await (supabase.from('profiles') as any)
+                    .select('id, full_name, username')
+                    .in('id', sellerIds)
+                const nextMap: Record<string, { fullName?: string | null, username?: string | null }> = {}
+                ;((profiles || []) as any[]).forEach((row) => {
+                    const id = String(row?.id || '')
+                    if (!id) return
+                    nextMap[id] = {
+                        fullName: row?.full_name || null,
+                        username: row?.username || null
+                    }
+                })
+                setSellerProfilesById(nextMap)
+            } else {
+                setSellerProfilesById({})
+            }
         } catch (error) {
             console.error('Error fetching meetings:', error)
+            setMeetingRiskForecast(null)
         } finally {
             setLoading(false)
         }
@@ -158,6 +189,28 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
         return sequence === 1 ? 'Primera junta' : `Junta #${sequence}`
     }
 
+    const formatUserDisplay = (raw?: string | null) => {
+        const value = String(raw || '').trim()
+        if (!value) return 'Sin asignar'
+        if (value.includes('.')) {
+            return value
+                .split('.')
+                .filter(Boolean)
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+                .join(' ')
+        }
+        return value
+    }
+
+    const getSnapshotOwnerName = (snapshot?: Snapshot | null, meeting?: Meeting | null) => {
+        const sellerId = String(snapshot?.seller_id || meeting?.seller_id || '').trim()
+        if (!sellerId) return 'Sin asignar'
+        const profile = sellerProfilesById[sellerId]
+        if (profile?.fullName) return profile.fullName
+        if (profile?.username) return formatUserDisplay(profile.username)
+        return sellerId
+    }
+
     if (loading) {
         return (
             <div className='flex items-center justify-center py-8'>
@@ -192,6 +245,12 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                 const snapshot = getSnapshotForMeeting(meeting.id)
                 const startTime = new Date(meeting.start_time)
                 const isUpcoming = startTime > new Date()
+                const riskProbability = Number(meetingRiskForecast?.probabilityPct || 0)
+                const riskTone = riskProbability >= 45
+                    ? { border: 'rgba(239,68,68,0.35)', bg: 'rgba(239,68,68,0.12)', text: '#ef4444' }
+                    : riskProbability >= 22
+                        ? { border: 'rgba(245,158,11,0.35)', bg: 'rgba(245,158,11,0.12)', text: '#d97706' }
+                        : { border: 'rgba(32,72,255,0.30)', bg: 'rgba(32,72,255,0.10)', text: '#2048FF' }
 
                 return (
                     <div
@@ -272,6 +331,21 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                         </div>
                                     )}
 
+                                    {meeting.status === 'scheduled' && meetingRiskForecast && (
+                                        <div className='mt-2'>
+                                            <div
+                                                className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest'
+                                                style={{ borderColor: riskTone.border, background: riskTone.bg, color: riskTone.text }}
+                                            >
+                                                <TriangleAlert size={12} />
+                                                Prob. postergar/cancelar: {riskProbability.toFixed(1)}%
+                                            </div>
+                                            <p className='mt-1 text-[10px] font-bold uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                Base {meetingRiskForecast.basedOn === 'company' ? 'empresa' : 'lead'} · muestra {meetingRiskForecast.sampleSize} · conf. {meetingRiskForecast.confidence}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {meeting.confirmation_notes && (
                                         <div className='mt-3'>
                                             <p className='text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1'>Notas de la Junta</p>
@@ -295,6 +369,9 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                         </div>
                                         <p className='text-sm font-black text-purple-700'>
                                             Probabilidad registrada: {snapshot.probability}%
+                                        </p>
+                                        <p className='text-xs font-bold text-purple-700/90 mt-1'>
+                                            Usuario: {getSnapshotOwnerName(snapshot, meeting)}
                                         </p>
                                     </div>
                                 )}

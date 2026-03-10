@@ -1,5 +1,5 @@
-import CorrelacionesPage from '../page'
+import { redirect } from 'next/navigation'
 
 export default function CorrelacionesPronosticoPage() {
-    return <CorrelacionesPage forcedView='pronostico' />
+    redirect('/admin/correlaciones')
 }

@@ -30,6 +30,7 @@ type Cliente = Database['public']['Tables']['clientes']['Row']
 type MeetingRow = Database['public']['Tables']['meetings']['Row']
 type TaskRow = Database['public']['Tables']['tareas']['Row']
 type ForecastSnapshotRow = Database['public']['Tables']['forecast_snapshots']['Row']
+type LeadHistoryRow = Database['public']['Tables']['lead_history']['Row']
 type CompanyNoteRow = {
     id: string
     empresa_id: string
@@ -45,6 +46,7 @@ type CompanyProjectAssignment360 = {
     proyecto_id: string
     assignment_stage: string
     source_lead_id: number | null
+    assigned_by: string | null
     mensualidad_pactada_usd: number | null
     implementacion_pactada_usd: number | null
     notes: string | null
@@ -87,6 +89,59 @@ type SnapshotComparisonRow = {
     deltaTotal: number | null
     deltaCloseDateDays: number | null
 }
+
+type CompanyAuditTimelineKind = 'lead_change' | 'meeting' | 'snapshot' | 'task' | 'project' | 'note'
+
+type CompanyAuditTimelineEntry = {
+    id: string
+    kind: CompanyAuditTimelineKind
+    title: string
+    detail: string
+    timestamp: string | null
+    leadId: number | null
+    leadLabel: string
+    actorId: string | null
+    actorName: string
+    tone: UiToneLane
+}
+
+const LEAD_HISTORY_FIELD_LABELS: Record<string, string> = {
+    etapa: 'Etapa',
+    probabilidad: 'Probabilidad de cierre',
+    valor_estimado: 'Pronóstico mensual',
+    valor_real_cierre: 'Mensualidad REAL',
+    valor_implementacion_estimado: 'Pronóstico implementación',
+    valor_implementacion_real_cierre: 'Implementación REAL',
+    forecast_close_date: 'Fecha pronosticada de cierre',
+    closed_at_real: 'Fecha real de cierre',
+    calificacion: 'Calificación',
+    oportunidad: 'Oportunidad',
+    notas: 'Notas',
+    loss_reason_id: 'Motivo de pérdida',
+    loss_subreason_id: 'Submotivo de pérdida',
+    loss_notes: 'Notas de pérdida',
+    prospect_role_catalog_id: 'Área del puesto',
+    prospect_role_custom: 'Área personalizada',
+    prospect_role_exact_title: 'Puesto exacto',
+    prospect_age_exact: 'Edad exacta',
+    prospect_age_range_id: 'Rango de edad'
+}
+
+const LEAD_HISTORY_MONEY_FIELDS = new Set([
+    'valor_estimado',
+    'valor_real_cierre',
+    'valor_implementacion_estimado',
+    'valor_implementacion_real_cierre'
+])
+
+const LEAD_HISTORY_PERCENT_FIELDS = new Set([
+    'probabilidad'
+])
+
+const LEAD_HISTORY_DATE_FIELDS = new Set([
+    'forecast_close_date',
+    'closed_at_real'
+])
 
 function isWonStage(stage: unknown) {
     const normalized = String(stage || '').trim().toLowerCase()
@@ -149,10 +204,11 @@ export default function AdminCompanyDetailView({
     const [loadingClients, setLoadingClients] = useState(false)
     const [projectAssignments, setProjectAssignments] = useState<CompanyProjectAssignment360[]>([])
     const [industryCatalogVisualRows, setIndustryCatalogVisualRows] = useState<IndustryCatalogVisualRow[]>([])
-    const [leadOwnerProfilesById, setLeadOwnerProfilesById] = useState<Record<string, { fullName?: string | null }>>({})
+    const [leadOwnerProfilesById, setLeadOwnerProfilesById] = useState<Record<string, { fullName?: string | null, username?: string | null }>>({})
     const [meetings, setMeetings] = useState<MeetingRow[]>([])
     const [tasks, setTasks] = useState<TaskRow[]>([])
     const [forecastSnapshots, setForecastSnapshots] = useState<ForecastSnapshotRow[]>([])
+    const [leadHistoryEntries, setLeadHistoryEntries] = useState<LeadHistoryRow[]>([])
     const [companyNotes, setCompanyNotes] = useState<CompanyNoteRow[]>([])
     const [loadingWorkspaceExtras, setLoadingWorkspaceExtras] = useState(false)
     const [workspaceWarning, setWorkspaceWarning] = useState<string | null>(null)
@@ -174,6 +230,8 @@ export default function AdminCompanyDetailView({
     const [quickNoteType, setQuickNoteType] = useState<'seguimiento' | 'contexto' | 'riesgo' | 'acuerdo'>('seguimiento')
     const [quickActionError, setQuickActionError] = useState<string | null>(null)
     const [isCompanyMeetingsExpanded, setIsCompanyMeetingsExpanded] = useState(false)
+    const [isCompanySnapshotsExpanded, setIsCompanySnapshotsExpanded] = useState(false)
+    const [isCompanyAuditExpanded, setIsCompanyAuditExpanded] = useState(false)
     const [quickProjectForm, setQuickProjectForm] = useState<QuickProjectFormState>({
         proyecto_id: '',
         assignment_stage: 'in_negotiation',
@@ -192,6 +250,8 @@ export default function AdminCompanyDetailView({
 
     useEffect(() => {
         setIsCompanyMeetingsExpanded(false)
+        setIsCompanySnapshotsExpanded(false)
+        setIsCompanyAuditExpanded(false)
     }, [company.id])
 
     const fetchCompanyWorkspace = async (companyId: string) => {
@@ -220,6 +280,7 @@ export default function AdminCompanyDetailView({
             setMeetings([])
             setTasks([])
             setForecastSnapshots([])
+            setLeadHistoryEntries([])
             setCompanyNotes([])
             setLoadingClients(false)
             setLoadingWorkspaceExtras(false)
@@ -233,36 +294,21 @@ export default function AdminCompanyDetailView({
         const ownerIds = Array.from(new Set(
             visibleClients.map((client: any) => String(client?.owner_id || '')).filter(Boolean)
         ))
-        if (ownerIds.length > 0) {
-            const { data: ownerProfiles } = await (supabase.from('profiles') as any)
-                .select('id, full_name')
-                .in('id', ownerIds)
-            const ownerMap: Record<string, { fullName?: string | null }> = {}
-            ;((ownerProfiles || []) as any[]).forEach((row) => {
-                const id = String(row?.id || '')
-                if (!id) return
-                ownerMap[id] = { fullName: row?.full_name || null }
-            })
-            setLeadOwnerProfilesById(ownerMap)
-        } else {
-            setLeadOwnerProfilesById({})
-        }
 
         const leadIds = visibleClients.map((client) => Number(client.id)).filter((id) => Number.isFinite(id))
         const projectAssignmentsRawResult = await (supabase.from('empresa_proyecto_asignaciones') as any)
-            .select('id, proyecto_id, assignment_stage, source_lead_id, mensualidad_pactada_usd, implementacion_pactada_usd, notes, created_at, updated_at')
+            .select('id, proyecto_id, assignment_stage, source_lead_id, assigned_by, mensualidad_pactada_usd, implementacion_pactada_usd, notes, created_at, updated_at')
             .eq('empresa_id', companyId)
             .order('updated_at', { ascending: false })
 
         if (projectAssignmentsRawResult.error) {
             console.warn('[AdminCompanyDetailView] Could not fetch company project assignments:', projectAssignmentsRawResult.error.message)
-            setWorkspaceWarning('Algunas secciones (proyectos/tareas/juntas) no pudieron cargarse completamente.')
+            setWorkspaceWarning('Algunas secciones (proyectos/tareas/juntas/auditoría) no pudieron cargarse completamente.')
         }
 
         const rawAssignments = (projectAssignmentsRawResult.data || []) as any[]
         const projectIds = Array.from(new Set(rawAssignments.map((row) => String(row?.proyecto_id || '')).filter(Boolean)))
-
-        const [projectsCatalogResult, meetingsResult, tasksResult, notesResult, industryCatalogResult, snapshotsResult] = await Promise.all([
+        const [projectsCatalogResult, meetingsResult, tasksResult, notesResult, industryCatalogResult, snapshotsResult, leadHistoryResult] = await Promise.all([
             projectIds.length > 0
                 ? (supabase.from('proyectos_catalogo') as any)
                     .select('id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd')
@@ -296,10 +342,17 @@ export default function AdminCompanyDetailView({
                     .in('lead_id', leadIds)
                     .eq('source', 'meeting_confirmed_held')
                     .order('snapshot_timestamp', { ascending: false })
+                : Promise.resolve({ data: [], error: null } as any),
+            leadIds.length > 0
+                ? (supabase.from('lead_history') as any)
+                    .select('id, lead_id, changed_by, field_name, old_value, new_value, created_at')
+                    .in('lead_id', leadIds)
+                    .order('created_at', { ascending: false })
+                    .limit(500)
                 : Promise.resolve({ data: [], error: null } as any)
         ])
 
-        if (projectsCatalogResult?.error || meetingsResult?.error || tasksResult?.error || notesResult?.error || industryCatalogResult?.error || snapshotsResult?.error) {
+        if (projectsCatalogResult?.error || meetingsResult?.error || tasksResult?.error || notesResult?.error || industryCatalogResult?.error || snapshotsResult?.error || leadHistoryResult?.error) {
             const notesMessage = String(notesResult?.error?.message || '').toLowerCase()
             const notesCatalogMissing = notesMessage.includes('empresa_notas') || notesMessage.includes('does not exist') || notesMessage.includes('42p01')
             console.warn('[AdminCompanyDetailView] Partial workspace data load error', {
@@ -308,13 +361,77 @@ export default function AdminCompanyDetailView({
                 tasks: tasksResult?.error?.message,
                 notes: notesResult?.error?.message,
                 industries: industryCatalogResult?.error?.message,
-                snapshots: snapshotsResult?.error?.message
+                snapshots: snapshotsResult?.error?.message,
+                leadHistory: leadHistoryResult?.error?.message
             })
             setWorkspaceWarning(
                 notesCatalogMissing
-                    ? 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos) no pudieron cargarse completamente. Para notas de empresa, ejecuta la migración 062.'
-                    : 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos) no pudieron cargarse completamente.'
+                    ? 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos/auditoría) no pudieron cargarse completamente. Para notas de empresa, ejecuta la migración 062.'
+                    : 'Algunas secciones (proyectos/tareas/juntas/notas/pronósticos/auditoría) no pudieron cargarse completamente.'
             )
+        }
+
+        const meetingRows = (meetingsResult?.data || []) as MeetingRow[]
+        const taskRows = (tasksResult?.data || []) as TaskRow[]
+        const notesRows = Array.isArray(notesResult?.data) ? (notesResult.data as any[]) : []
+        const snapshotRows = (snapshotsResult?.data || []) as ForecastSnapshotRow[]
+        const leadHistoryRows = (leadHistoryResult?.data || []) as LeadHistoryRow[]
+        const snapshotSellerIds = Array.from(new Set(
+            snapshotRows
+                .map((snapshot) => String(snapshot?.seller_id || '').trim())
+                .filter(Boolean)
+        ))
+        const leadHistoryUserIds = Array.from(new Set(
+            leadHistoryRows
+                .map((entry) => String(entry?.changed_by || '').trim())
+                .filter(Boolean)
+        ))
+        const meetingUserIds = Array.from(new Set(
+            meetingRows.flatMap((meeting) => [
+                String((meeting as any)?.seller_id || '').trim(),
+                String((meeting as any)?.confirmed_by || '').trim()
+            ]).filter(Boolean)
+        ))
+        const taskUserIds = Array.from(new Set(
+            taskRows
+                .map((task) => String((task as any)?.vendedor_id || '').trim())
+                .filter(Boolean)
+        ))
+        const noteUserIds = Array.from(new Set(
+            notesRows
+                .map((note) => String(note?.created_by || '').trim())
+                .filter(Boolean)
+        ))
+        const assignmentUserIds = Array.from(new Set(
+            rawAssignments
+                .map((assignment) => String(assignment?.assigned_by || '').trim())
+                .filter(Boolean)
+        ))
+        const profileIds = Array.from(new Set([
+            ...ownerIds,
+            ...snapshotSellerIds,
+            ...leadHistoryUserIds,
+            ...meetingUserIds,
+            ...taskUserIds,
+            ...noteUserIds,
+            ...assignmentUserIds
+        ]))
+        if (profileIds.length > 0) {
+            const { data: ownerProfiles } = await (supabase.from('profiles') as any)
+                .select('id, full_name, username')
+                .in('id', profileIds)
+            const ownerMap: Record<string, { fullName?: string | null, username?: string | null }> = {}
+            ;((ownerProfiles || []) as any[]).forEach((row) => {
+                const id = String(row?.id || '')
+                if (!id) return
+                ownerMap[id] = {
+                    fullName: row?.full_name || null,
+                    username: row?.username || null
+                }
+            })
+            setLeadOwnerProfilesById(ownerMap)
+        } else {
+            setLeadOwnerProfilesById({})
         }
 
         const projectMap = new Map<string, any>(
@@ -329,6 +446,7 @@ export default function AdminCompanyDetailView({
                 proyecto_id: projectId,
                 assignment_stage: String(row?.assignment_stage || ''),
                 source_lead_id: row?.source_lead_id == null ? null : Number(row.source_lead_id),
+                assigned_by: row?.assigned_by == null ? null : String(row.assigned_by),
                 mensualidad_pactada_usd: row?.mensualidad_pactada_usd == null ? null : Number(row.mensualidad_pactada_usd),
                 implementacion_pactada_usd: row?.implementacion_pactada_usd == null ? null : Number(row.implementacion_pactada_usd),
                 notes: row?.notes || null,
@@ -341,9 +459,10 @@ export default function AdminCompanyDetailView({
         })
 
         setProjectAssignments(normalizedAssignments)
-        setMeetings(((meetingsResult?.data || []) as MeetingRow[]))
-        setTasks(((tasksResult?.data || []) as TaskRow[]))
-        setForecastSnapshots((snapshotsResult?.data || []) as ForecastSnapshotRow[])
+        setMeetings(meetingRows)
+        setTasks(taskRows)
+        setForecastSnapshots(snapshotRows)
+        setLeadHistoryEntries(leadHistoryRows)
         setIndustryCatalogVisualRows(
             Array.isArray(industryCatalogResult?.data)
                 ? (industryCatalogResult.data as any[])
@@ -351,7 +470,7 @@ export default function AdminCompanyDetailView({
                     .filter((row) => row.id && row.name)
                 : []
         )
-        setCompanyNotes(Array.isArray(notesResult?.data) ? ((notesResult.data as any[]).map((row) => ({
+        setCompanyNotes(notesRows.length > 0 ? (notesRows.map((row) => ({
             id: String(row.id),
             empresa_id: String(row.empresa_id),
             note_text: String(row.note_text || ''),
@@ -484,6 +603,9 @@ export default function AdminCompanyDetailView({
         try {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
+            if (isWon && (!Array.isArray(leadData.proyectos_implementados_reales_ids) || leadData.proyectos_implementados_reales_ids.length === 0)) {
+                throw new Error('Para guardar un cierre ganado debes asignar al menos 1 proyecto implementado real.')
+            }
             const realClosureValue = isWon ? (leadData.valor_real_cierre ?? null) : null
             const realImplementationValue = isWon ? (leadData.valor_implementacion_real_cierre ?? null) : null
             const safeCreateStage = isWon ? 'Negociación' : leadData.etapa
@@ -827,7 +949,23 @@ export default function AdminCompanyDetailView({
         if (!lead) return 'Sin asignar'
         const ownerId = String((lead as any)?.owner_id || '')
         const profileName = ownerId ? leadOwnerProfilesById[ownerId]?.fullName : null
-        return profileName || formatOwnerDisplayName(String((lead as any)?.owner_username || ''))
+        const username = ownerId ? leadOwnerProfilesById[ownerId]?.username : null
+        return profileName || formatOwnerDisplayName(String((lead as any)?.owner_username || username || ''))
+    }
+
+    const getSnapshotOwnerName = (snapshot?: ForecastSnapshotRow | null, linkedLead?: Cliente | null) => {
+        const sellerId = String(snapshot?.seller_id || '').trim()
+        if (sellerId) {
+            const profile = leadOwnerProfilesById[sellerId]
+            if (profile?.fullName) return profile.fullName
+            if (profile?.username) return formatOwnerDisplayName(profile.username)
+        }
+        return getLeadResponsibleName(linkedLead)
+    }
+
+    const getLeadHistoryFieldLabel = (fieldName?: string | null) => {
+        const normalizedField = String(fieldName || '').trim().toLowerCase()
+        return LEAD_HISTORY_FIELD_LABELS[normalizedField] || String(fieldName || 'campo')
     }
 
     const selectedMeetingLead = useMemo(
@@ -1069,6 +1207,32 @@ export default function AdminCompanyDetailView({
         })
     }, [sortedForecastSnapshots])
 
+    const snapshotsByLead = useMemo(() => {
+        const groups = new Map<number, { lead: Cliente | null; snapshots: ForecastSnapshotRow[] }>()
+        sortedForecastSnapshots.forEach((snapshot) => {
+            const leadId = Number(snapshot.lead_id || 0)
+            if (!Number.isFinite(leadId) || leadId <= 0) return
+            const existing = groups.get(leadId)
+            if (existing) {
+                existing.snapshots.push(snapshot)
+                return
+            }
+            groups.set(leadId, {
+                lead: leadById.get(leadId) || null,
+                snapshots: [snapshot]
+            })
+        })
+
+        return Array.from(groups.entries())
+            .map(([leadId, value]) => ({ leadId, ...value }))
+            .sort((a, b) => {
+                if (b.snapshots.length !== a.snapshots.length) return b.snapshots.length - a.snapshots.length
+                const aName = String(a.lead?.nombre || a.lead?.empresa || `Lead ${a.leadId}`).toLowerCase()
+                const bName = String(b.lead?.nombre || b.lead?.empresa || `Lead ${b.leadId}`).toLowerCase()
+                return aName.localeCompare(bName)
+            })
+    }, [sortedForecastSnapshots, leadById])
+
     const latestSnapshotProgress = useMemo(() => {
         if (sortedForecastSnapshots.length < 2) return null
         const latest = sortedForecastSnapshots[0]
@@ -1192,6 +1356,252 @@ export default function AdminCompanyDetailView({
         if (s === 'prospection_same_close') return 'Prospección Mismo Cierre'
         if (s === 'future_lead_opportunity') return 'Futuro Lead'
         return s || 'Sin etapa'
+    }
+
+    const auditTimelineEntries = useMemo<CompanyAuditTimelineEntry[]>(() => {
+        const entries: CompanyAuditTimelineEntry[] = []
+        const resolveLeadLabel = (leadId: number | null) => {
+            if (leadId == null || !Number.isFinite(leadId)) return company.nombre || 'Empresa'
+            const linkedLead = leadById.get(leadId)
+            if (!linkedLead) return `Lead #${leadId}`
+            return linkedLead.nombre || linkedLead.empresa || `Lead #${leadId}`
+        }
+        const resolveActorName = (actorId: string | null) => {
+            const normalizedId = String(actorId || '').trim()
+            if (!normalizedId) return 'Sistema'
+            const profile = leadOwnerProfilesById[normalizedId]
+            if (profile?.fullName) return profile.fullName
+            if (profile?.username) return formatOwnerDisplayName(profile.username)
+            if (normalizedId === String(currentUserProfile?.id || '')) {
+                const ownName = String(currentUserProfile?.full_name || '').trim()
+                if (ownName) return ownName
+                const ownUsername = String(currentUserProfile?.username || '').trim()
+                if (ownUsername) return formatOwnerDisplayName(ownUsername)
+            }
+            return 'Usuario'
+        }
+        const parseTimelineTime = (value?: string | null) => {
+            const ts = value ? new Date(value).getTime() : Number.NEGATIVE_INFINITY
+            return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY
+        }
+        const formatLeadHistoryValue = (fieldName: string, value: string | null) => {
+            const raw = String(value ?? '').trim()
+            if (!raw) return 'vacío'
+
+            if (LEAD_HISTORY_MONEY_FIELDS.has(fieldName)) {
+                const numericValue = Number(raw)
+                return Number.isFinite(numericValue) ? formatCurrency(numericValue) : raw
+            }
+            if (LEAD_HISTORY_PERCENT_FIELDS.has(fieldName)) {
+                const numericValue = Number(raw)
+                return Number.isFinite(numericValue) ? `${Math.round(numericValue)}%` : raw
+            }
+            if (LEAD_HISTORY_DATE_FIELDS.has(fieldName)) {
+                return raw.length <= 10 ? formatDateOnly(raw) : formatDateTime(raw)
+            }
+            if (fieldName === 'calificacion') {
+                const numericValue = Number(raw)
+                return Number.isFinite(numericValue) ? `${Math.round(numericValue)}/5` : raw
+            }
+            if (fieldName === 'prospect_is_family_member') {
+                return ['true', 't', '1', 'si', 'sí'].includes(raw.toLowerCase()) ? 'Sí' : 'No'
+            }
+            return raw
+        }
+        const formatProjectStageInline = (stage: string) => {
+            if (stage === 'implemented_real') return 'Implementado Real'
+            if (stage === 'in_negotiation' || stage === 'forecasted') return 'En Negociación'
+            if (stage === 'prospection_same_close') return 'Prospección Mismo Cierre'
+            if (stage === 'future_lead_opportunity') return 'Futuro Lead'
+            return stage || 'Sin etapa'
+        }
+
+        leadHistoryEntries.forEach((historyRow) => {
+            const leadId = historyRow.lead_id == null ? null : Number(historyRow.lead_id)
+            const fieldKey = String(historyRow.field_name || '').trim().toLowerCase()
+            const fieldLabel = getLeadHistoryFieldLabel(fieldKey)
+            const oldValueText = formatLeadHistoryValue(fieldKey, historyRow.old_value)
+            const newValueText = formatLeadHistoryValue(fieldKey, historyRow.new_value)
+            const detail = historyRow.old_value == null || String(historyRow.old_value).trim() === ''
+                ? `${fieldLabel}: ${newValueText}`
+                : `${fieldLabel}: ${oldValueText} → ${newValueText}`
+
+            entries.push({
+                id: `lead-history-${historyRow.id}`,
+                kind: 'lead_change',
+                title: 'Cambio de lead',
+                detail,
+                timestamp: historyRow.created_at || null,
+                leadId,
+                leadLabel: resolveLeadLabel(leadId),
+                actorId: historyRow.changed_by || null,
+                actorName: resolveActorName(historyRow.changed_by || null),
+                tone: 'amber'
+            })
+        })
+
+        meetings.forEach((meeting) => {
+            const leadId = Number((meeting as any)?.lead_id || 0)
+            const normalizedLeadId = Number.isFinite(leadId) && leadId > 0 ? leadId : null
+            const status = String((meeting as any)?.meeting_status || (meeting as any)?.status || 'scheduled').trim().toLowerCase()
+            const statusLabel =
+                status === 'held' || status === 'completed' ? 'Realizada'
+                    : status === 'pending_confirmation' ? 'Pendiente confirmar'
+                        : status === 'not_held' ? 'No realizada'
+                            : status === 'cancelled' ? 'Cancelada'
+                                : 'Agendada'
+            const meetingType = String((meeting as any)?.meeting_type || '').trim()
+            entries.push({
+                id: `meeting-${String((meeting as any)?.id || `${normalizedLeadId || 'lead'}-${String((meeting as any)?.start_time || 'no-time')}`)}`,
+                kind: 'meeting',
+                title: String((meeting as any)?.title || 'Junta'),
+                detail: `${statusLabel}${meetingType ? ` · ${meetingType}` : ''}`,
+                timestamp: String((meeting as any)?.updated_at || (meeting as any)?.created_at || (meeting as any)?.start_time || ''),
+                leadId: normalizedLeadId,
+                leadLabel: resolveLeadLabel(normalizedLeadId),
+                actorId: String((meeting as any)?.confirmed_by || (meeting as any)?.seller_id || '').trim() || null,
+                actorName: resolveActorName(String((meeting as any)?.confirmed_by || (meeting as any)?.seller_id || '').trim() || null),
+                tone: 'violet'
+            })
+        })
+
+        tasks.forEach((task) => {
+            const leadId = Number((task as any)?.lead_id || 0)
+            const normalizedLeadId = Number.isFinite(leadId) && leadId > 0 ? leadId : null
+            const status = String((task as any)?.estado || 'pendiente').trim().toLowerCase()
+            const statusLabel =
+                status === 'completada' ? 'Completada'
+                    : status === 'cancelada' ? 'Cancelada'
+                        : status === 'atrasada' ? 'Atrasada'
+                            : 'Pendiente'
+            entries.push({
+                id: `task-${String((task as any)?.id || `${normalizedLeadId || 'lead'}-${String((task as any)?.fecha_vencimiento || 'no-date')}`)}`,
+                kind: 'task',
+                title: String((task as any)?.titulo || 'Tarea'),
+                detail: `${statusLabel} · vence ${formatDateOnly(String((task as any)?.fecha_vencimiento || ''))}`,
+                timestamp: String((task as any)?.updated_at || (task as any)?.created_at || ''),
+                leadId: normalizedLeadId,
+                leadLabel: resolveLeadLabel(normalizedLeadId),
+                actorId: String((task as any)?.vendedor_id || '').trim() || null,
+                actorName: resolveActorName(String((task as any)?.vendedor_id || '').trim() || null),
+                tone: 'cyan'
+            })
+        })
+
+        projectAssignments.forEach((assignment) => {
+            const leadId = assignment.source_lead_id == null ? null : Number(assignment.source_lead_id)
+            entries.push({
+                id: `project-assignment-${assignment.id}`,
+                kind: 'project',
+                title: assignment.projectName,
+                detail: `${formatProjectStageInline(assignment.assignment_stage)} · Mensual ${formatCurrency(assignment.mensualidad_pactada_usd ?? assignment.projectMonthlyReal)} · Implementación ${formatCurrency(assignment.implementacion_pactada_usd ?? assignment.projectImplementationReal)}`,
+                timestamp: assignment.updated_at || assignment.created_at || null,
+                leadId: Number.isFinite(leadId as number) ? leadId : null,
+                leadLabel: resolveLeadLabel(Number.isFinite(leadId as number) ? leadId : null),
+                actorId: assignment.assigned_by,
+                actorName: resolveActorName(assignment.assigned_by),
+                tone: 'amber'
+            })
+        })
+
+        sortedForecastSnapshots.forEach((snapshot) => {
+            const leadId = Number(snapshot.lead_id || 0)
+            const normalizedLeadId = Number.isFinite(leadId) && leadId > 0 ? leadId : null
+            const totalForecast = Number(snapshot.forecast_value_amount || 0) + Number(snapshot.forecast_implementation_amount || 0)
+            entries.push({
+                id: `snapshot-${snapshot.id}`,
+                kind: 'snapshot',
+                title: `Snapshot #${snapshot.snapshot_number}`,
+                detail: `Prob. ${Math.round(Number(snapshot.probability || 0))}% · Forecast total ${formatCurrency(totalForecast)} · Cierre ${formatDateOnly(snapshot.forecast_close_date)}`,
+                timestamp: snapshot.snapshot_timestamp || snapshot.created_at || null,
+                leadId: normalizedLeadId,
+                leadLabel: resolveLeadLabel(normalizedLeadId),
+                actorId: String(snapshot.seller_id || '').trim() || null,
+                actorName: resolveActorName(String(snapshot.seller_id || '').trim() || null),
+                tone: 'emerald'
+            })
+        })
+
+        companyNotes.forEach((note) => {
+            entries.push({
+                id: `company-note-${note.id}`,
+                kind: 'note',
+                title: `Nota ${note.note_type ? `(${note.note_type})` : 'de empresa'}`,
+                detail: String(note.note_text || '').trim().slice(0, 220) || 'Sin contenido',
+                timestamp: note.created_at || note.updated_at || null,
+                leadId: null,
+                leadLabel: company.nombre || 'Empresa',
+                actorId: note.created_by,
+                actorName: resolveActorName(note.created_by),
+                tone: 'slate'
+            })
+        })
+
+        return entries
+            .sort((a, b) => parseTimelineTime(b.timestamp) - parseTimelineTime(a.timestamp))
+            .slice(0, 140)
+    }, [
+        company.nombre,
+        companyNotes,
+        currentUserProfile?.full_name,
+        currentUserProfile?.id,
+        currentUserProfile?.username,
+        leadById,
+        leadHistoryEntries,
+        leadOwnerProfilesById,
+        meetings,
+        projectAssignments,
+        sortedForecastSnapshots,
+        tasks
+    ])
+
+    const auditTimelineSummary = useMemo(() => {
+        const actorIds = new Set(
+            auditTimelineEntries
+                .map((entry) => String(entry.actorId || '').trim())
+                .filter(Boolean)
+        )
+        const leadsInvolved = new Set(
+            auditTimelineEntries
+                .map((entry) => entry.leadId)
+                .filter((leadId): leadId is number => leadId != null && Number.isFinite(leadId))
+        )
+        const byKind = auditTimelineEntries.reduce<Record<CompanyAuditTimelineKind, number>>((acc, entry) => {
+            acc[entry.kind] = (acc[entry.kind] || 0) + 1
+            return acc
+        }, {
+            lead_change: 0,
+            meeting: 0,
+            snapshot: 0,
+            task: 0,
+            project: 0,
+            note: 0
+        })
+
+        return {
+            total: auditTimelineEntries.length,
+            actors: actorIds.size,
+            leads: leadsInvolved.size,
+            byKind
+        }
+    }, [auditTimelineEntries])
+
+    const getAuditKindLabel = (kind: CompanyAuditTimelineKind) => {
+        if (kind === 'lead_change') return 'Lead'
+        if (kind === 'meeting') return 'Junta'
+        if (kind === 'snapshot') return 'Snapshot'
+        if (kind === 'task') return 'Tarea'
+        if (kind === 'project') return 'Proyecto'
+        return 'Nota'
+    }
+
+    const renderAuditKindIcon = (kind: CompanyAuditTimelineKind) => {
+        if (kind === 'lead_change') return <Pencil size={12} strokeWidth={2.4} className='text-amber-500 dark:text-amber-300' />
+        if (kind === 'meeting') return <CalendarClock size={12} strokeWidth={2.4} />
+        if (kind === 'snapshot') return <Camera size={12} strokeWidth={2.4} />
+        if (kind === 'task') return <CheckSquare size={12} strokeWidth={2.4} />
+        if (kind === 'project') return <FolderClosed size={12} strokeWidth={2.4} />
+        return <StickyNote size={12} strokeWidth={2.4} />
     }
 
     const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
@@ -1789,6 +2199,90 @@ export default function AdminCompanyDetailView({
                                         )}
                                     </div>
                                 </div>
+
+                                <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
+                                    <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-3'>
+                                        <div className='flex items-center gap-2'>
+                                            <Camera size={16} className='text-blue-500 dark:text-blue-300' />
+                                            <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
+                                                Snapshots asociados
+                                            </h3>
+                                        </div>
+                                        <div className='flex items-center gap-2'>
+                                            <span className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                                {sortedForecastSnapshots.length}
+                                            </span>
+                                            <button
+                                                type='button'
+                                                onClick={() => setIsCompanySnapshotsExpanded((prev) => !prev)}
+                                                className='h-8 px-2.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1.5 cursor-pointer'
+                                            >
+                                                {isCompanySnapshotsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                {isCompanySnapshotsExpanded ? 'Ocultar' : 'Mostrar'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className={isCompanySnapshotsExpanded ? 'p-4 max-h-[340px] overflow-y-auto custom-scrollbar' : 'px-4 py-0'}>
+                                        {loadingWorkspaceExtras ? (
+                                            <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando snapshots...</div>
+                                        ) : !isCompanySnapshotsExpanded ? null : (
+                                            snapshotsByLead.length === 0 ? (
+                                                <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin snapshots asociados para esta empresa.</div>
+                                            ) : (
+                                                <div className='space-y-3'>
+                                                    {snapshotsByLead.map((group) => (
+                                                        <div key={`snapshot-lead-${group.leadId}`} className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-3'>
+                                                            <div className='flex items-center justify-between gap-2'>
+                                                                <div className='min-w-0'>
+                                                                    <p className='text-sm font-black text-[var(--text-primary)] truncate'>
+                                                                        {group.lead?.nombre || group.lead?.empresa || `Lead ${group.leadId}`}
+                                                                    </p>
+                                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]/80 truncate mt-1'>
+                                                                        Responsable · {getLeadResponsibleName(group.lead)}
+                                                                    </p>
+                                                                </div>
+                                                                <span
+                                                                    className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                                    style={toneVars('blue')}
+                                                                >
+                                                                    {group.snapshots.length} snapshot(s)
+                                                                </span>
+                                                            </div>
+                                                            <div className='mt-2 space-y-2'>
+                                                                {group.snapshots.slice(0, 8).map((snapshot) => (
+                                                                    <div key={snapshot.id} className='rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-2'>
+                                                                        <div className='flex items-center justify-between gap-2'>
+                                                                            <p className='text-[10px] font-black uppercase tracking-[0.11em] text-[var(--text-secondary)]'>
+                                                                                #{snapshot.snapshot_number} · {formatDateTime(snapshot.snapshot_timestamp || snapshot.created_at)}
+                                                                            </p>
+                                                                            <span
+                                                                                className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${toneChipClassName}`}
+                                                                                style={toneVars('emerald')}
+                                                                            >
+                                                                                {Math.round(Number(snapshot.probability || 0))}%
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className='text-[11px] font-bold text-[var(--text-secondary)] mt-1 truncate'>
+                                                                            Mensual {formatCurrency(snapshot.forecast_value_amount)} · Implementación {formatCurrency(snapshot.forecast_implementation_amount)}
+                                                                        </p>
+                                                                        <p className='text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-secondary)]/80 mt-1 truncate'>
+                                                                            Cierre forecast · {formatDateOnly(snapshot.forecast_close_date)} · Capturó {getSnapshotOwnerName(snapshot, group.lead)}
+                                                                        </p>
+                                                                    </div>
+                                                                ))}
+                                                                {group.snapshots.length > 8 && (
+                                                                    <p className='text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-secondary)]/75'>
+                                                                        +{group.snapshots.length - 8} snapshot(s) adicionales en historial
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1838,6 +2332,88 @@ export default function AdminCompanyDetailView({
                                             </div>
                                         )})}
                                     </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className='bg-[var(--card-bg)] rounded-3xl shadow-sm border border-[var(--card-border)] overflow-hidden'>
+                            <div className='px-6 py-4 border-b border-[var(--card-border)] flex items-center justify-between gap-2'>
+                                <div className='flex items-center gap-2'>
+                                    <ClipboardList size={16} className='text-blue-500 dark:text-blue-300' />
+                                    <h3 className='text-sm font-black uppercase tracking-[0.16em] text-[var(--text-primary)]'>
+                                        Auditoría de actividad comercial
+                                    </h3>
+                                </div>
+                                <div className='flex items-center gap-2'>
+                                    <span className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                        {auditTimelineSummary.total} cambios
+                                    </span>
+                                    <button
+                                        type='button'
+                                        onClick={() => setIsCompanyAuditExpanded((prev) => !prev)}
+                                        className='h-8 px-2.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors inline-flex items-center gap-1.5 cursor-pointer'
+                                    >
+                                        {isCompanyAuditExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                        {isCompanyAuditExpanded ? 'Ocultar' : 'Mostrar'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div className={isCompanyAuditExpanded ? 'p-4' : 'px-4 py-0'}>
+                                {loadingWorkspaceExtras ? (
+                                    <div className='py-8 text-center text-[var(--text-secondary)] animate-pulse font-bold'>Cargando auditoría...</div>
+                                ) : !isCompanyAuditExpanded ? null : (
+                                    <>
+                                        <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3'>
+                                            <div className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Leads con actividad</p>
+                                                <p className='text-sm font-black text-[var(--text-primary)] mt-1'>{auditTimelineSummary.leads}</p>
+                                            </div>
+                                            <div className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Usuarios involucrados</p>
+                                                <p className='text-sm font-black text-[var(--text-primary)] mt-1'>{auditTimelineSummary.actors}</p>
+                                            </div>
+                                            <div className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-2'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Cambios de lead</p>
+                                                <p className='text-sm font-black text-[var(--text-primary)] mt-1'>{auditTimelineSummary.byKind.lead_change}</p>
+                                            </div>
+                                        </div>
+                                        {auditTimelineEntries.length === 0 ? (
+                                            <div className='py-8 text-center text-[var(--text-secondary)] font-bold'>Sin actividad registrada para auditoría en esta empresa.</div>
+                                        ) : (
+                                            <div className='space-y-2 max-h-[360px] overflow-y-auto custom-scrollbar'>
+                                                {auditTimelineEntries.map((entry) => (
+                                                    <div key={entry.id} className='rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-3 py-3'>
+                                                        <div className='flex items-start gap-3'>
+                                                            <span
+                                                                className={`mt-0.5 h-7 w-7 shrink-0 rounded-lg inline-flex items-center justify-center ${toneChipClassName}`}
+                                                                style={toneVars(entry.tone)}
+                                                                aria-hidden
+                                                            >
+                                                                {renderAuditKindIcon(entry.kind)}
+                                                            </span>
+                                                            <div className='min-w-0 flex-1'>
+                                                                <div className='flex items-start justify-between gap-2'>
+                                                                    <p className='text-sm font-black text-[var(--text-primary)] truncate'>{entry.title}</p>
+                                                                    <span
+                                                                        className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${toneChipClassName}`}
+                                                                        style={toneVars(entry.tone)}
+                                                                    >
+                                                                        {getAuditKindLabel(entry.kind)}
+                                                                    </span>
+                                                                </div>
+                                                                <p className='mt-1 text-xs font-bold text-[var(--text-secondary)] break-words'>{entry.detail}</p>
+                                                                <div className='mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-secondary)]/85'>
+                                                                    <span>Lead · {entry.leadLabel}</span>
+                                                                    <span>Usuario · {entry.actorName}</span>
+                                                                    <span>{formatDateTime(entry.timestamp)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -2115,6 +2691,9 @@ export default function AdminCompanyDetailView({
                                                         </p>
                                                         <p className='text-xs font-bold text-[var(--text-secondary)] mt-1 truncate'>
                                                             Junta: {String((linkedMeeting as any)?.title || snapshot.meeting_id || 'Sin referencia')}
+                                                        </p>
+                                                        <p className='text-xs font-bold text-[var(--text-secondary)] mt-1 truncate'>
+                                                            Snapshot de: {getSnapshotOwnerName(snapshot, linkedLead)}
                                                         </p>
                                                     </div>
                                                     <span
