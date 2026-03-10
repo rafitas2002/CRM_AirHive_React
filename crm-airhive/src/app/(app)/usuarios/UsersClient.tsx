@@ -1068,31 +1068,34 @@ export default function UsersClient({ initialUsers }: UsersClientProps) {
                     >
                         Todas
                     </button>
-                    {(catalogs.areas || []).map(area => (
-                        <button
-                            key={area.id}
-                            onClick={() => setSelectedArea(area.id)}
-                            onMouseEnter={() => setHoveredArea(area.id)}
-                            onMouseLeave={() => setHoveredArea(null)}
-                            className='px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 cursor-pointer'
-                            style={{
-                                background: selectedArea === area.id
-                                    ? (areaColorMap[area.id]?.bgStrong || '#2048FF')
-                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.bg || 'var(--hover-bg)') : 'var(--card-bg)'),
-                                borderColor: selectedArea === area.id
-                                    ? (areaColorMap[area.id]?.borderStrong || '#2048FF')
-                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.border || 'var(--card-border)') : 'var(--card-border)'),
-                                color: selectedArea === area.id
-                                    ? '#ffffff'
-                                    : (hoveredArea === area.id ? (areaHoverColorMap[area.id]?.text || 'var(--text-primary)') : 'var(--text-secondary)'),
-                                boxShadow: selectedArea === area.id
-                                    ? `0 10px 22px -12px ${areaColorMap[area.id]?.borderStrong || '#2048FF'}`
-                                    : 'none'
-                            }}
-                        >
-                            {area.name}
-                        </button>
-                    ))}
+                    {(catalogs.areas || []).map(area => {
+                        const hoverMeta = areaHoverColorMap[area.id] || areaColorMap[area.id]
+                        return (
+                            <button
+                                key={area.id}
+                                onClick={() => setSelectedArea(area.id)}
+                                onMouseEnter={() => setHoveredArea(area.id)}
+                                onMouseLeave={() => setHoveredArea(null)}
+                                className='px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 cursor-pointer'
+                                style={{
+                                    background: selectedArea === area.id
+                                        ? (hoverMeta?.bgStrong || hoverMeta?.bg || '#2048FF')
+                                        : (hoveredArea === area.id ? (hoverMeta?.bg || 'var(--hover-bg)') : 'var(--card-bg)'),
+                                    borderColor: selectedArea === area.id
+                                        ? (hoverMeta?.borderStrong || hoverMeta?.border || '#2048FF')
+                                        : (hoveredArea === area.id ? (hoverMeta?.border || 'var(--card-border)') : 'var(--card-border)'),
+                                    color: selectedArea === area.id
+                                        ? (hoverMeta?.text || '#ffffff')
+                                        : (hoveredArea === area.id ? (hoverMeta?.text || 'var(--text-primary)') : 'var(--text-secondary)'),
+                                    boxShadow: selectedArea === area.id
+                                        ? `0 10px 22px -12px ${hoverMeta?.borderStrong || hoverMeta?.border || '#2048FF'}`
+                                        : 'none'
+                                }}
+                            >
+                                {area.name}
+                            </button>
+                        )
+                    })}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">

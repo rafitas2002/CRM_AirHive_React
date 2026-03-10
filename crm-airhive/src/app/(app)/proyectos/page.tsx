@@ -15,6 +15,9 @@ type ProjectRow = {
     descripcion: string | null
     valor_real_mensualidad_usd: number | null
     valor_real_implementacion_usd: number | null
+    tiempo_implementacion_dias: number | null
+    costo_interno_mensualidad_usd: number | null
+    costo_interno_implementacion_usd: number | null
     is_active: boolean
     created_at: string
     updated_at: string
@@ -32,6 +35,9 @@ type ProjectForm = {
     descripcion: string
     valor_real_mensualidad_usd: string
     valor_real_implementacion_usd: string
+    tiempo_implementacion_dias: string
+    costo_interno_mensualidad_usd: string
+    costo_interno_implementacion_usd: string
     is_active: boolean
     implementedIndustryIds: string[]
     availableIndustryIds: string[]
@@ -43,6 +49,9 @@ const EMPTY_FORM: ProjectForm = {
     descripcion: '',
     valor_real_mensualidad_usd: '',
     valor_real_implementacion_usd: '',
+    tiempo_implementacion_dias: '',
+    costo_interno_mensualidad_usd: '',
+    costo_interno_implementacion_usd: '',
     is_active: true,
     implementedIndustryIds: [],
     availableIndustryIds: []
@@ -60,6 +69,14 @@ function parseMoneyInput(raw: string): number | null {
     if (!digits) return null
     const parsed = Number(digits)
     return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseIntegerInput(raw: string): number | null {
+    const digits = raw.replace(/[^\d]/g, '')
+    if (!digits) return null
+    const parsed = Number(digits)
+    if (!Number.isFinite(parsed)) return null
+    return Math.max(0, Math.round(parsed))
 }
 
 function formatMoneyInput(raw: string): string {
@@ -176,6 +193,9 @@ export default function ProyectosPage() {
             descripcion: project.descripcion || '',
             valor_real_mensualidad_usd: project.valor_real_mensualidad_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.valor_real_mensualidad_usd)))),
             valor_real_implementacion_usd: project.valor_real_implementacion_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.valor_real_implementacion_usd)))),
+            tiempo_implementacion_dias: project.tiempo_implementacion_dias == null ? '' : String(Math.max(0, Math.round(Number(project.tiempo_implementacion_dias)))),
+            costo_interno_mensualidad_usd: project.costo_interno_mensualidad_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.costo_interno_mensualidad_usd)))),
+            costo_interno_implementacion_usd: project.costo_interno_implementacion_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.costo_interno_implementacion_usd)))),
             is_active: !!project.is_active,
             implementedIndustryIds: [...rel.implemented],
             availableIndustryIds: rel.available.filter((id) => !rel.implemented.includes(id))
@@ -214,9 +234,30 @@ export default function ProyectosPage() {
         })
     }
 
+    const toggleAllAvailableIndustries = () => {
+        setForm((prev) => {
+            const implemented = new Set(prev.implementedIndustryIds)
+            const selectableIndustryIds = industries
+                .map((industry) => industry.id)
+                .filter((industryId) => !implemented.has(industryId))
+
+            const allSelected = selectableIndustryIds.length > 0
+                && selectableIndustryIds.every((industryId) => prev.availableIndustryIds.includes(industryId))
+
+            return {
+                ...prev,
+                availableIndustryIds: allSelected ? [] : selectableIndustryIds
+            }
+        })
+    }
+
     const saveProject = async () => {
         if (!form.nombre.trim()) {
             alert('El nombre del proyecto es obligatorio.')
+            return
+        }
+        if (!form.tiempo_implementacion_dias.trim()) {
+            alert('El tiempo de implementación (días) es obligatorio.')
             return
         }
 
@@ -226,6 +267,9 @@ export default function ProyectosPage() {
             const userId = authUserData.user?.id || null
             const realMonthly = parseMoneyInput(form.valor_real_mensualidad_usd)
             const realImplementation = parseMoneyInput(form.valor_real_implementacion_usd)
+            const internalMonthlyCost = parseMoneyInput(form.costo_interno_mensualidad_usd)
+            const internalImplementationCost = parseMoneyInput(form.costo_interno_implementacion_usd)
+            const implementationTimeDays = parseIntegerInput(form.tiempo_implementacion_dias)
             if (realMonthly !== null && (!Number.isFinite(realMonthly) || realMonthly < 0)) {
                 alert('La mensualidad real del proyecto no es válida.')
                 setSaving(false)
@@ -236,33 +280,81 @@ export default function ProyectosPage() {
                 setSaving(false)
                 return
             }
+            if (internalMonthlyCost !== null && (!Number.isFinite(internalMonthlyCost) || internalMonthlyCost < 0)) {
+                alert('El costo interno mensual no es válido.')
+                setSaving(false)
+                return
+            }
+            if (internalImplementationCost !== null && (!Number.isFinite(internalImplementationCost) || internalImplementationCost < 0)) {
+                alert('El costo interno de implementación no es válido.')
+                setSaving(false)
+                return
+            }
+            if (
+                implementationTimeDays === null
+                || !Number.isFinite(implementationTimeDays)
+                || implementationTimeDays <= 0
+            ) {
+                alert('El tiempo estimado de implementación debe ser mayor a 0 días.')
+                setSaving(false)
+                return
+            }
+
+            const isUnknownColumnError = (error: any) => {
+                const message = String(error?.message || '').toLowerCase()
+                return message.includes('could not find the') && message.includes('column of')
+            }
+            const corePayload = {
+                nombre: form.nombre.trim(),
+                descripcion: form.descripcion.trim() || null,
+                valor_real_mensualidad_usd: realMonthly,
+                valor_real_implementacion_usd: realImplementation,
+                is_active: form.is_active
+            }
+            const extendedPayload = {
+                ...corePayload,
+                tiempo_implementacion_dias: implementationTimeDays,
+                costo_interno_mensualidad_usd: internalMonthlyCost,
+                costo_interno_implementacion_usd: internalImplementationCost
+            }
+            const payloadCandidates = [extendedPayload, corePayload]
 
             let projectId = form.id
             if (form.id) {
-                const { error } = await (supabase.from('proyectos_catalogo') as any)
-                    .update({
-                        nombre: form.nombre.trim(),
-                        descripcion: form.descripcion.trim() || null,
-                        valor_real_mensualidad_usd: realMonthly,
-                        valor_real_implementacion_usd: realImplementation,
-                        is_active: form.is_active
-                    })
-                    .eq('id', form.id)
-                if (error) throw error
+                let updateError: any = null
+                for (const candidate of payloadCandidates) {
+                    const { error } = await (supabase.from('proyectos_catalogo') as any)
+                        .update(candidate)
+                        .eq('id', form.id)
+                    if (!error) {
+                        updateError = null
+                        break
+                    }
+                    updateError = error
+                    if (!isUnknownColumnError(error)) break
+                }
+                if (updateError) throw updateError
             } else {
-                const { data, error } = await (supabase.from('proyectos_catalogo') as any)
-                    .insert({
-                        nombre: form.nombre.trim(),
-                        descripcion: form.descripcion.trim() || null,
-                        valor_real_mensualidad_usd: realMonthly,
-                        valor_real_implementacion_usd: realImplementation,
-                        is_active: form.is_active,
-                        created_by: userId
-                    })
-                    .select('id')
-                    .single()
-                if (error) throw error
-                projectId = String(data.id)
+                let insertError: any = null
+                let insertedData: any = null
+                for (const candidate of payloadCandidates) {
+                    const { data, error } = await (supabase.from('proyectos_catalogo') as any)
+                        .insert({
+                            ...candidate,
+                            created_by: userId
+                        })
+                        .select('id')
+                        .single()
+                    if (!error) {
+                        insertedData = data
+                        insertError = null
+                        break
+                    }
+                    insertError = error
+                    if (!isUnknownColumnError(error)) break
+                }
+                if (insertError) throw insertError
+                projectId = String(insertedData.id)
             }
 
             if (!projectId) throw new Error('No se pudo determinar el ID del proyecto.')
@@ -296,6 +388,12 @@ export default function ProyectosPage() {
             setSaving(false)
         }
     }
+
+    const selectableIndustryIds = industries
+        .map((industry) => industry.id)
+        .filter((industryId) => !form.implementedIndustryIds.includes(industryId))
+    const isAllIndustriesSelected = selectableIndustryIds.length > 0
+        && selectableIndustryIds.every((industryId) => form.availableIndustryIds.includes(industryId))
 
     return (
         <div className='h-full flex flex-col p-8 overflow-y-auto' style={{ background: 'transparent' }}>
@@ -376,6 +474,47 @@ export default function ProyectosPage() {
                                     />
                                 </div>
                             </div>
+                            <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
+                                <div>
+                                    <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
+                                        Tiempo implementación (días)
+                                    </label>
+                                    <input
+                                        value={form.tiempo_implementacion_dias}
+                                        onChange={(e) => setForm((prev) => ({ ...prev, tiempo_implementacion_dias: e.target.value.replace(/[^\d]/g, '') }))}
+                                        inputMode='numeric'
+                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='30'
+                                    />
+                                </div>
+                                <div>
+                                    <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
+                                        Costo interno mensual (USD)
+                                    </label>
+                                    <input
+                                        value={form.costo_interno_mensualidad_usd}
+                                        onChange={(e) => setForm((prev) => ({ ...prev, costo_interno_mensualidad_usd: formatMoneyInput(e.target.value) }))}
+                                        inputMode='numeric'
+                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='1200'
+                                    />
+                                </div>
+                                <div>
+                                    <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
+                                        Costo interno implementación (USD)
+                                    </label>
+                                    <input
+                                        value={form.costo_interno_implementacion_usd}
+                                        onChange={(e) => setForm((prev) => ({ ...prev, costo_interno_implementacion_usd: formatMoneyInput(e.target.value) }))}
+                                        inputMode='numeric'
+                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='5000'
+                                    />
+                                </div>
+                            </div>
                             <div>
                                 <label className='text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>Descripción</label>
                                 <textarea
@@ -423,6 +562,21 @@ export default function ProyectosPage() {
                                 <p className='text-[10px] font-black uppercase tracking-[0.16em] text-blue-400'>Industrias de alcance (editable)</p>
                                 <p className='mt-2 text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
                                     Marca las industrias donde crees que este proyecto tiene alcance al crearlo. Puedes agregar más después.
+                                </p>
+                                <label
+                                    className='mt-3 mb-1 inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.12em] cursor-pointer'
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <input
+                                        type='checkbox'
+                                        checked={isAllIndustriesSelected}
+                                        disabled={selectableIndustryIds.length === 0}
+                                        onChange={toggleAllAvailableIndustries}
+                                    />
+                                    <span>Todas las industrias</span>
+                                </label>
+                                <p className='text-[10px] font-bold mb-2' style={{ color: 'var(--text-secondary)' }}>
+                                    Selecciona o limpia todas las industrias disponibles con un clic.
                                 </p>
                                 <div className='mt-3 max-h-48 overflow-y-auto custom-scrollbar space-y-2'>
                                     {industries.map((industry) => (
@@ -532,6 +686,17 @@ export default function ProyectosPage() {
                                                     {project.descripcion && (
                                                         <p className='text-xs mt-1 line-clamp-2' style={{ color: 'var(--text-secondary)' }}>{project.descripcion}</p>
                                                     )}
+                                                    <div className='mt-2 space-y-0.5'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                            Tiempo implementación: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(Number(project.tiempo_implementacion_dias)))} días` : 'N/D'}
+                                                        </p>
+                                                        <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                            Costo interno M: {formatUsd(project.costo_interno_mensualidad_usd)}
+                                                        </p>
+                                                        <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                            Costo interno I: {formatUsd(project.costo_interno_implementacion_usd)}
+                                                        </p>
+                                                    </div>
                                                 </td>
                                                 <td className='px-4 py-4'>
                                                     <p className='text-sm font-black text-[#1700AC]'>{formatUsd(project.valor_real_mensualidad_usd)}</p>

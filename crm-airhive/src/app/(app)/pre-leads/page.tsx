@@ -2,19 +2,21 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import { createCompanyFromPreLead } from '@/lib/companyHelpers'
 import PreLeadsTable from '@/components/PreLeadsTable'
 import PreLeadModal from '@/components/PreLeadModal'
 import PreLeadDetailView from '@/components/PreLeadDetailView'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
-import { Search, Target, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Plus } from 'lucide-react'
+import { Search, Target, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Building2 } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { useAuth } from '@/lib/auth'
 import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
 
 export default function PreLeadsPage() {
     const auth = useAuth()
+    const router = useRouter()
     const [supabase] = useState(() => createClient())
     const [preLeads, setPreLeads] = useState<any[]>([])
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
@@ -396,6 +398,11 @@ export default function PreLeadsPage() {
             if (!auth.user?.id) {
                 throw new Error('Sesión inválida. Vuelve a iniciar sesión.')
             }
+            const normalizedStage = String(data?.etapa || '').trim().toLowerCase()
+            const isWon = normalizedStage === 'cerrado ganado' || normalizedStage === 'cerrada ganada'
+            if (isWon && (!Array.isArray(data?.proyectos_implementados_reales_ids) || data.proyectos_implementados_reales_ids.length === 0)) {
+                throw new Error('Para guardar un cierre ganado debes asignar al menos 1 proyecto implementado real.')
+            }
 
             // 1. Insert lead in 'clientes' with traceability
             const traceability = clientModalMode === 'convert' ? {
@@ -640,7 +647,7 @@ export default function PreLeadsPage() {
                                     Suspects
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Empresas investigadas y calificadas antes del primer contacto comercial.
+                                    Bandeja de suspects generados desde Empresas para investigación y ascenso a lead.
                                 </p>
                             </div>
                         </div>
@@ -670,10 +677,13 @@ export default function PreLeadsPage() {
                             </div>
                         </button>
                         <button
-                            onClick={() => { setModalMode('create'); setCurrentPreLead(null); setIsModalOpen(true); }}
+                            onClick={() => router.push('/empresas')}
                             className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
-                            + Registrar Suspect
+                            <span className='inline-flex items-center gap-2'>
+                                <Building2 size={14} strokeWidth={2.4} />
+                                Registrar Empresa
+                            </span>
                         </button>
                     </div>
                 </div>

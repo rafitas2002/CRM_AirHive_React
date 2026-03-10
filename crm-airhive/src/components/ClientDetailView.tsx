@@ -104,6 +104,7 @@ export default function ClientDetailView({
     const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+    const [snapshotOwnerProfilesById, setSnapshotOwnerProfilesById] = useState<Record<string, { fullName?: string | null, username?: string | null }>>({})
     const [isSnapshotsModalOpen, setIsSnapshotsModalOpen] = useState(false)
     const [currentUser, setCurrentUser] = useState<any>(null)
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
@@ -111,6 +112,8 @@ export default function ClientDetailView({
     const [lossReasonLabel, setLossReasonLabel] = useState<string | null>(null)
     const [lossSubreasonLabel, setLossSubreasonLabel] = useState<string | null>(null)
     const [isMeetingsPanelExpanded, setIsMeetingsPanelExpanded] = useState(false)
+    const [companyMeetingsCount, setCompanyMeetingsCount] = useState(0)
+    const [companyOtherLeadsCount, setCompanyOtherLeadsCount] = useState(0)
 
     useEffect(() => {
         if (client?.empresa_id) {
@@ -364,6 +367,29 @@ export default function ClientDetailView({
         return 'Captura de pronóstico'
     }
 
+    const formatSnapshotOwnerDisplay = (raw?: string | null) => {
+        const value = String(raw || '').trim()
+        if (!value) return 'Sin asignar'
+        if (value.includes('.')) {
+            return value
+                .split('.')
+                .filter(Boolean)
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+                .join(' ')
+        }
+        return value
+    }
+
+    const getSnapshotOwnerName = (snapshot?: Snapshot | null) => {
+        const sellerId = String(snapshot?.seller_id || '').trim()
+        if (sellerId) {
+            const profile = snapshotOwnerProfilesById[sellerId]
+            if (profile?.fullName) return profile.fullName
+            if (profile?.username) return formatSnapshotOwnerDisplay(profile.username)
+        }
+        return formatSnapshotOwnerDisplay(client?.owner_username || null)
+    }
+
     const fetchCompany = async (id: string) => {
         setLoadingCompany(true)
         const { data, error } = await supabase
@@ -386,14 +412,93 @@ export default function ClientDetailView({
     const fetchMeetingsData = async () => {
         if (!client) return
         try {
-            const [nextMtg, snaps] = await Promise.all([
+            const companyStatsPromise = (async () => {
+                let leadIds: number[] = []
+                if (client.empresa_id) {
+                    const { data: companyLeads, error: companyLeadsError } = await (supabase
+                        .from('clientes') as any)
+                        .select('id')
+                        .eq('empresa_id', client.empresa_id)
+                    if (companyLeadsError) throw companyLeadsError
+
+                    leadIds = ((companyLeads || []) as Array<{ id: number | string }>)
+                        .map((lead) => Number(lead.id))
+                        .filter((leadId) => Number.isFinite(leadId))
+                } else {
+                    const companyName = String(client.empresa || '').trim()
+                    if (companyName) {
+                        const { data: companyLeadsByName, error: companyLeadsByNameError } = await (supabase
+                            .from('clientes') as any)
+                            .select('id')
+                            .eq('empresa', companyName)
+                        if (companyLeadsByNameError) throw companyLeadsByNameError
+
+                        leadIds = ((companyLeadsByName || []) as Array<{ id: number | string }>)
+                            .map((lead) => Number(lead.id))
+                            .filter((leadId) => Number.isFinite(leadId))
+                    }
+                }
+
+                const uniqueLeadIds = Array.from(new Set(leadIds))
+                const hasCompanyLinkedLeads = uniqueLeadIds.length > 0
+                const normalizedCurrentLeadId = Number(client.id)
+                const otherLeadsCount = hasCompanyLinkedLeads
+                    ? uniqueLeadIds.filter((leadId) => leadId !== normalizedCurrentLeadId).length
+                    : 0
+
+                if (!hasCompanyLinkedLeads) {
+                    const { count, error: leadMeetingsError } = await (supabase
+                        .from('meetings') as any)
+                        .select('id', { count: 'exact', head: true })
+                        .eq('lead_id', client.id)
+                    if (leadMeetingsError) throw leadMeetingsError
+                    return { meetingsCount: Number(count || 0), otherLeadsCount }
+                }
+
+                const { count, error: companyMeetingsError } = await (supabase
+                    .from('meetings') as any)
+                    .select('id', { count: 'exact', head: true })
+                    .in('lead_id', uniqueLeadIds)
+                if (companyMeetingsError) throw companyMeetingsError
+                return { meetingsCount: Number(count || 0), otherLeadsCount }
+            })()
+
+            const [nextMtg, snaps, companyStats] = await Promise.all([
                 getNextMeeting(client.id),
-                getLeadSnapshots(client.id)
+                getLeadSnapshots(client.id),
+                companyStatsPromise
             ])
             setNextMeeting(nextMtg)
             setSnapshots(snaps)
+            setCompanyMeetingsCount(Math.max(0, Number(companyStats.meetingsCount || 0)))
+            setCompanyOtherLeadsCount(Math.max(0, Number(companyStats.otherLeadsCount || 0)))
+
+            const sellerIds = Array.from(new Set(
+                (snaps || [])
+                    .map((snapshot) => String(snapshot?.seller_id || '').trim())
+                    .filter(Boolean)
+            ))
+            if (sellerIds.length > 0) {
+                const { data: profiles } = await (supabase.from('profiles') as any)
+                    .select('id, full_name, username')
+                    .in('id', sellerIds)
+                const nextMap: Record<string, { fullName?: string | null, username?: string | null }> = {}
+                ;((profiles || []) as any[]).forEach((row) => {
+                    const id = String(row?.id || '')
+                    if (!id) return
+                    nextMap[id] = {
+                        fullName: row?.full_name || null,
+                        username: row?.username || null
+                    }
+                })
+                setSnapshotOwnerProfilesById(nextMap)
+            } else {
+                setSnapshotOwnerProfilesById({})
+            }
         } catch (error) {
             console.error('Error fetching meetings data:', error)
+            setCompanyMeetingsCount(0)
+            setCompanyOtherLeadsCount(0)
         }
     }
 
@@ -518,6 +623,9 @@ export default function ClientDetailView({
                                 <div className='group'>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2 group-hover:text-blue-500 transition-colors'>Empresa (Lead)</label>
                                     <p className='text-[var(--text-primary)] font-black text-xl tracking-tight'>{client.empresa}</p>
+                                    <p className='text-[10px] font-black uppercase tracking-widest mt-2' style={{ color: 'var(--text-secondary)' }}>
+                                        Otros leads vinculados a esta empresa: <span style={{ color: 'var(--text-primary)' }}>{companyOtherLeadsCount}</span>
+                                    </p>
                                 </div>
 
                                 <div>
@@ -746,7 +854,16 @@ export default function ClientDetailView({
                                     />
                                 </div>
                             ) : (
-                                <div className='flex-1 min-h-[12px]' />
+                                <div className='flex-1 min-h-[88px] flex items-center'>
+                                    <div className='w-full rounded-3xl border border-[var(--card-border)] bg-[var(--hover-bg)] px-4 py-3'>
+                                        <p className='text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
+                                            Total de juntas de esta empresa
+                                        </p>
+                                        <p className='mt-1 text-lg font-black text-[var(--text-primary)] tracking-tight'>
+                                            {companyMeetingsCount.toLocaleString('es-MX')} {companyMeetingsCount === 1 ? 'junta' : 'juntas'}
+                                        </p>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -931,6 +1048,9 @@ export default function ClientDetailView({
                                                     {formatSnapshotDateTime(snapshot.snapshot_timestamp || snapshot.created_at)}
                                                 </p>
                                                 <p className='text-[9px] font-bold text-[var(--text-secondary)]'>
+                                                    Usuario: {getSnapshotOwnerName(snapshot)}
+                                                </p>
+                                                <p className='text-[9px] font-bold text-[var(--text-secondary)]'>
                                                     Mensualidad: {formatSnapshotCurrency(snapshot.forecast_value_amount)}
                                                 </p>
                                                 <p className='text-[9px] font-bold text-[var(--text-secondary)]'>
@@ -1045,6 +1165,9 @@ export default function ClientDetailView({
                                                                         </p>
                                                                         <p className='text-xs font-bold text-[var(--text-secondary)] mt-1'>
                                                                             Fecha de captura: {formatSnapshotDateTime(snapshot.snapshot_timestamp || snapshot.created_at)}
+                                                                        </p>
+                                                                        <p className='text-xs font-bold text-[var(--text-secondary)] mt-1'>
+                                                                            Usuario: {getSnapshotOwnerName(snapshot)}
                                                                         </p>
                                                                     </div>
                                                                     <span className='shrink-0 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1 text-xs font-black text-[var(--text-primary)]'>

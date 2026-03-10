@@ -74,6 +74,19 @@ export default function EmpresasPage() {
     const [filterMonterreyMunicipality, setFilterMonterreyMunicipality] = useState('All')
     const [filterLifecycle, setFilterLifecycle] = useState<'All' | 'lead' | 'pre_lead'>('All')
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
+    const [preLeadColumns, setPreLeadColumns] = useState<Record<string, boolean>>({
+        empresa_id: true,
+        industria_id: true,
+        tamano: true,
+        tamano_fuente: true,
+        tamano_confianza: true,
+        tamano_senal_principal: true,
+        website: true,
+        logo_url: true,
+        created_by: true,
+        updated_by: true,
+        is_converted: true
+    })
 
     const supabase = createClient()
 
@@ -86,8 +99,161 @@ export default function EmpresasPage() {
 
         if (auth.loggedIn) {
             fetchCompanies()
+            void detectPreLeadColumns()
         }
     }, [auth.loading, auth.loggedIn, router])
+
+    const detectPreLeadColumns = async () => {
+        const candidates = [
+            'empresa_id',
+            'industria_id',
+            'tamano',
+            'tamano_fuente',
+            'tamano_confianza',
+            'tamano_senal_principal',
+            'website',
+            'logo_url',
+            'created_by',
+            'updated_by',
+            'is_converted'
+        ]
+        const result: Record<string, boolean> = {}
+
+        for (const column of candidates) {
+            const { error } = await (supabase.from('pre_leads') as any).select(column).limit(1)
+            const missing = error && (error.code === '42703' || String(error.message || '').toLowerCase().includes(`'${column}'`))
+            result[column] = !missing
+        }
+
+        setPreLeadColumns(result)
+    }
+
+    const isUnknownColumnError = (error: any) => {
+        const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
+        return msg.includes('could not find the') && msg.includes('column of')
+    }
+
+    const markCompanyAsPreLead = async (companyId: string) => {
+        if (!companyId || !auth.user?.id) return
+        const now = new Date().toISOString()
+        const attempts: Array<Record<string, any>> = [
+            {
+                lifecycle_stage: 'pre_lead',
+                source_channel: 'pre_lead',
+                updated_by: auth.user.id,
+                first_pre_lead_at: now,
+                last_pre_lead_at: now,
+                pre_leads_count: 1
+            },
+            {
+                lifecycle_stage: 'pre_lead',
+                source_channel: 'pre_lead'
+            },
+            {
+                source_channel: 'pre_lead'
+            }
+        ]
+
+        for (const payload of attempts) {
+            const { error } = await (supabase.from('empresas') as any)
+                .update(payload)
+                .eq('id', companyId)
+            if (!error) return
+            if (!isUnknownColumnError(error)) {
+                console.warn('No se pudo actualizar metadata de funnel en empresa nueva:', error)
+                return
+            }
+        }
+    }
+
+    const ensureCompanyHasSuspect = async (companyId: string, companyData: CompanyData) => {
+        if (!companyId || !auth.user?.id) return
+
+        let existingRows: any[] = []
+        let existingError: any = null
+        const primaryCheck = await (supabase.from('pre_leads') as any)
+            .select(preLeadColumns.is_converted ? 'id, is_converted' : 'id')
+            .eq('empresa_id', companyId)
+            .limit(10)
+        existingRows = Array.isArray(primaryCheck?.data) ? primaryCheck.data : []
+        existingError = primaryCheck?.error
+        if (existingError && isUnknownColumnError(existingError)) {
+            const fallbackCheck = await (supabase.from('pre_leads') as any)
+                .select('id')
+                .eq('empresa_id', companyId)
+                .limit(10)
+            existingRows = Array.isArray(fallbackCheck?.data) ? fallbackCheck.data : []
+            existingError = fallbackCheck?.error
+        }
+        if (existingError) {
+            console.error('Error validating linked suspects for new company:', existingError)
+            throw new Error(parseSupabaseError(existingError, 'No se pudo validar suspects vinculados a la empresa.'))
+        }
+
+        const existing = Array.isArray(existingRows) ? existingRows : []
+        const hasActiveSuspect = existing.some((row: any) => preLeadColumns.is_converted ? !Boolean(row?.is_converted) : true)
+        if (hasActiveSuspect) {
+            await markCompanyAsPreLead(companyId)
+            return
+        }
+
+        const normalizeOptionalText = (value: unknown) => {
+            const normalized = String(value ?? '').trim()
+            return normalized ? normalized : null
+        }
+        const sellerName = auth.profile?.full_name || auth.username || auth.user.email?.split('@')[0] || null
+
+        const payload: Record<string, any> = {
+            nombre_empresa: String(companyData.nombre || '').trim(),
+            nombre_contacto: null,
+            correos: [],
+            telefonos: [],
+            ubicacion: normalizeOptionalText(companyData.ubicacion),
+            giro_empresa: normalizeOptionalText(companyData.industria) || 'Sin clasificar',
+            vendedor_id: auth.user.id,
+            vendedor_name: sellerName,
+            notas: normalizeOptionalText(companyData.descripcion)
+        }
+
+        if (preLeadColumns.empresa_id) payload.empresa_id = companyId
+        if (preLeadColumns.industria_id) payload.industria_id = companyData.industria_id || null
+        if (preLeadColumns.tamano) payload.tamano = Number(companyData.tamano || 1)
+        if (preLeadColumns.tamano_fuente) payload.tamano_fuente = normalizeOptionalText((companyData as any).tamano_fuente)
+        if (preLeadColumns.tamano_confianza) payload.tamano_confianza = normalizeOptionalText((companyData as any).tamano_confianza)
+        if (preLeadColumns.tamano_senal_principal) payload.tamano_senal_principal = normalizeOptionalText((companyData as any).tamano_senal_principal)
+        if (preLeadColumns.website) payload.website = normalizeOptionalText(companyData.website)
+        if (preLeadColumns.logo_url) payload.logo_url = normalizeOptionalText(companyData.logo_url)
+        if (preLeadColumns.created_by) payload.created_by = auth.user.id
+        if (preLeadColumns.updated_by) payload.updated_by = auth.user.id
+        if (preLeadColumns.is_converted) payload.is_converted = false
+
+        const { data: createdPreLead, error: createPreLeadError } = await (supabase.from('pre_leads') as any)
+            .insert(payload)
+            .select('id')
+            .single()
+
+        if (createPreLeadError) {
+            console.error('Error creating initial suspect from company registration:', createPreLeadError)
+            throw new Error(parseSupabaseError(createPreLeadError, 'La empresa se creó, pero no se pudo crear el suspect inicial.'))
+        }
+
+        await markCompanyAsPreLead(companyId)
+
+        try {
+            const { trackEvent } = await import('@/app/actions/events')
+            await trackEvent({
+                eventType: 'pre_lead_created',
+                entityType: 'pre_lead',
+                entityId: createdPreLead?.id,
+                metadata: {
+                    source: 'company_registration',
+                    empresa_id: companyId
+                }
+            })
+        } catch (trackError) {
+            console.error('[Empresas] Tracking error (non-blocking):', trackError)
+        }
+    }
 
     const companyLocationFacetsById = useMemo(() => {
         const byId = new Map<string, ReturnType<typeof getLocationFilterFacet>>()
@@ -420,6 +586,10 @@ export default function EmpresasPage() {
             const normalized = String(value ?? '').trim()
             return normalized ? normalized : null
         }
+        const normalizeIndustryIds = (ids: string[] | undefined, fallbackPrimary: string | undefined) =>
+            Array.from(new Set([...(ids || []), ...(fallbackPrimary ? [fallbackPrimary] : [])]))
+                .filter(Boolean)
+                .sort()
         const basePayload: any = {
             nombre: companyData.nombre,
             tamano: companyData.tamano,
@@ -436,11 +606,20 @@ export default function EmpresasPage() {
             ...basePayload,
             ...sizeAssessmentPayload
         }
+        const profileFieldsPayload: any = {
+            logo_url: normalizeOptionalText(companyData.logo_url),
+            descripcion: normalizeOptionalText(companyData.descripcion)
+        }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
 
         const getPayloadCandidates = () => {
             const candidates: any[] = []
-            const corePayloadVariants = [basePayloadWithSizeAssessment, basePayload]
+            const corePayloadVariants = [
+                { ...basePayloadWithSizeAssessment, ...profileFieldsPayload },
+                { ...basePayload, ...profileFieldsPayload },
+                basePayloadWithSizeAssessment,
+                basePayload
+            ]
             for (const corePayload of corePayloadVariants) {
                 if (websiteValue !== null) {
                     candidates.push({ ...corePayload, website: websiteValue })
@@ -449,11 +628,6 @@ export default function EmpresasPage() {
                 candidates.push(corePayload)
             }
             return candidates
-        }
-
-        const isUnknownColumnError = (error: any) => {
-            const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
-            return msg.includes('could not find the') && msg.includes('column of')
         }
 
         if (isEditing) {
@@ -480,11 +654,21 @@ export default function EmpresasPage() {
                 return
             }
 
-            try {
-                await syncCompanyIndustries(modalCompanyData.id!, companyData)
-            } catch (industryError: any) {
-                console.error('Error updating company industries:', industryError)
-                alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
+            const prevPrimaryIndustryId = String(modalCompanyData.industria_id || '').trim()
+            const nextPrimaryIndustryId = String(companyData.industria_id || '').trim()
+            const prevIndustryIds = normalizeIndustryIds(modalCompanyData.industria_ids, prevPrimaryIndustryId)
+            const nextIndustryIds = normalizeIndustryIds(companyData.industria_ids, nextPrimaryIndustryId)
+            const industriesChanged =
+                prevPrimaryIndustryId !== nextPrimaryIndustryId ||
+                prevIndustryIds.join('|') !== nextIndustryIds.join('|')
+
+            if (industriesChanged) {
+                try {
+                    await syncCompanyIndustries(modalCompanyData.id!, companyData)
+                } catch (industryError: any) {
+                    console.error('Error updating company industries:', industryError)
+                    alert('La empresa se actualizó, pero no se pudieron guardar todas las industrias.')
+                }
             }
 
             setSelectedCompany((prev) => (
@@ -538,6 +722,16 @@ export default function EmpresasPage() {
                 console.error('Error saving company industries:', industryError)
                 alert('La empresa se creó, pero no se pudieron guardar todas las industrias.')
             }
+
+            try {
+                if (createdCompany?.id) {
+                    await ensureCompanyHasSuspect(createdCompany.id, companyData)
+                }
+            } catch (suspectError: any) {
+                const parsed = parseSupabaseError(suspectError, 'La empresa se creó, pero no se pudo generar su suspect inicial.')
+                console.error('Error creating suspect from company flow:', parsed, suspectError)
+                alert(parsed)
+            }
         }
 
         setIsCompanyModalOpen(false)
@@ -585,7 +779,7 @@ export default function EmpresasPage() {
                                     Catálogo de Empresas
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Gestión centralizada de cuentas y relaciones corporativas.
+                                    Alta única de empresas: cada registro nuevo crea su suspect inicial para mantener el funnel conectado.
                                 </p>
                             </div>
                         </div>
@@ -624,7 +818,7 @@ export default function EmpresasPage() {
                             }}
                             className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
-                            + Nueva Empresa
+                            + Nueva Empresa (Suspect)
                         </button>
                     </div>
                 </div>

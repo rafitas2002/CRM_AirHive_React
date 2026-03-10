@@ -9,6 +9,7 @@ type MeetingUpdate = Database['public']['Tables']['meetings']['Update']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
 type SnapshotInsert = Database['public']['Tables']['forecast_snapshots']['Insert']
 type Lead = Database['public']['Tables']['clientes']['Row']
+type MeetingStatusLike = Pick<Meeting, 'status' | 'meeting_status'>
 
 const supabase = createClient()
 
@@ -252,6 +253,106 @@ export async function getMeeting(meetingId: string): Promise<Meeting | null> {
     }
 
     return data
+}
+
+export type MeetingPostponeCancelForecast = {
+    probabilityPct: number
+    sampleSize: number
+    postponedOrCancelledCount: number
+    heldCount: number
+    confidence: 'alta' | 'media' | 'baja' | 'insuficiente'
+    basedOn: 'company' | 'lead'
+}
+
+function getMeetingRiskConfidenceLabel(sampleSize: number): 'alta' | 'media' | 'baja' | 'insuficiente' {
+    if (sampleSize >= 30) return 'alta'
+    if (sampleSize >= 12) return 'media'
+    if (sampleSize >= 5) return 'baja'
+    return 'insuficiente'
+}
+
+function normalizeMeetingOutcomeStatus(meeting: MeetingStatusLike): 'held' | 'not_held' | 'cancelled' | 'scheduled' {
+    const meetingStatus = String(meeting?.meeting_status || '').trim().toLowerCase()
+    const status = String(meeting?.status || '').trim().toLowerCase()
+
+    if (meetingStatus === 'held' || status === 'completed') return 'held'
+    if (meetingStatus === 'not_held') return 'not_held'
+    if (meetingStatus === 'cancelled' || status === 'cancelled') return 'cancelled'
+    return 'scheduled'
+}
+
+export async function getMeetingPostponeCancelForecastForLead(leadId: number): Promise<MeetingPostponeCancelForecast | null> {
+    const safeLeadId = Number(leadId)
+    if (!Number.isFinite(safeLeadId) || safeLeadId <= 0) return null
+
+    try {
+        const { data: leadRow, error: leadError } = await (supabase
+            .from('clientes') as any)
+            .select('id, empresa_id')
+            .eq('id', safeLeadId)
+            .maybeSingle()
+
+        if (leadError) throw leadError
+        if (!leadRow?.id) return null
+
+        let basedOn: 'company' | 'lead' = 'lead'
+        let scopedLeadIds: number[] = [safeLeadId]
+
+        const companyId = String(leadRow.empresa_id || '').trim()
+        if (companyId) {
+            const { data: companyLeadRows, error: companyLeadError } = await (supabase
+                .from('clientes') as any)
+                .select('id')
+                .eq('empresa_id', companyId)
+            if (companyLeadError) throw companyLeadError
+            const parsedLeadIds = ((companyLeadRows || []) as Array<{ id: number | string }>)
+                .map((row) => Number(row.id))
+                .filter((id) => Number.isFinite(id))
+            if (parsedLeadIds.length > 0) {
+                scopedLeadIds = parsedLeadIds
+                basedOn = 'company'
+            }
+        }
+
+        const { data: meetingRows, error: meetingError } = await (supabase
+            .from('meetings') as any)
+            .select('status, meeting_status, lead_id')
+            .in('lead_id', scopedLeadIds)
+        if (meetingError) throw meetingError
+
+        let sampleSize = 0
+        let postponedOrCancelledCount = 0
+        let heldCount = 0
+
+        ;((meetingRows || []) as MeetingStatusLike[]).forEach((meeting) => {
+            const outcome = normalizeMeetingOutcomeStatus(meeting)
+            if (outcome === 'scheduled') return
+            sampleSize += 1
+            if (outcome === 'held') {
+                heldCount += 1
+                return
+            }
+            if (outcome === 'not_held' || outcome === 'cancelled') {
+                postponedOrCancelledCount += 1
+            }
+        })
+
+        const probabilityPct = sampleSize > 0
+            ? (postponedOrCancelledCount / sampleSize) * 100
+            : 0
+
+        return {
+            probabilityPct,
+            sampleSize,
+            postponedOrCancelledCount,
+            heldCount,
+            confidence: getMeetingRiskConfidenceLabel(sampleSize),
+            basedOn
+        }
+    } catch (error) {
+        console.error('[MeetingsService] Error calculating postpone/cancel forecast:', error)
+        return null
+    }
 }
 
 // ============================================

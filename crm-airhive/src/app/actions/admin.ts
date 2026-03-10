@@ -46,6 +46,33 @@ const isClosedStage = (stage: string | null | undefined) => {
 
 const norm = (value: string | null | undefined) => (value || '').trim().toLowerCase()
 
+const CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS = [1, 5, 10, 15, 20, 30, 40, 50] as const
+const QUOTE_CONTRIBUTION_THRESHOLDS = [1, 5, 10, 25] as const
+const QUOTE_LIKES_THRESHOLDS = [10, 25, 50] as const
+const PRELEAD_REGISTERED_THRESHOLDS = [1, 25, 100, 300] as const
+const LEAD_REGISTERED_THRESHOLDS = [1, 10, 25, 50, 75, 100, 200, 500] as const
+const MEETING_COMPLETED_THRESHOLDS = [1, 10, 25, 50, 75, 100, 200, 500] as const
+
+const getThresholdLevelMetaFromList = (progress: number, thresholds: readonly number[]) => {
+    const safeProgress = Math.max(0, Number(progress || 0))
+    let level = 0
+    let next: number | null = thresholds[0] ?? null
+    thresholds.forEach((threshold, index) => {
+        if (safeProgress >= threshold) {
+            level = index + 1
+            next = thresholds[index + 1] ?? null
+        }
+    })
+    return { level, next }
+}
+
+const normalizeSpecialBadgeKey = (type: string, key: string) => {
+    const safeType = String(type || '')
+    const safeKey = String(key || '').trim()
+    if (safeType === 'closure_milestone') return 'closure_milestone'
+    return safeKey
+}
+
 async function ensureAdminContext() {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)
@@ -120,6 +147,9 @@ export async function getAdminCorrelationData() {
             { data: companyProjectAssignments, error: companyProjectAssignmentsError },
             { data: sellerIndustryBadgesRows, error: sellerIndustryBadgesError },
             { data: sellerSpecialBadgesRows, error: sellerSpecialBadgesError },
+            { data: sellerBadgeClosuresRows, error: sellerBadgeClosuresError },
+            { data: quoteRows, error: quoteRowsError },
+            { data: quoteReactionRows, error: quoteReactionRowsError },
             { data: meetingCancellationReasonRows, error: meetingCancellationReasonRowsError },
             { data: prospectRolesCatalogRows, error: prospectRolesCatalogRowsError },
             { data: companySizesCatalogRows, error: companySizesCatalogRowsError }
@@ -140,8 +170,11 @@ export async function getAdminCorrelationData() {
             dbClient.from('seller_forecast_reliability_metrics').select('*') as any,
             dbClient.from('empresa_proyecto_asignaciones')
                 .select('proyecto_id, source_lead_id, assigned_by, assignment_stage') as any,
-            dbClient.from('seller_industry_badges').select('seller_id, level').gt('level', 0) as any,
-            dbClient.from('seller_special_badges').select('seller_id, level').gt('level', 0) as any,
+            dbClient.from('seller_industry_badges').select('seller_id, industria_id, level').gt('level', 0) as any,
+            dbClient.from('seller_special_badges').select('seller_id, badge_type, badge_key, level').gt('level', 0) as any,
+            dbClient.from('seller_badge_closures').select('seller_id, lead_id') as any,
+            dbClient.from('crm_quotes').select('id, contributed_by, contributed_by_name, quote_author, quote_source').is('deleted_at', null) as any,
+            dbClient.from('crm_quote_reactions').select('quote_id, reaction_type').eq('reaction_type', 'like') as any,
             dbClient.from('meeting_cancellation_reason_analytics_view').select('*') as any,
             dbClient.from('lead_prospect_roles_catalog').select('id, label, sort_order, is_active') as any,
             dbClient.from('company_sizes').select('size_value, name, sort_order, is_active') as any
@@ -172,6 +205,15 @@ export async function getAdminCorrelationData() {
         if (sellerSpecialBadgesError && sellerSpecialBadgesError.code !== '42P01') {
             throw sellerSpecialBadgesError
         }
+        if (sellerBadgeClosuresError && sellerBadgeClosuresError.code !== '42P01') {
+            throw sellerBadgeClosuresError
+        }
+        if (quoteRowsError && quoteRowsError.code !== '42P01') {
+            console.warn('[AdminCorrelation] Quote rows query warning:', quoteRowsError)
+        }
+        if (quoteReactionRowsError && quoteReactionRowsError.code !== '42P01') {
+            console.warn('[AdminCorrelation] Quote reaction query warning:', quoteReactionRowsError)
+        }
         if (meetingCancellationReasonRowsError && meetingCancellationReasonRowsError.code !== '42P01') {
             throw meetingCancellationReasonRowsError
         }
@@ -193,16 +235,173 @@ export async function getAdminCorrelationData() {
             return acc
         }, {})
 
-        const badgesAccumulatedBySeller = new Map<string, number>()
+        const badgeIdentityBySeller = new Map<string, Set<string>>()
+        const addBadgeIdentity = (sellerIdRaw: unknown, identityRaw: unknown) => {
+            const sellerId = String(sellerIdRaw || '').trim()
+            const identity = String(identityRaw || '').trim()
+            if (!sellerId || !identity) return
+            if (!badgeIdentityBySeller.has(sellerId)) {
+                badgeIdentityBySeller.set(sellerId, new Set<string>())
+            }
+            badgeIdentityBySeller.get(sellerId)!.add(identity)
+        }
+
         ;((sellerIndustryBadgesRows || []) as any[]).forEach((row: any) => {
-            const sellerId = String(row?.seller_id || '')
-            if (!sellerId) return
-            badgesAccumulatedBySeller.set(sellerId, (badgesAccumulatedBySeller.get(sellerId) || 0) + 1)
+            const sellerId = String(row?.seller_id || '').trim()
+            const industryId = String(row?.industria_id || '').trim()
+            if (!sellerId || !industryId) return
+            addBadgeIdentity(sellerId, `industry::${industryId}`)
         })
+
         ;((sellerSpecialBadgesRows || []) as any[]).forEach((row: any) => {
-            const sellerId = String(row?.seller_id || '')
+            const sellerId = String(row?.seller_id || '').trim()
+            const badgeType = String(row?.badge_type || '').trim()
+            const badgeKey = normalizeSpecialBadgeKey(badgeType, String(row?.badge_key || ''))
+            if (!sellerId || !badgeType) return
+            const normalizedKey = badgeKey || badgeType
+            addBadgeIdentity(sellerId, `special::${badgeType}::${normalizedKey}`)
+        })
+
+        const closureLeadIdsBySeller = new Map<string, Set<string>>()
+        ;((sellerBadgeClosuresRows || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.seller_id || '').trim()
+            const leadId = String(row?.lead_id || '').trim()
+            if (!sellerId || !leadId) return
+            if (!closureLeadIdsBySeller.has(sellerId)) {
+                closureLeadIdsBySeller.set(sellerId, new Set<string>())
+            }
+            closureLeadIdsBySeller.get(sellerId)!.add(leadId)
+        })
+        closureLeadIdsBySeller.forEach((leadIds, sellerId) => {
+            const closureProgress = leadIds.size
+            const closureMeta = getThresholdLevelMetaFromList(closureProgress, CLOSURE_MILESTONE_EIGHT_TIER_THRESHOLDS)
+            if (closureMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::closure_milestone::closure_milestone')
+            }
+        })
+
+        const normalizeComparableName = (value: unknown) => String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toLowerCase()
+
+        const sellerIdsByNormalizedName = new Map<string, string[]>()
+        ;((profiles || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.id || '').trim()
+            const normalizedName = normalizeComparableName(row?.full_name)
+            if (!sellerId || !normalizedName) return
+            if (!sellerIdsByNormalizedName.has(normalizedName)) {
+                sellerIdsByNormalizedName.set(normalizedName, [])
+            }
+            sellerIdsByNormalizedName.get(normalizedName)!.push(sellerId)
+        })
+
+        const likesByQuoteId = new Map<number, number>()
+        ;((quoteReactionRows || []) as any[]).forEach((row: any) => {
+            const quoteId = Number(row?.quote_id)
+            if (!Number.isFinite(quoteId)) return
+            likesByQuoteId.set(quoteId, (likesByQuoteId.get(quoteId) || 0) + 1)
+        })
+
+        const quoteIdsBySeller = new Map<string, Set<number>>()
+        const attachQuoteToSeller = (sellerIdRaw: unknown, quoteId: number) => {
+            const sellerId = String(sellerIdRaw || '').trim()
+            if (!sellerId || !Number.isFinite(quoteId)) return
+            if (!quoteIdsBySeller.has(sellerId)) {
+                quoteIdsBySeller.set(sellerId, new Set<number>())
+            }
+            quoteIdsBySeller.get(sellerId)!.add(quoteId)
+        }
+
+        ;((quoteRows || []) as any[]).forEach((row: any) => {
+            const quoteId = Number(row?.id)
+            if (!Number.isFinite(quoteId)) return
+
+            const contributorSellerId = String(row?.contributed_by || '').trim()
+            if (contributorSellerId) attachQuoteToSeller(contributorSellerId, quoteId)
+
+            const contributorNameMatches = sellerIdsByNormalizedName.get(normalizeComparableName(row?.contributed_by_name)) || []
+            contributorNameMatches.forEach((sellerId) => attachQuoteToSeller(sellerId, quoteId))
+
+            const ownLikeQuote = String(row?.quote_source || '').toLowerCase().includes('interna en airhive')
+            if (ownLikeQuote) {
+                const authorMatches = sellerIdsByNormalizedName.get(normalizeComparableName(row?.quote_author)) || []
+                authorMatches.forEach((sellerId) => attachQuoteToSeller(sellerId, quoteId))
+            }
+        })
+
+        quoteIdsBySeller.forEach((quoteIds, sellerId) => {
+            const contributionProgress = quoteIds.size
+            const contributionMeta = getThresholdLevelMetaFromList(contributionProgress, QUOTE_CONTRIBUTION_THRESHOLDS)
+            if (contributionMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::quote_contribution::quote_contribution')
+            }
+
+            const likesProgress = Array.from(quoteIds).reduce((acc, quoteId) => acc + Number(likesByQuoteId.get(quoteId) || 0), 0)
+            const likesMeta = getThresholdLevelMetaFromList(likesProgress, QUOTE_LIKES_THRESHOLDS)
+            if (likesMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::quote_likes_received::quote_likes_received')
+            }
+        })
+
+        const preLeadsCountBySeller = new Map<string, number>()
+        ;((preLeads || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.vendedor_id || '').trim()
             if (!sellerId) return
-            badgesAccumulatedBySeller.set(sellerId, (badgesAccumulatedBySeller.get(sellerId) || 0) + 1)
+            preLeadsCountBySeller.set(sellerId, (preLeadsCountBySeller.get(sellerId) || 0) + 1)
+        })
+
+        const leadsCountBySeller = new Map<string, number>()
+        ;((clients || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.owner_id || '').trim()
+            if (!sellerId) return
+            leadsCountBySeller.set(sellerId, (leadsCountBySeller.get(sellerId) || 0) + 1)
+        })
+
+        const completedMeetingsCountBySeller = new Map<string, number>()
+        ;((meetings || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.seller_id || '').trim()
+            if (!sellerId) return
+            const status = String(row?.status || '').trim().toLowerCase()
+            const meetingStatus = String(row?.meeting_status || '').trim().toLowerCase()
+            const isCompleted = status === 'completed' || meetingStatus === 'held'
+            if (!isCompleted) return
+            completedMeetingsCountBySeller.set(sellerId, (completedMeetingsCountBySeller.get(sellerId) || 0) + 1)
+        })
+
+        const sellerIdsForDerivedBadges = new Set<string>()
+        ;((profiles || []) as any[]).forEach((row: any) => {
+            const sellerId = String(row?.id || '').trim()
+            if (sellerId) sellerIdsForDerivedBadges.add(sellerId)
+        })
+        preLeadsCountBySeller.forEach((_count, sellerId) => sellerIdsForDerivedBadges.add(sellerId))
+        leadsCountBySeller.forEach((_count, sellerId) => sellerIdsForDerivedBadges.add(sellerId))
+        completedMeetingsCountBySeller.forEach((_count, sellerId) => sellerIdsForDerivedBadges.add(sellerId))
+
+        sellerIdsForDerivedBadges.forEach((sellerId) => {
+            const preLeadProgress = Number(preLeadsCountBySeller.get(sellerId) || 0)
+            const preLeadMeta = getThresholdLevelMetaFromList(preLeadProgress, PRELEAD_REGISTERED_THRESHOLDS)
+            if (preLeadMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::prelead_registered::prelead_registered')
+            }
+
+            const leadProgress = Number(leadsCountBySeller.get(sellerId) || 0)
+            const leadMeta = getThresholdLevelMetaFromList(leadProgress, LEAD_REGISTERED_THRESHOLDS)
+            if (leadMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::lead_registered::lead_registered')
+            }
+
+            const meetingProgress = Number(completedMeetingsCountBySeller.get(sellerId) || 0)
+            const meetingMeta = getThresholdLevelMetaFromList(meetingProgress, MEETING_COMPLETED_THRESHOLDS)
+            if (meetingMeta.level > 0) {
+                addBadgeIdentity(sellerId, 'special::meeting_completed::meeting_completed')
+            }
+        })
+
+        const badgesAccumulatedBySeller = new Map<string, number>()
+        badgeIdentityBySeller.forEach((identities, sellerId) => {
+            badgesAccumulatedBySeller.set(sellerId, identities.size)
         })
 
         // 3. Aggregate Performance by User

@@ -78,6 +78,15 @@ function isClosedStageLocal(stage: unknown) {
     return isWonStageLocal(stage) || isLostStageLocal(stage)
 }
 
+function normalizeLeadStageForModal(stage: unknown): string {
+    const normalized = String(stage || '').trim().toLowerCase()
+    if (normalized === 'cerrado ganado' || normalized === 'cerrada ganada') return 'Cerrado Ganado'
+    if (normalized === 'cerrado perdido' || normalized === 'cerrada perdida') return 'Cerrado Perdido'
+    if (normalized === 'negociación' || normalized === 'negociacion') return 'Negociación'
+    if (normalized === 'prospección' || normalized === 'prospeccion') return 'Negociación'
+    return 'Negociación'
+}
+
 function todayDateOnly() {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -98,7 +107,16 @@ type ProjectCatalogItem = {
     nombre: string
     valor_real_mensualidad_usd?: number | null
     valor_real_implementacion_usd?: number | null
+    tiempo_implementacion_dias?: number | null
+    costo_interno_mensualidad_usd?: number | null
+    costo_interno_implementacion_usd?: number | null
     is_active?: boolean
+}
+
+type ProjectIndustryRelation = {
+    proyecto_id: string
+    industria_id: string
+    relation_status: 'implemented_in_industry' | 'available_not_implemented'
 }
 
 type LossReasonCatalogItem = {
@@ -232,7 +250,9 @@ export default function ClientModal({
     const [pendingCloseRealValue, setPendingCloseRealValue] = useState<number | null>(null)
     const [pendingCloseImplementationRealValue, setPendingCloseImplementationRealValue] = useState<number | null>(null)
     const [projectsCatalog, setProjectsCatalog] = useState<ProjectCatalogItem[]>([])
+    const [projectIndustryRelations, setProjectIndustryRelations] = useState<ProjectIndustryRelation[]>([])
     const [projectsLoading, setProjectsLoading] = useState(false)
+    const [companyIndustryIds, setCompanyIndustryIds] = useState<string[]>([])
     const [lossReasonsCatalog, setLossReasonsCatalog] = useState<LossReasonCatalogItem[]>([])
     const [lossSubreasonsCatalog, setLossSubreasonsCatalog] = useState<LossSubreasonCatalogItem[]>([])
     const [lossCatalogLoading, setLossCatalogLoading] = useState(false)
@@ -254,6 +274,7 @@ export default function ClientModal({
             if (initialData) {
                 setFormData({
                     ...initialData,
+                    etapa: normalizeLeadStageForModal(initialData.etapa),
                     valor_real_cierre: initialData.valor_real_cierre ?? null,
                     valor_implementacion_estimado: (initialData as any).valor_implementacion_estimado ?? null,
                     valor_implementacion_real_cierre: (initialData as any).valor_implementacion_real_cierre ?? null,
@@ -366,18 +387,60 @@ export default function ClientModal({
 
         const loadProjectsCatalog = async () => {
             setProjectsLoading(true)
-            const { data } = await (supabase.from('proyectos_catalogo') as any)
-                .select('id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, is_active')
+            const isUnknownColumnError = (error: any) => {
+                const message = String(error?.message || '').toLowerCase()
+                return message.includes('column') && message.includes('does not exist')
+            }
+            const isMissingTableError = (error: any) => {
+                const message = String(error?.message || '').toLowerCase()
+                return message.includes('does not exist') || message.includes('42p01')
+            }
+            const extendedSelect = 'id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, tiempo_implementacion_dias, costo_interno_mensualidad_usd, costo_interno_implementacion_usd, is_active'
+            const coreSelect = 'id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, is_active'
+
+            let response: any = await (supabase.from('proyectos_catalogo') as any)
+                .select(extendedSelect)
                 .eq('is_active', true)
                 .order('nombre', { ascending: true })
-            if (!cancelled && Array.isArray(data)) {
-                setProjectsCatalog((data as any[]).map((row) => ({
+
+            if (response?.error && isUnknownColumnError(response.error)) {
+                response = await (supabase.from('proyectos_catalogo') as any)
+                    .select(coreSelect)
+                    .eq('is_active', true)
+                    .order('nombre', { ascending: true })
+            }
+
+            if (!cancelled && Array.isArray(response?.data)) {
+                setProjectsCatalog((response.data as any[]).map((row) => ({
                     id: String(row.id),
                     nombre: String(row.nombre || 'Proyecto'),
                     valor_real_mensualidad_usd: row.valor_real_mensualidad_usd == null ? null : Number(row.valor_real_mensualidad_usd),
                     valor_real_implementacion_usd: row.valor_real_implementacion_usd == null ? null : Number(row.valor_real_implementacion_usd),
+                    tiempo_implementacion_dias: row.tiempo_implementacion_dias == null ? null : Number(row.tiempo_implementacion_dias),
+                    costo_interno_mensualidad_usd: row.costo_interno_mensualidad_usd == null ? null : Number(row.costo_interno_mensualidad_usd),
+                    costo_interno_implementacion_usd: row.costo_interno_implementacion_usd == null ? null : Number(row.costo_interno_implementacion_usd),
                     is_active: !!row.is_active
                 })))
+            }
+
+            const { data: relationsData, error: relationsError } = await (supabase.from('proyecto_industrias') as any)
+                .select('proyecto_id, industria_id, relation_status')
+
+            if (!cancelled) {
+                if (relationsError) {
+                    if (!isMissingTableError(relationsError)) {
+                        console.warn('No se pudo cargar relaciones proyecto-industria:', relationsError)
+                    }
+                    setProjectIndustryRelations([])
+                } else if (Array.isArray(relationsData)) {
+                    setProjectIndustryRelations((relationsData as any[]).map((row) => ({
+                        proyecto_id: String(row.proyecto_id),
+                        industria_id: String(row.industria_id),
+                        relation_status: row.relation_status === 'implemented_in_industry' ? 'implemented_in_industry' : 'available_not_implemented'
+                    })))
+                } else {
+                    setProjectIndustryRelations([])
+                }
             }
             if (!cancelled) setProjectsLoading(false)
         }
@@ -630,6 +693,7 @@ export default function ClientModal({
         const companyId = formData.empresa_id || ''
         if (!companyId) {
             lastLoadedProjectsCompanyRef.current = null
+            setCompanyIndustryIds([])
             setFormData((prev) => ({
                 ...prev,
                 proyectos_pronosticados_ids: [],
@@ -644,12 +708,33 @@ export default function ClientModal({
         let cancelled = false
 
         const loadCompanyProjectAssignments = async () => {
-            const { data } = await (supabase.from('empresa_proyecto_asignaciones') as any)
-                .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
-                .eq('empresa_id', companyId)
+            const [assignmentsRes, companyRes, linkedIndustriesRes] = await Promise.all([
+                (supabase.from('empresa_proyecto_asignaciones') as any)
+                    .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
+                    .eq('empresa_id', companyId),
+                (supabase.from('empresas') as any)
+                    .select('industria_id')
+                    .eq('id', companyId)
+                    .maybeSingle(),
+                (supabase.from('company_industries') as any)
+                    .select('industria_id')
+                    .eq('empresa_id', companyId)
+            ])
+
+            const industryIds = new Set<string>()
+            const primaryIndustryId = String((companyRes as any)?.data?.industria_id || '').trim()
+            if (primaryIndustryId) industryIds.add(primaryIndustryId)
+            const linkedIndustryRows = Array.isArray((linkedIndustriesRes as any)?.data) ? (linkedIndustriesRes as any).data : []
+            for (const row of linkedIndustryRows) {
+                const industryId = String((row as any)?.industria_id || '').trim()
+                if (industryId) industryIds.add(industryId)
+            }
+            if (!cancelled) {
+                setCompanyIndustryIds(Array.from(industryIds))
+            }
 
             if (cancelled) return
-            const rows = Array.isArray(data) ? data : []
+            const rows = Array.isArray((assignmentsRes as any)?.data) ? (assignmentsRes as any).data : []
             const inNegotiation = rows
                 .filter((r: any) => ['forecasted', 'in_negotiation'].includes(String(r.assignment_stage)))
                 .map((r: any) => String(r.proyecto_id))
@@ -698,6 +783,113 @@ export default function ClientModal({
     const sortedProjectCatalog = useMemo(
         () => [...projectsCatalog].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
         [projectsCatalog]
+    )
+    const compatibleProjectIdSet = useMemo(() => {
+        const selectedIndustryIds = new Set(
+            companyIndustryIds
+                .map((id) => String(id || '').trim())
+                .filter(Boolean)
+        )
+        if (selectedIndustryIds.size === 0) return new Set<string>()
+
+        const compatibleIds = new Set<string>()
+        for (const relation of projectIndustryRelations) {
+            const industryId = String(relation.industria_id || '').trim()
+            const projectId = String(relation.proyecto_id || '').trim()
+            if (!industryId || !projectId) continue
+            if (selectedIndustryIds.has(industryId)) compatibleIds.add(projectId)
+        }
+        return compatibleIds
+    }, [companyIndustryIds, projectIndustryRelations])
+    const compatibleProjectCatalog = useMemo(
+        () => sortedProjectCatalog.filter((project) => compatibleProjectIdSet.has(project.id)),
+        [compatibleProjectIdSet, sortedProjectCatalog]
+    )
+    const hasCompatibilityContext = companyIndustryIds.length > 0
+
+    const renderProjectBaseMeta = (project: ProjectCatalogItem) => (
+        <>
+            <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
+            <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                M real: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
+            </span>
+            <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                I real: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
+            </span>
+            <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                Impl.: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(project.tiempo_implementacion_dias))} días` : 'N/D'}
+            </span>
+        </>
+    )
+    const renderProjectCheckboxOption = (
+        project: ProjectCatalogItem,
+        keyPrefix: string,
+        isChecked: boolean,
+        onToggle: () => void
+    ) => (
+        <label key={`${keyPrefix}-${project.id}`} className='flex items-start gap-2 cursor-pointer'>
+            <input
+                type='checkbox'
+                checked={isChecked}
+                onChange={onToggle}
+                className='mt-0.5'
+            />
+            <span className='min-w-0'>
+                {renderProjectBaseMeta(project)}
+            </span>
+        </label>
+    )
+    const renderImplementedRealProjectCard = (project: ProjectCatalogItem, keyPrefix: string) => (
+        <div key={`${keyPrefix}-${project.id}`} className='rounded-xl border p-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
+            <label className='flex items-start gap-2 cursor-pointer'>
+                <input
+                    type='checkbox'
+                    checked={(formData.proyectos_implementados_reales_ids || []).includes(project.id)}
+                    onChange={() => toggleProjectSelection(project.id, 'implemented_real')}
+                    className='mt-0.5'
+                />
+                <span className='min-w-0'>
+                    <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
+                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                        Real catálogo M: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
+                    </span>
+                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                        Real catálogo I: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
+                    </span>
+                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                        Impl.: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(project.tiempo_implementacion_dias))} días` : 'N/D'}
+                    </span>
+                </span>
+            </label>
+            {(formData.proyectos_implementados_reales_ids || []).includes(project.id) && (
+                <div className='mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                    <div>
+                        <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Mensualidad pactada</label>
+                        <input
+                            type='text'
+                            inputMode='numeric'
+                            value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.mensualidad_usd ?? null)}
+                            onChange={(e) => setImplementedProjectValue(project.id, 'mensualidad_usd', e.target.value)}
+                            className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
+                            style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            placeholder='0'
+                        />
+                    </div>
+                    <div>
+                        <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Implementación pactada</label>
+                        <input
+                            type='text'
+                            inputMode='numeric'
+                            value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.implementacion_usd ?? null)}
+                            onChange={(e) => setImplementedProjectValue(project.id, 'implementacion_usd', e.target.value)}
+                            className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
+                            style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                            placeholder='0'
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
     )
     const sortedProspectRolesCatalog = useMemo(
         () => [...prospectRolesCatalog].sort((a, b) => {
@@ -988,6 +1180,10 @@ export default function ClientModal({
                 alert('Debes registrar la fecha real de cierre del lead ganado.')
                 return
             }
+            if (((formData as any).proyectos_implementados_reales_ids || []).length === 0) {
+                alert('Para cerrar como ganado debes asignar al menos 1 proyecto implementado real.')
+                return
+            }
             if ((formData.valor_real_cierre ?? 0) <= 0) {
                 alert('Debes registrar la mensualidad real para un lead ganado.')
                 return
@@ -1034,6 +1230,10 @@ export default function ClientModal({
     const applyCloseLead = () => {
         if (!pendingCloseDate) {
             alert('Selecciona la fecha real del cierre.')
+            return
+        }
+        if (pendingCloseOutcome === 'won' && ((formData as any).proyectos_implementados_reales_ids || []).length === 0) {
+            alert('Antes de cerrar como ganado, asigna al menos 1 proyecto implementado real.')
             return
         }
         if (pendingCloseOutcome === 'won' && (pendingCloseRealValue ?? 0) <= 0) {
@@ -1365,25 +1565,38 @@ export default function ClientModal({
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
                                         ) : sortedProjectCatalog.length === 0 ? (
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : sortedProjectCatalog.map((project) => (
-                                            <label key={`forecast-${project.id}`} className='flex items-start gap-2 cursor-pointer'>
-                                                <input
-                                                    type='checkbox'
-                                                    checked={(formData.proyectos_pronosticados_ids || []).includes(project.id)}
-                                                    onChange={() => toggleProjectSelection(project.id, 'in_negotiation')}
-                                                    className='mt-0.5'
-                                                />
-                                                <span className='min-w-0'>
-                                                    <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        M real: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        I real: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        ))}
+                                        ) : (
+                                            <div className='space-y-3'>
+                                                {hasCompatibilityContext && (
+                                                    <div className='space-y-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
+                                                            Compatibles con la industria de la empresa
+                                                        </p>
+                                                        {compatibleProjectCatalog.length === 0 ? (
+                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                No hay proyectos compatibles registrados para esta industria.
+                                                            </p>
+                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                            project,
+                                                            'forecast-compatible',
+                                                            (formData.proyectos_pronosticados_ids || []).includes(project.id),
+                                                            () => toggleProjectSelection(project.id, 'in_negotiation')
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className='space-y-2'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-blue-300'>
+                                                        Catálogo completo
+                                                    </p>
+                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                        project,
+                                                        'forecast-all',
+                                                        (formData.proyectos_pronosticados_ids || []).includes(project.id),
+                                                        () => toggleProjectSelection(project.id, 'in_negotiation')
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1400,25 +1613,38 @@ export default function ClientModal({
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
                                         ) : sortedProjectCatalog.length === 0 ? (
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : sortedProjectCatalog.map((project) => (
-                                            <label key={`prospect-same-close-${project.id}`} className='flex items-start gap-2 cursor-pointer'>
-                                                <input
-                                                    type='checkbox'
-                                                    checked={((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).includes(project.id)}
-                                                    onChange={() => toggleProjectSelection(project.id, 'prospection_same_close')}
-                                                    className='mt-0.5'
-                                                />
-                                                <span className='min-w-0'>
-                                                    <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        M real: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        I real: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        ))}
+                                        ) : (
+                                            <div className='space-y-3'>
+                                                {hasCompatibilityContext && (
+                                                    <div className='space-y-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
+                                                            Compatibles con la industria de la empresa
+                                                        </p>
+                                                        {compatibleProjectCatalog.length === 0 ? (
+                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                No hay proyectos compatibles registrados para esta industria.
+                                                            </p>
+                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                            project,
+                                                            'prospect-compatible',
+                                                            ((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).includes(project.id),
+                                                            () => toggleProjectSelection(project.id, 'prospection_same_close')
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className='space-y-2'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200'>
+                                                        Catálogo completo
+                                                    </p>
+                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                        project,
+                                                        'prospect-all',
+                                                        ((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).includes(project.id),
+                                                        () => toggleProjectSelection(project.id, 'prospection_same_close')
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1435,25 +1661,38 @@ export default function ClientModal({
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
                                         ) : sortedProjectCatalog.length === 0 ? (
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : sortedProjectCatalog.map((project) => (
-                                            <label key={`future-lead-${project.id}`} className='flex items-start gap-2 cursor-pointer'>
-                                                <input
-                                                    type='checkbox'
-                                                    checked={((formData as any).proyectos_futuro_lead_ids || []).includes(project.id)}
-                                                    onChange={() => toggleProjectSelection(project.id, 'future_lead_opportunity')}
-                                                    className='mt-0.5'
-                                                />
-                                                <span className='min-w-0'>
-                                                    <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        M real: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                        I real: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                    </span>
-                                                </span>
-                                            </label>
-                                        ))}
+                                        ) : (
+                                            <div className='space-y-3'>
+                                                {hasCompatibilityContext && (
+                                                    <div className='space-y-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
+                                                            Compatibles con la industria de la empresa
+                                                        </p>
+                                                        {compatibleProjectCatalog.length === 0 ? (
+                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                No hay proyectos compatibles registrados para esta industria.
+                                                            </p>
+                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                            project,
+                                                            'future-compatible',
+                                                            ((formData as any).proyectos_futuro_lead_ids || []).includes(project.id),
+                                                            () => toggleProjectSelection(project.id, 'future_lead_opportunity')
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className='space-y-2'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-violet-200'>
+                                                        Catálogo completo
+                                                    </p>
+                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
+                                                        project,
+                                                        'future-all',
+                                                        ((formData as any).proyectos_futuro_lead_ids || []).includes(project.id),
+                                                        () => toggleProjectSelection(project.id, 'future_lead_opportunity')
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1462,6 +1701,11 @@ export default function ClientModal({
                                         <p className='text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400'>Proyecto implementado real</p>
                                         <span className='text-[10px] font-black text-emerald-300'>{(formData.proyectos_implementados_reales_ids || []).length}</span>
                                     </div>
+                                    {isWonStageLocal(formData.etapa) && (formData.proyectos_implementados_reales_ids || []).length === 0 && (
+                                        <p className='text-[10px] font-black rounded-lg border px-2 py-1 text-rose-400 border-rose-400/30 bg-rose-500/10'>
+                                            Requerido para cierre ganado: asigna al menos 1 proyecto implementado real.
+                                        </p>
+                                    )}
                                     {!isWonStageLocal(formData.etapa) && (
                                         <p className='text-[10px] font-bold rounded-lg border px-2 py-1'
                                             style={{ color: 'var(--text-secondary)', borderColor: 'var(--card-border)', background: 'var(--background)' }}>
@@ -1473,55 +1717,28 @@ export default function ClientModal({
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
                                         ) : sortedProjectCatalog.length === 0 ? (
                                             <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : sortedProjectCatalog.map((project) => (
-                                            <div key={`real-${project.id}`} className='rounded-xl border p-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                                <label className='flex items-start gap-2 cursor-pointer'>
-                                                    <input
-                                                        type='checkbox'
-                                                        checked={(formData.proyectos_implementados_reales_ids || []).includes(project.id)}
-                                                        onChange={() => toggleProjectSelection(project.id, 'implemented_real')}
-                                                        className='mt-0.5'
-                                                    />
-                                                    <span className='min-w-0'>
-                                                        <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
-                                                        <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                            Real catálogo M: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                        </span>
-                                                        <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                            Real catálogo I: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
-                                                        </span>
-                                                    </span>
-                                                </label>
-                                                {(formData.proyectos_implementados_reales_ids || []).includes(project.id) && (
-                                                    <div className='mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                                                        <div>
-                                                            <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Mensualidad pactada</label>
-                                                            <input
-                                                                type='text'
-                                                                inputMode='numeric'
-                                                                value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.mensualidad_usd ?? null)}
-                                                                onChange={(e) => setImplementedProjectValue(project.id, 'mensualidad_usd', e.target.value)}
-                                                                className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
-                                                                style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                                                                placeholder='0'
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Implementación pactada</label>
-                                                            <input
-                                                                type='text'
-                                                                inputMode='numeric'
-                                                                value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.implementacion_usd ?? null)}
-                                                                onChange={(e) => setImplementedProjectValue(project.id, 'implementacion_usd', e.target.value)}
-                                                                className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
-                                                                style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                                                                placeholder='0'
-                                                            />
-                                                        </div>
+                                        ) : (
+                                            <div className='space-y-3'>
+                                                {hasCompatibilityContext && (
+                                                    <div className='space-y-2'>
+                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
+                                                            Compatibles con la industria de la empresa
+                                                        </p>
+                                                        {compatibleProjectCatalog.length === 0 ? (
+                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                No hay proyectos compatibles registrados para esta industria.
+                                                            </p>
+                                                        ) : compatibleProjectCatalog.map((project) => renderImplementedRealProjectCard(project, 'implemented-compatible'))}
                                                     </div>
                                                 )}
+                                                <div className='space-y-2'>
+                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200'>
+                                                        Catálogo completo
+                                                    </p>
+                                                    {sortedProjectCatalog.map((project) => renderImplementedRealProjectCard(project, 'implemented-all'))}
+                                                </div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
                                 </div>
                             </div>

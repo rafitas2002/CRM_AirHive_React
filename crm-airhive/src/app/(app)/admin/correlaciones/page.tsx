@@ -381,6 +381,15 @@ type ProspectBuilderConfig = {
     monthRangeEnd: string
     dayRangeStart: string
     dayRangeEnd: string
+    compareEnabled: boolean
+    comparePeriod: ProspectBuilderPeriod
+    compareDateFilterMode: ProspectBuilderDateFilterMode
+    compareRangeGranularity: ProspectBuilderRangeGranularity
+    compareSelectedMonths: string[]
+    compareMonthRangeStart: string
+    compareMonthRangeEnd: string
+    compareDayRangeStart: string
+    compareDayRangeEnd: string
     forecastMetrics?: ProspectBuilderMetric[]
 }
 
@@ -625,6 +634,15 @@ const PROSPECT_DEFAULT_BUILDER_CONFIG: ProspectBuilderConfig = {
     monthRangeEnd: '',
     dayRangeStart: '',
     dayRangeEnd: '',
+    compareEnabled: false,
+    comparePeriod: 'all',
+    compareDateFilterMode: 'preset',
+    compareRangeGranularity: 'month',
+    compareSelectedMonths: [],
+    compareMonthRangeStart: '',
+    compareMonthRangeEnd: '',
+    compareDayRangeStart: '',
+    compareDayRangeEnd: '',
     forecastMetrics: []
 }
 
@@ -977,6 +995,63 @@ const getBuilderPeriodWindow = (period: ProspectBuilderPeriod): TimeWindow | nul
     }
 }
 
+type BuilderDateFilterSelection = {
+    period: ProspectBuilderPeriod
+    dateFilterMode: ProspectBuilderDateFilterMode
+    rangeGranularity: ProspectBuilderRangeGranularity
+    selectedMonths: string[]
+    monthRangeStart: string
+    monthRangeEnd: string
+    dayRangeStart: string
+    dayRangeEnd: string
+}
+
+const describeBuilderDateFilterSelection = (selection: BuilderDateFilterSelection) => {
+    const periodWindow = getBuilderPeriodWindow(selection.period)
+    const rangeGranularity: ProspectBuilderRangeGranularity = selection.rangeGranularity === 'day' ? 'day' : 'month'
+    const selectedMonths = normalizeBuilderMonthSelection(selection.selectedMonths)
+    const monthRangeStart = normalizeMonthKey(selection.monthRangeStart)
+    const monthRangeEnd = normalizeMonthKey(selection.monthRangeEnd)
+    const normalizedRangeStart = monthRangeStart && monthRangeEnd
+        ? (monthRangeStart <= monthRangeEnd ? monthRangeStart : monthRangeEnd)
+        : (monthRangeStart || monthRangeEnd)
+    const normalizedRangeEnd = monthRangeStart && monthRangeEnd
+        ? (monthRangeStart <= monthRangeEnd ? monthRangeEnd : monthRangeStart)
+        : (monthRangeStart || monthRangeEnd)
+    const dayRangeStart = normalizeDayKey(selection.dayRangeStart)
+    const dayRangeEnd = normalizeDayKey(selection.dayRangeEnd)
+    const normalizedDayRangeStart = dayRangeStart && dayRangeEnd
+        ? (dayRangeStart <= dayRangeEnd ? dayRangeStart : dayRangeEnd)
+        : (dayRangeStart || dayRangeEnd)
+    const normalizedDayRangeEnd = dayRangeStart && dayRangeEnd
+        ? (dayRangeStart <= dayRangeEnd ? dayRangeEnd : dayRangeStart)
+        : (dayRangeStart || dayRangeEnd)
+
+    if (selection.dateFilterMode === 'months') {
+        const preview = buildSelectedMonthsPreview(selectedMonths)
+        return preview ? `Meses: ${preview}` : null
+    }
+    if (selection.dateFilterMode === 'range') {
+        if (rangeGranularity === 'day') {
+            if (!normalizedDayRangeStart && !normalizedDayRangeEnd) return null
+            const startLabel = normalizedDayRangeStart ? formatDayKeyLabel(normalizedDayRangeStart) : 'Sin inicio'
+            const endLabel = normalizedDayRangeEnd ? formatDayKeyLabel(normalizedDayRangeEnd) : 'Sin fin'
+            return `Rango días: ${startLabel} → ${endLabel}`
+        }
+        if (!normalizedRangeStart && !normalizedRangeEnd) return null
+        const startLabel = normalizedRangeStart ? formatMonthKeyLabel(normalizedRangeStart) : 'Sin inicio'
+        const endLabel = normalizedRangeEnd ? formatMonthKeyLabel(normalizedRangeEnd) : 'Sin fin'
+        return `Rango mes: ${startLabel} → ${endLabel}`
+    }
+    return periodWindow?.label || null
+}
+
+const formatBuilderMetricDelta = (metric: ProspectBuilderMetric, value: number) => {
+    const absValue = Math.abs(value)
+    const formatted = formatBuilderMetricValue(metric, absValue)
+    return `${value >= 0 ? '+' : '-'}${formatted}`
+}
+
 const serializeBuilderQueryConfig = (config: ProspectBuilderConfig) =>
     `${PROSPECT_BUILDER_QUERY_PREFIX}${JSON.stringify(config)}`
 
@@ -1022,6 +1097,21 @@ const parseBuilderQueryConfig = (queryText: string): ProspectBuilderConfig | nul
         const monthRangeEnd = normalizeMonthKey(parsed.monthRangeEnd) || ''
         const dayRangeStart = normalizeDayKey(parsed.dayRangeStart) || ''
         const dayRangeEnd = normalizeDayKey(parsed.dayRangeEnd) || ''
+        const compareEnabled = parsed.compareEnabled === true
+        const comparePeriod = periodSet.has(parsed.comparePeriod as ProspectBuilderPeriod)
+            ? parsed.comparePeriod as ProspectBuilderPeriod
+            : PROSPECT_DEFAULT_BUILDER_CONFIG.comparePeriod
+        const compareDateFilterMode = dateFilterModeSet.has(parsed.compareDateFilterMode as ProspectBuilderDateFilterMode)
+            ? parsed.compareDateFilterMode as ProspectBuilderDateFilterMode
+            : PROSPECT_DEFAULT_BUILDER_CONFIG.compareDateFilterMode
+        const compareRangeGranularity = rangeGranularitySet.has(parsed.compareRangeGranularity as ProspectBuilderRangeGranularity)
+            ? parsed.compareRangeGranularity as ProspectBuilderRangeGranularity
+            : PROSPECT_DEFAULT_BUILDER_CONFIG.compareRangeGranularity
+        const compareSelectedMonths = normalizeBuilderMonthSelection(parsed.compareSelectedMonths)
+        const compareMonthRangeStart = normalizeMonthKey(parsed.compareMonthRangeStart) || ''
+        const compareMonthRangeEnd = normalizeMonthKey(parsed.compareMonthRangeEnd) || ''
+        const compareDayRangeStart = normalizeDayKey(parsed.compareDayRangeStart) || ''
+        const compareDayRangeEnd = normalizeDayKey(parsed.compareDayRangeEnd) || ''
         const forecastMetrics = normalizeForecastMetricSelection(parsed.forecastMetrics)
 
         return {
@@ -1041,6 +1131,15 @@ const parseBuilderQueryConfig = (queryText: string): ProspectBuilderConfig | nul
             monthRangeEnd,
             dayRangeStart,
             dayRangeEnd,
+            compareEnabled,
+            comparePeriod,
+            compareDateFilterMode,
+            compareRangeGranularity,
+            compareSelectedMonths,
+            compareMonthRangeStart,
+            compareMonthRangeEnd,
+            compareDayRangeStart,
+            compareDayRangeEnd,
             forecastMetrics
         }
     } catch {
@@ -1068,44 +1167,29 @@ const describeBuilderQueryConfig = (config: ProspectBuilderConfig, options: Pros
     const outcomeLabel = config.outcomeFilter !== 'all'
         ? getBuilderOutcomeLabel(config.outcomeFilter)
         : null
-    const rangeGranularity: ProspectBuilderRangeGranularity = config.rangeGranularity === 'day' ? 'day' : 'month'
-    const selectedMonths = normalizeBuilderMonthSelection(config.selectedMonths)
-    const monthRangeStart = normalizeMonthKey(config.monthRangeStart)
-    const monthRangeEnd = normalizeMonthKey(config.monthRangeEnd)
-    const normalizedRangeStart = monthRangeStart && monthRangeEnd
-        ? (monthRangeStart <= monthRangeEnd ? monthRangeStart : monthRangeEnd)
-        : (monthRangeStart || monthRangeEnd)
-    const normalizedRangeEnd = monthRangeStart && monthRangeEnd
-        ? (monthRangeStart <= monthRangeEnd ? monthRangeEnd : monthRangeStart)
-        : (monthRangeStart || monthRangeEnd)
-    const dayRangeStart = normalizeDayKey(config.dayRangeStart)
-    const dayRangeEnd = normalizeDayKey(config.dayRangeEnd)
-    const normalizedDayRangeStart = dayRangeStart && dayRangeEnd
-        ? (dayRangeStart <= dayRangeEnd ? dayRangeStart : dayRangeEnd)
-        : (dayRangeStart || dayRangeEnd)
-    const normalizedDayRangeEnd = dayRangeStart && dayRangeEnd
-        ? (dayRangeStart <= dayRangeEnd ? dayRangeEnd : dayRangeStart)
-        : (dayRangeStart || dayRangeEnd)
-    const dateFilterLabel = (() => {
-        if (config.dateFilterMode === 'months') {
-            const preview = buildSelectedMonthsPreview(selectedMonths)
-            return preview ? `Meses: ${preview}` : 'Meses específicos (sin selección)'
-        }
-        if (config.dateFilterMode === 'range') {
-            if (rangeGranularity === 'day') {
-                if (!normalizedDayRangeStart && !normalizedDayRangeEnd) return 'Rango por días (sin definir)'
-                const startLabel = normalizedDayRangeStart ? formatDayKeyLabel(normalizedDayRangeStart) : 'Sin inicio'
-                const endLabel = normalizedDayRangeEnd ? formatDayKeyLabel(normalizedDayRangeEnd) : 'Sin fin'
-                return `Rango días: ${startLabel} → ${endLabel}`
-            }
-            if (!normalizedRangeStart && !normalizedRangeEnd) return 'Rango por mes (sin definir)'
-            const startLabel = normalizedRangeStart ? formatMonthKeyLabel(normalizedRangeStart) : 'Sin inicio'
-            const endLabel = normalizedRangeEnd ? formatMonthKeyLabel(normalizedRangeEnd) : 'Sin fin'
-            return `Rango mes: ${startLabel} → ${endLabel}`
-        }
-        const periodLabel = getBuilderPeriodLabel(config.period)
-        return periodLabel !== getBuilderPeriodLabel('all') ? periodLabel : null
-    })()
+    const periodALabel = describeBuilderDateFilterSelection({
+        period: config.period,
+        dateFilterMode: config.dateFilterMode,
+        rangeGranularity: config.rangeGranularity,
+        selectedMonths: config.selectedMonths,
+        monthRangeStart: config.monthRangeStart,
+        monthRangeEnd: config.monthRangeEnd,
+        dayRangeStart: config.dayRangeStart,
+        dayRangeEnd: config.dayRangeEnd
+    })
+    const periodBLabel = describeBuilderDateFilterSelection({
+        period: config.comparePeriod,
+        dateFilterMode: config.compareDateFilterMode,
+        rangeGranularity: config.compareRangeGranularity,
+        selectedMonths: config.compareSelectedMonths,
+        monthRangeStart: config.compareMonthRangeStart,
+        monthRangeEnd: config.compareMonthRangeEnd,
+        dayRangeStart: config.compareDayRangeStart,
+        dayRangeEnd: config.compareDayRangeEnd
+    })
+    const dateFilterLabel = config.compareEnabled
+        ? `Comparativa de periodos · A: ${periodALabel || 'Todo el historial'} · B: ${periodBLabel || 'Todo el historial'}`
+        : periodALabel
 
     const activeFilters = [
         dateFilterLabel,
@@ -1143,7 +1227,7 @@ const describeBuilderQueryConfig = (config: ProspectBuilderConfig, options: Pros
     return rankingParts.join(' · ')
 }
 
-const answerProspectBuilderQuery = (
+const answerProspectBuilderQuerySingle = (
     config: ProspectBuilderConfig,
     rows: ProspectAnalyticsRow[],
     options: ProspectAnalyticsOptions
@@ -1567,6 +1651,124 @@ const answerProspectBuilderQuery = (
     }
 }
 
+const answerProspectBuilderQuery = (
+    config: ProspectBuilderConfig,
+    rows: ProspectAnalyticsRow[],
+    options: ProspectAnalyticsOptions
+): ProspectQuestionAnswer => {
+    if (!config.compareEnabled) {
+        return answerProspectBuilderQuerySingle(config, rows, options)
+    }
+
+    const baseConfig: ProspectBuilderConfig = {
+        ...config,
+        compareEnabled: false
+    }
+
+    const periodAConfig: ProspectBuilderConfig = {
+        ...baseConfig
+    }
+
+    const periodBConfig: ProspectBuilderConfig = {
+        ...baseConfig,
+        period: config.comparePeriod,
+        dateFilterMode: config.compareDateFilterMode,
+        rangeGranularity: config.compareRangeGranularity,
+        selectedMonths: normalizeBuilderMonthSelection(config.compareSelectedMonths),
+        monthRangeStart: normalizeMonthKey(config.compareMonthRangeStart) || '',
+        monthRangeEnd: normalizeMonthKey(config.compareMonthRangeEnd) || '',
+        dayRangeStart: normalizeDayKey(config.compareDayRangeStart) || '',
+        dayRangeEnd: normalizeDayKey(config.compareDayRangeEnd) || ''
+    }
+
+    const answerA = answerProspectBuilderQuerySingle(periodAConfig, rows, options)
+    const answerB = answerProspectBuilderQuerySingle(periodBConfig, rows, options)
+
+    const labelA = answerA.filters?.period || describeBuilderDateFilterSelection({
+        period: periodAConfig.period,
+        dateFilterMode: periodAConfig.dateFilterMode,
+        rangeGranularity: periodAConfig.rangeGranularity,
+        selectedMonths: periodAConfig.selectedMonths,
+        monthRangeStart: periodAConfig.monthRangeStart,
+        monthRangeEnd: periodAConfig.monthRangeEnd,
+        dayRangeStart: periodAConfig.dayRangeStart,
+        dayRangeEnd: periodAConfig.dayRangeEnd
+    }) || 'Todo el historial'
+
+    const labelB = answerB.filters?.period || describeBuilderDateFilterSelection({
+        period: periodBConfig.period,
+        dateFilterMode: periodBConfig.dateFilterMode,
+        rangeGranularity: periodBConfig.rangeGranularity,
+        selectedMonths: periodBConfig.selectedMonths,
+        monthRangeStart: periodBConfig.monthRangeStart,
+        monthRangeEnd: periodBConfig.monthRangeEnd,
+        dayRangeStart: periodBConfig.dayRangeStart,
+        dayRangeEnd: periodBConfig.dayRangeEnd
+    }) || 'Todo el historial'
+
+    const valueA = answerA.topBreakdown && answerA.topBreakdown.length > 0
+        ? parseBreakdownNumericValue(answerA.topBreakdown[0])
+        : null
+    const valueB = answerB.topBreakdown && answerB.topBreakdown.length > 0
+        ? parseBreakdownNumericValue(answerB.topBreakdown[0])
+        : null
+    const hasComparableValues = valueA != null && Number.isFinite(valueA) && valueB != null && Number.isFinite(valueB)
+    const delta = hasComparableValues ? (valueB! - valueA!) : null
+
+    const formatSummaryValue = (answer: ProspectQuestionAnswer, fallbackValue: number | null) => {
+        if (answer.topBreakdown && answer.topBreakdown[0]?.valueText) return answer.topBreakdown[0].valueText
+        if (fallbackValue != null && Number.isFinite(fallbackValue)) return formatBuilderMetricValue(config.metric, fallbackValue)
+        return 'Sin dato'
+    }
+
+    const valueTextA = formatSummaryValue(answerA, valueA)
+    const valueTextB = formatSummaryValue(answerB, valueB)
+    const deltaText = delta == null
+        ? 'Sin dato comparable'
+        : formatBuilderMetricDelta(config.metric, delta)
+
+    const message = (() => {
+        if (answerA.success && answerB.success) {
+            if (config.groupBy === 'none') {
+                return `Comparativo ${getBuilderMetricLabel(config.metric)} · A (${labelA}): ${valueTextA} · B (${labelB}): ${valueTextB} · Variación B - A: ${deltaText}.`
+            }
+            const topALabel = answerA.topBreakdown?.[0]?.label || 'Sin líder'
+            const topBLabel = answerB.topBreakdown?.[0]?.label || 'Sin líder'
+            return `Comparativo ${getBuilderGroupLabel(config.groupBy)} · A (${labelA}) líder: "${topALabel}" (${valueTextA}) · B (${labelB}) líder: "${topBLabel}" (${valueTextB}) · Variación B - A: ${deltaText}.`
+        }
+        if (!answerA.success && !answerB.success) {
+            return `No hay datos suficientes para comparar los periodos seleccionados. Revisa filtros de periodo A (${labelA}) y periodo B (${labelB}).`
+        }
+        if (answerA.success) {
+            return `Solo el periodo A (${labelA}) tiene datos válidos: ${valueTextA}. El periodo B (${labelB}) no tiene muestra suficiente.`
+        }
+        return `Solo el periodo B (${labelB}) tiene datos válidos: ${valueTextB}. El periodo A (${labelA}) no tiene muestra suficiente.`
+    })()
+
+    const filteredCount = Number(answerA.filteredCount || 0) + Number(answerB.filteredCount || 0)
+    const sampleCount = Number(answerA.sampleCount || 0) + Number(answerB.sampleCount || 0)
+    const filtersPeriod = `A: ${labelA} · B: ${labelB}`
+
+    return {
+        success: answerA.success || answerB.success,
+        metric: builderMetricToAnswerMetric[config.metric],
+        message,
+        filteredCount,
+        sampleCount,
+        filters: {
+            companySize: answerA.filters?.companySize || answerB.filters?.companySize || null,
+            industry: answerA.filters?.industry || answerB.filters?.industry || null,
+            roleArea: answerA.filters?.roleArea || answerB.filters?.roleArea || null,
+            period: filtersPeriod
+        },
+        topBreakdown: [
+            { label: `Periodo A · ${labelA}`, count: valueA ?? 0, valueText: valueTextA },
+            { label: `Periodo B · ${labelB}`, count: valueB ?? 0, valueText: valueTextB },
+            { label: 'Variación B - A', count: delta ?? 0, valueText: deltaText }
+        ]
+    }
+}
+
 const answerProspectQuestion = (
     question: string,
     rows: ProspectAnalyticsRow[],
@@ -1969,7 +2171,7 @@ const answerProspectQuestion = (
     }
 }
 
-export default function CorrelacionesPage({ forcedView }: { forcedView?: 'general' | 'grafica' | 'pronostico' } = {}) {
+export default function CorrelacionesPage({ forcedView }: { forcedView?: 'general' | 'grafica' } = {}) {
     const auth = useAuth()
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -2001,8 +2203,21 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
     const [builderMonthRangeEnd, setBuilderMonthRangeEnd] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.monthRangeEnd)
     const [builderDayRangeStart, setBuilderDayRangeStart] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.dayRangeStart)
     const [builderDayRangeEnd, setBuilderDayRangeEnd] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.dayRangeEnd)
+    const [builderCompareEnabled, setBuilderCompareEnabled] = useState<boolean>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareEnabled)
+    const [builderComparePeriod, setBuilderComparePeriod] = useState<ProspectBuilderPeriod>(PROSPECT_DEFAULT_BUILDER_CONFIG.comparePeriod)
+    const [builderCompareDateFilterMode, setBuilderCompareDateFilterMode] = useState<ProspectBuilderDateFilterMode>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareDateFilterMode)
+    const [builderCompareRangeGranularity, setBuilderCompareRangeGranularity] = useState<ProspectBuilderRangeGranularity>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareRangeGranularity)
+    const [builderCompareSelectedMonths, setBuilderCompareSelectedMonths] = useState<string[]>(
+        normalizeBuilderMonthSelection(PROSPECT_DEFAULT_BUILDER_CONFIG.compareSelectedMonths)
+    )
+    const [builderCompareMonthRangeStart, setBuilderCompareMonthRangeStart] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareMonthRangeStart)
+    const [builderCompareMonthRangeEnd, setBuilderCompareMonthRangeEnd] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareMonthRangeEnd)
+    const [builderCompareDayRangeStart, setBuilderCompareDayRangeStart] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareDayRangeStart)
+    const [builderCompareDayRangeEnd, setBuilderCompareDayRangeEnd] = useState<string>(PROSPECT_DEFAULT_BUILDER_CONFIG.compareDayRangeEnd)
     const dayRangeStartInputRef = useRef<HTMLInputElement | null>(null)
     const dayRangeEndInputRef = useRef<HTMLInputElement | null>(null)
+    const compareDayRangeStartInputRef = useRef<HTMLInputElement | null>(null)
+    const compareDayRangeEndInputRef = useRef<HTMLInputElement | null>(null)
     const [forecastMetricSourceView, setForecastMetricSourceView] = useState<ForecastMetricSourceView>('forecast')
     const [activeForecastMetrics, setActiveForecastMetrics] = useState<ProspectBuilderMetric[]>(
         normalizeForecastMetricSelection(PROSPECT_DEFAULT_BUILDER_CONFIG.forecastMetrics)
@@ -2048,6 +2263,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
     const [forecastLoading, setForecastLoading] = useState(false)
     const [autoClosingMonth, setAutoClosingMonth] = useState(false)
     const [showCompanyRegistry, setShowCompanyRegistry] = useState(false)
+    const [showMeetingPostponeForecastTable, setShowMeetingPostponeForecastTable] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [sortBy, setSortBy] = useState('totalSales')
     const [genderFilter, setGenderFilter] = useState('all')
@@ -2063,8 +2279,7 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
     const [error, setError] = useState<string | null>(null)
     const currentView = (forcedView || searchParams.get('view') || 'general').toLowerCase()
     const showGraphView = currentView === 'grafica'
-    const showForecastView = currentView === 'pronostico'
-    const showGeneralView = !showGraphView && !showForecastView
+    const showGeneralView = !showGraphView
 
     useEffect(() => {
         if (!auth.loading && !auth.loggedIn) {
@@ -2509,6 +2724,61 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         return [...byIndustry, ...bySize].slice(0, 8)
     }, [forecastData])
 
+    const compactMeetingPostponeForecast = useMemo(() => {
+        const globalProbabilityPct = Number(forecastData?.postponementForecast?.globalProbability || 0) * 100
+        const sampleSize = Math.max(0, Number(forecastData?.postponementForecast?.sampleSize || 0))
+        const confidence = String(forecastData?.postponementForecast?.confidence || 'insuficiente')
+
+        const fromAnalytics = (analytics.postponeByCompanySize || [])
+            .map((row: any) => ({
+                size: Number(row?.size || 0),
+                totalMeetings: Math.max(0, Number(row?.totalMeetings || 0)),
+                postponedMeetings: Math.max(0, Number(row?.postponedMeetings || 0)),
+                heldMeetings: Math.max(0, Number(row?.heldMeetings || 0)),
+                probabilityPct: Math.max(0, Math.min(100, Number(row?.postponeProbability || 0)))
+            }))
+            .filter((row: any) => Number.isFinite(row.size) && row.size > 0)
+            .sort((a: any, b: any) => a.size - b.size)
+
+        const fallbackBySize = (forecastData?.postponementForecast?.bySize || [])
+            .map((row: any) => ({
+                size: Number(String(row?.label || '').replace(/[^\d]/g, '')) || 0,
+                totalMeetings: Math.max(0, Number(row?.n || 0)),
+                postponedMeetings: Math.max(0, Math.round(Number(row?.n || 0) * Number(row?.probability || 0))),
+                heldMeetings: Math.max(0, Math.round(Number(row?.n || 0) * (1 - Number(row?.probability || 0)))),
+                probabilityPct: Math.max(0, Math.min(100, Number(row?.probability || 0) * 100))
+            }))
+            .filter((row: any) => Number.isFinite(row.size) && row.size > 0)
+            .sort((a: any, b: any) => a.size - b.size)
+
+        const bySizeRows = fromAnalytics.length > 0 ? fromAnalytics : fallbackBySize
+
+        const topFactorRows = (forecastData?.postponementForecast?.topFactors || [])
+            .map((row: any) => ({
+                dimensionLabel: row?.dimension === 'industria'
+                    ? 'Industria'
+                    : row?.dimension === 'tamano'
+                        ? 'Tamaño'
+                        : row?.dimension === 'ubicacion'
+                            ? 'Ubicación'
+                            : 'Factor',
+                label: String(row?.label || 'Sin clasificar'),
+                sampleSize: Math.max(0, Number(row?.n || 0)),
+                probabilityPct: Math.max(0, Math.min(100, Number(row?.probability || 0) * 100)),
+                liftPct: Number(row?.liftVsGlobal || 0) * 100
+            }))
+            .sort((a: any, b: any) => b.probabilityPct - a.probabilityPct)
+            .slice(0, 8)
+
+        return {
+            globalProbabilityPct,
+            sampleSize,
+            confidence,
+            bySizeRows,
+            topFactorRows
+        }
+    }, [analytics.postponeByCompanySize, forecastData])
+
     const currentBuilderConfig = useMemo<ProspectBuilderConfig>(() => ({
         metric: builderMetric,
         groupBy: builderGroupBy,
@@ -2526,6 +2796,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         monthRangeEnd: builderMonthRangeEnd,
         dayRangeStart: builderDayRangeStart,
         dayRangeEnd: builderDayRangeEnd,
+        compareEnabled: builderCompareEnabled,
+        comparePeriod: builderComparePeriod,
+        compareDateFilterMode: builderCompareDateFilterMode,
+        compareRangeGranularity: builderCompareRangeGranularity,
+        compareSelectedMonths: builderCompareSelectedMonths,
+        compareMonthRangeStart: builderCompareMonthRangeStart,
+        compareMonthRangeEnd: builderCompareMonthRangeEnd,
+        compareDayRangeStart: builderCompareDayRangeStart,
+        compareDayRangeEnd: builderCompareDayRangeEnd,
         forecastMetrics: activeForecastMetrics
     }), [
         builderMetric,
@@ -2544,6 +2823,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         builderMonthRangeEnd,
         builderDayRangeStart,
         builderDayRangeEnd,
+        builderCompareEnabled,
+        builderComparePeriod,
+        builderCompareDateFilterMode,
+        builderCompareRangeGranularity,
+        builderCompareSelectedMonths,
+        builderCompareMonthRangeStart,
+        builderCompareMonthRangeEnd,
+        builderCompareDayRangeStart,
+        builderCompareDayRangeEnd,
         activeForecastMetrics
     ])
 
@@ -2581,9 +2869,13 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
 
         const mergedMonthKeys = new Set<string>(monthKeys)
         normalizeBuilderMonthSelection(builderSelectedMonths).forEach((monthKey) => mergedMonthKeys.add(monthKey))
+        normalizeBuilderMonthSelection(builderCompareSelectedMonths).forEach((monthKey) => mergedMonthKeys.add(monthKey))
         const selectedRangeMonths = [normalizeMonthKey(builderMonthRangeStart), normalizeMonthKey(builderMonthRangeEnd)]
             .filter((monthKey): monthKey is string => !!monthKey)
         selectedRangeMonths.forEach((monthKey) => mergedMonthKeys.add(monthKey))
+        const selectedCompareRangeMonths = [normalizeMonthKey(builderCompareMonthRangeStart), normalizeMonthKey(builderCompareMonthRangeEnd)]
+            .filter((monthKey): monthKey is string => !!monthKey)
+        selectedCompareRangeMonths.forEach((monthKey) => mergedMonthKeys.add(monthKey))
 
         return Array.from(mergedMonthKeys)
             .sort((a, b) => b.localeCompare(a))
@@ -2591,15 +2883,39 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                 value: monthKey,
                 label: formatMonthKeyLabel(monthKey)
             }))
-    }, [prospectRows, builderSelectedMonths, builderMonthRangeStart, builderMonthRangeEnd])
-    const hasDateFilterApplied = useMemo(() => {
-        if (builderDateFilterMode === 'preset') return builderPeriod !== 'all'
-        if (builderDateFilterMode === 'months') return normalizeBuilderMonthSelection(builderSelectedMonths).length > 0
-        if (builderRangeGranularity === 'day') {
-            return !!(normalizeDayKey(builderDayRangeStart) || normalizeDayKey(builderDayRangeEnd))
-        }
-        return !!(normalizeMonthKey(builderMonthRangeStart) || normalizeMonthKey(builderMonthRangeEnd))
     }, [
+        prospectRows,
+        builderSelectedMonths,
+        builderMonthRangeStart,
+        builderMonthRangeEnd,
+        builderCompareSelectedMonths,
+        builderCompareMonthRangeStart,
+        builderCompareMonthRangeEnd
+    ])
+    const hasDateFilterApplied = useMemo(() => {
+        const hasPrimaryFilter = (() => {
+            if (builderDateFilterMode === 'preset') return builderPeriod !== 'all'
+            if (builderDateFilterMode === 'months') return normalizeBuilderMonthSelection(builderSelectedMonths).length > 0
+            if (builderRangeGranularity === 'day') {
+                return !!(normalizeDayKey(builderDayRangeStart) || normalizeDayKey(builderDayRangeEnd))
+            }
+            return !!(normalizeMonthKey(builderMonthRangeStart) || normalizeMonthKey(builderMonthRangeEnd))
+        })()
+
+        if (!builderCompareEnabled) return hasPrimaryFilter
+
+        const hasCompareFilter = (() => {
+            if (builderCompareDateFilterMode === 'preset') return builderComparePeriod !== 'all'
+            if (builderCompareDateFilterMode === 'months') return normalizeBuilderMonthSelection(builderCompareSelectedMonths).length > 0
+            if (builderCompareRangeGranularity === 'day') {
+                return !!(normalizeDayKey(builderCompareDayRangeStart) || normalizeDayKey(builderCompareDayRangeEnd))
+            }
+            return !!(normalizeMonthKey(builderCompareMonthRangeStart) || normalizeMonthKey(builderCompareMonthRangeEnd))
+        })()
+
+        return hasPrimaryFilter || hasCompareFilter
+    }, [
+        builderCompareEnabled,
         builderDateFilterMode,
         builderRangeGranularity,
         builderPeriod,
@@ -2607,7 +2923,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         builderMonthRangeStart,
         builderMonthRangeEnd,
         builderDayRangeStart,
-        builderDayRangeEnd
+        builderDayRangeEnd,
+        builderCompareDateFilterMode,
+        builderCompareRangeGranularity,
+        builderComparePeriod,
+        builderCompareSelectedMonths,
+        builderCompareMonthRangeStart,
+        builderCompareMonthRangeEnd,
+        builderCompareDayRangeStart,
+        builderCompareDayRangeEnd
     ])
 
     const quickAnswerChartRows = useMemo(() => {
@@ -2677,6 +3001,19 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         setActiveForecastMetricAnswers([])
     }
 
+    const toggleBuilderCompareSelectedMonth = (monthKey: string) => {
+        const normalized = normalizeMonthKey(monthKey)
+        if (!normalized) return
+        setBuilderCompareSelectedMonths((prev) => {
+            const normalizedPrev = normalizeBuilderMonthSelection(prev)
+            if (normalizedPrev.includes(normalized)) {
+                return normalizedPrev.filter((value) => value !== normalized)
+            }
+            return [...normalizedPrev, normalized].sort()
+        })
+        setActiveForecastMetricAnswers([])
+    }
+
     const openDateInputPicker = (input: HTMLInputElement | null) => {
         if (!input) return
         const nativeInput = input as HTMLInputElement & { showPicker?: () => void }
@@ -2694,12 +3031,22 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
 
     const clearBuilderDateFilters = () => {
         setBuilderPeriod(PROSPECT_DEFAULT_BUILDER_CONFIG.period)
+        setBuilderDateFilterMode(PROSPECT_DEFAULT_BUILDER_CONFIG.dateFilterMode)
         setBuilderRangeGranularity(PROSPECT_DEFAULT_BUILDER_CONFIG.rangeGranularity)
         setBuilderSelectedMonths([])
         setBuilderMonthRangeStart('')
         setBuilderMonthRangeEnd('')
         setBuilderDayRangeStart('')
         setBuilderDayRangeEnd('')
+        setBuilderCompareEnabled(PROSPECT_DEFAULT_BUILDER_CONFIG.compareEnabled)
+        setBuilderComparePeriod(PROSPECT_DEFAULT_BUILDER_CONFIG.comparePeriod)
+        setBuilderCompareDateFilterMode(PROSPECT_DEFAULT_BUILDER_CONFIG.compareDateFilterMode)
+        setBuilderCompareRangeGranularity(PROSPECT_DEFAULT_BUILDER_CONFIG.compareRangeGranularity)
+        setBuilderCompareSelectedMonths([])
+        setBuilderCompareMonthRangeStart('')
+        setBuilderCompareMonthRangeEnd('')
+        setBuilderCompareDayRangeStart('')
+        setBuilderCompareDayRangeEnd('')
         setActiveForecastMetricAnswers([])
     }
 
@@ -2731,6 +3078,15 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
         setBuilderMonthRangeEnd(normalizeMonthKey(config.monthRangeEnd) || '')
         setBuilderDayRangeStart(normalizeDayKey(config.dayRangeStart) || '')
         setBuilderDayRangeEnd(normalizeDayKey(config.dayRangeEnd) || '')
+        setBuilderCompareEnabled(config.compareEnabled === true)
+        setBuilderComparePeriod(config.comparePeriod || PROSPECT_DEFAULT_BUILDER_CONFIG.comparePeriod)
+        setBuilderCompareDateFilterMode(config.compareDateFilterMode || PROSPECT_DEFAULT_BUILDER_CONFIG.compareDateFilterMode)
+        setBuilderCompareRangeGranularity(config.compareRangeGranularity === 'day' ? 'day' : 'month')
+        setBuilderCompareSelectedMonths(normalizeBuilderMonthSelection(config.compareSelectedMonths))
+        setBuilderCompareMonthRangeStart(normalizeMonthKey(config.compareMonthRangeStart) || '')
+        setBuilderCompareMonthRangeEnd(normalizeMonthKey(config.compareMonthRangeEnd) || '')
+        setBuilderCompareDayRangeStart(normalizeDayKey(config.compareDayRangeStart) || '')
+        setBuilderCompareDayRangeEnd(normalizeDayKey(config.compareDayRangeEnd) || '')
         if (inferredSourceFromMetrics) setForecastMetricSourceView(inferredSourceFromMetrics)
         setActiveForecastMetrics(fallbackForecastMetrics)
     }
@@ -3161,16 +3517,116 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
 
                     {showGeneralView && (
                         <div className='rounded-[32px] border p-7 shadow-sm space-y-5' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
-                            <div className='flex items-start gap-4'>
-                                <div className='ah-icon-card ah-icon-card-sm'>
-                                    <Search size={20} strokeWidth={2} />
+                            <div className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'>
+                                <div className='flex items-start gap-4'>
+                                    <div className='ah-icon-card ah-icon-card-sm'>
+                                        <Search size={20} strokeWidth={2} />
+                                    </div>
+                                    <div className='space-y-1'>
+                                        <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Consultas Rápidas de Prospectos</h2>
+                                        <p className='text-sm font-medium' style={{ color: 'var(--text-secondary)' }}>
+                                            Selecciona métrica, agrupación y filtros para responder preguntas de negocio en segundos.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className='space-y-1'>
-                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Consultas Rápidas de Prospectos</h2>
-                                    <p className='text-sm font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                        Selecciona métrica, agrupación y filtros para responder preguntas de negocio en segundos.
-                                    </p>
+                                <button
+                                    type='button'
+                                    onClick={() => setShowMeetingPostponeForecastTable((prev) => !prev)}
+                                    className='ah-toggle-pill ah-accent-hover-surface h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center justify-center gap-2 self-start cursor-pointer'
+                                >
+                                    {showMeetingPostponeForecastTable ? <EyeOff size={14} /> : <Eye size={14} />}
+                                    {showMeetingPostponeForecastTable ? 'Ocultar pronóstico de juntas' : 'Mostrar pronóstico de juntas'}
+                                </button>
+                            </div>
+
+                            <div className='rounded-2xl border p-4 space-y-3' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
+                                <div className='flex flex-wrap items-center gap-2'>
+                                    <span className='px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-[0.12em]' style={{ borderColor: 'rgba(32,72,255,0.35)', background: 'rgba(32,72,255,0.10)', color: '#2048FF' }}>
+                                        Riesgo Global: {compactMeetingPostponeForecast.globalProbabilityPct.toFixed(1)}%
+                                    </span>
+                                    <span className='px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-[0.12em]' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                        Muestra: {compactMeetingPostponeForecast.sampleSize.toLocaleString('es-MX')} juntas
+                                    </span>
+                                    <span className='px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-[0.12em]' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                        Confianza: {compactMeetingPostponeForecast.confidence}
+                                    </span>
                                 </div>
+                                <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                    Pronóstico compacto de probabilidad de postergar/cancelar reuniones, integrado en correlaciones.
+                                </p>
+                                {showMeetingPostponeForecastTable && (
+                                    <div className='grid grid-cols-1 xl:grid-cols-2 gap-3'>
+                                        <div className='rounded-xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                            <div className='px-3 py-2 border-b text-[10px] font-black uppercase tracking-[0.14em]' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                                Tabla por Tamaño de Empresa
+                                            </div>
+                                            {compactMeetingPostponeForecast.bySizeRows.length > 0 ? (
+                                                <div className='max-h-[210px] overflow-auto custom-scrollbar'>
+                                                    <table className='w-full text-left'>
+                                                        <thead className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-secondary)' }}>
+                                                            <tr>
+                                                                <th className='px-3 py-2'>Tamaño</th>
+                                                                <th className='px-3 py-2'>Prob.</th>
+                                                                <th className='px-3 py-2'>Muestra</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {compactMeetingPostponeForecast.bySizeRows.map((row: any) => (
+                                                                <tr key={`compact-postpone-size-${row.size}`} className='border-t' style={{ borderColor: 'var(--card-border)' }}>
+                                                                    <td className='px-3 py-2 text-xs font-black' style={{ color: 'var(--text-primary)' }}>{`Tamaño ${row.size}`}</td>
+                                                                    <td className='px-3 py-2 text-xs font-black' style={{ color: '#2048FF' }}>{row.probabilityPct.toFixed(1)}%</td>
+                                                                    <td className='px-3 py-2 text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                        {row.totalMeetings} juntas
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className='px-3 py-4 text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                    Sin datos suficientes por tamaño para mostrar la tabla.
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className='rounded-xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                            <div className='px-3 py-2 border-b text-[10px] font-black uppercase tracking-[0.14em]' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
+                                                Factores con Mayor Riesgo
+                                            </div>
+                                            {compactMeetingPostponeForecast.topFactorRows.length > 0 ? (
+                                                <div className='max-h-[210px] overflow-auto custom-scrollbar'>
+                                                    <table className='w-full text-left'>
+                                                        <thead className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-secondary)' }}>
+                                                            <tr>
+                                                                <th className='px-3 py-2'>Segmento</th>
+                                                                <th className='px-3 py-2'>Prob.</th>
+                                                                <th className='px-3 py-2'>Muestra</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {compactMeetingPostponeForecast.topFactorRows.map((row: any, index: number) => (
+                                                                <tr key={`compact-postpone-factor-${row.dimensionLabel}-${row.label}-${index}`} className='border-t' style={{ borderColor: 'var(--card-border)' }}>
+                                                                    <td className='px-3 py-2 text-xs font-bold' style={{ color: 'var(--text-primary)' }}>
+                                                                        {row.dimensionLabel}: {row.label}
+                                                                    </td>
+                                                                    <td className='px-3 py-2 text-xs font-black' style={{ color: '#2048FF' }}>{row.probabilityPct.toFixed(1)}%</td>
+                                                                    <td className='px-3 py-2 text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                                        {row.sampleSize}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className='px-3 py-4 text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                    Sin factores suficientes para ranking en este momento.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3'>
@@ -3232,16 +3688,33 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                     <p className='text-[11px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
                                         Filtro de Fechas para Análisis Histórico
                                     </p>
-                                    <button
-                                        type='button'
-                                        onClick={clearBuilderDateFilters}
-                                        disabled={!hasDateFilterApplied}
-                                        className='ah-toggle-pill ah-accent-hover-surface px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50'
-                                    >
-                                        Limpiar fechas
-                                    </button>
+                                    <div className='flex items-center gap-2'>
+                                        <button
+                                            type='button'
+                                            onClick={() => {
+                                                setBuilderCompareEnabled((prev) => !prev)
+                                                setActiveForecastMetricAnswers([])
+                                            }}
+                                            className={`ah-toggle-pill px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${builderCompareEnabled ? 'ah-toggle-pill--active' : ''}`}
+                                        >
+                                            {builderCompareEnabled ? 'Comparativo ON' : 'Comparativo OFF'}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            onClick={clearBuilderDateFilters}
+                                            disabled={!hasDateFilterApplied}
+                                            className='ah-toggle-pill ah-accent-hover-surface px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50'
+                                        >
+                                            Limpiar fechas
+                                        </button>
+                                    </div>
                                 </div>
 
+                                {builderCompareEnabled && (
+                                    <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                        Periodo A (base de comparación)
+                                    </p>
+                                )}
                                 <div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
                                     <select
                                         value={builderDateFilterMode}
@@ -3416,6 +3889,184 @@ export default function CorrelacionesPage({ forcedView }: { forcedView?: 'genera
                                     <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
                                         Usa el selector de periodo rápido para comparar ventanas como "Este mes", "Mes pasado", "Últimos 30/90 días" o todo el historial.
                                     </p>
+                                )}
+
+                                {builderCompareEnabled && (
+                                    <div className='mt-3 rounded-xl border p-3 space-y-3' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                        <p className='text-[11px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)' }}>
+                                            Periodo B (comparar contra A)
+                                        </p>
+                                        <div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
+                                            <select
+                                                value={builderCompareDateFilterMode}
+                                                onChange={(e) => {
+                                                    setBuilderCompareDateFilterMode(e.target.value as ProspectBuilderDateFilterMode)
+                                                    setActiveForecastMetricAnswers([])
+                                                }}
+                                                className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                            >
+                                                {PROSPECT_BUILDER_DATE_FILTER_MODE_OPTIONS.map((option) => (
+                                                    <option key={`compare-${option.value}`} value={option.value}>{option.label}</option>
+                                                ))}
+                                            </select>
+
+                                            {builderCompareDateFilterMode === 'preset' && (
+                                                <select
+                                                    value={builderComparePeriod}
+                                                    onChange={(e) => {
+                                                        setBuilderComparePeriod(e.target.value as ProspectBuilderPeriod)
+                                                        setActiveForecastMetricAnswers([])
+                                                    }}
+                                                    className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                >
+                                                    {PROSPECT_BUILDER_PERIOD_OPTIONS.map((option) => (
+                                                        <option key={`compare-period-${option.value}`} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                            )}
+
+                                            {builderCompareDateFilterMode === 'range' && (
+                                                <>
+                                                    <select
+                                                        value={builderCompareRangeGranularity}
+                                                        onChange={(e) => {
+                                                            setBuilderCompareRangeGranularity(e.target.value as ProspectBuilderRangeGranularity)
+                                                            setActiveForecastMetricAnswers([])
+                                                        }}
+                                                        className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                        style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                    >
+                                                        {PROSPECT_BUILDER_RANGE_GRANULARITY_OPTIONS.map((option) => (
+                                                            <option key={`compare-granularity-${option.value}`} value={option.value}>{option.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    {builderCompareRangeGranularity === 'month' ? (
+                                                        <>
+                                                            <select
+                                                                value={builderCompareMonthRangeStart}
+                                                                onChange={(e) => {
+                                                                    setBuilderCompareMonthRangeStart(e.target.value)
+                                                                    setActiveForecastMetricAnswers([])
+                                                                }}
+                                                                className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                                style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                            >
+                                                                <option value=''>Mes inicial (Periodo B)</option>
+                                                                {availableBuilderMonths.map((month) => {
+                                                                    const disabled = !!builderCompareMonthRangeEnd && month.value > builderCompareMonthRangeEnd
+                                                                    return (
+                                                                        <option key={`compare-range-start-${month.value}`} value={month.value} disabled={disabled}>
+                                                                            {month.label}
+                                                                        </option>
+                                                                    )
+                                                                })}
+                                                            </select>
+                                                            <select
+                                                                value={builderCompareMonthRangeEnd}
+                                                                onChange={(e) => {
+                                                                    setBuilderCompareMonthRangeEnd(e.target.value)
+                                                                    setActiveForecastMetricAnswers([])
+                                                                }}
+                                                                className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                                style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                            >
+                                                                <option value=''>Mes final (Periodo B)</option>
+                                                                {availableBuilderMonths.map((month) => {
+                                                                    const disabled = !!builderCompareMonthRangeStart && month.value < builderCompareMonthRangeStart
+                                                                    return (
+                                                                        <option key={`compare-range-end-${month.value}`} value={month.value} disabled={disabled}>
+                                                                            {month.label}
+                                                                        </option>
+                                                                    )
+                                                                })}
+                                                            </select>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className='grid grid-cols-[1fr_auto] gap-2'>
+                                                                <input
+                                                                    ref={compareDayRangeStartInputRef}
+                                                                    type='date'
+                                                                    value={builderCompareDayRangeStart}
+                                                                    max={builderCompareDayRangeEnd || undefined}
+                                                                    onChange={(e) => {
+                                                                        setBuilderCompareDayRangeStart(e.target.value)
+                                                                        setActiveForecastMetricAnswers([])
+                                                                    }}
+                                                                    className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                                />
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => openDateInputPicker(compareDayRangeStartInputRef.current)}
+                                                                    className='ah-toggle-pill ah-accent-hover-surface px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1'
+                                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                                >
+                                                                    <Calendar size={12} />
+                                                                    Inicio
+                                                                </button>
+                                                            </div>
+                                                            <div className='grid grid-cols-[1fr_auto] gap-2'>
+                                                                <input
+                                                                    ref={compareDayRangeEndInputRef}
+                                                                    type='date'
+                                                                    value={builderCompareDayRangeEnd}
+                                                                    min={builderCompareDayRangeStart || undefined}
+                                                                    onChange={(e) => {
+                                                                        setBuilderCompareDayRangeEnd(e.target.value)
+                                                                        setActiveForecastMetricAnswers([])
+                                                                    }}
+                                                                    className='w-full px-3 py-2 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all'
+                                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                                />
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => openDateInputPicker(compareDayRangeEndInputRef.current)}
+                                                                    className='ah-toggle-pill ah-accent-hover-surface px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1'
+                                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)', color: 'var(--text-primary)' }}
+                                                                >
+                                                                    <Calendar size={12} />
+                                                                    Fin
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {builderCompareDateFilterMode === 'months' && (
+                                            <div className='space-y-2'>
+                                                <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                    Selecciona los meses del Periodo B para compararlos contra el Periodo A.
+                                                </p>
+                                                <div className='max-h-[160px] overflow-auto custom-scrollbar rounded-xl border p-3 flex flex-wrap gap-2'
+                                                    style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}
+                                                >
+                                                    {availableBuilderMonths.length > 0 ? availableBuilderMonths.map((month) => {
+                                                        const isActive = builderCompareSelectedMonths.includes(month.value)
+                                                        return (
+                                                            <button
+                                                                key={`compare-month-${month.value}`}
+                                                                type='button'
+                                                                onClick={() => toggleBuilderCompareSelectedMonth(month.value)}
+                                                                className={`ah-toggle-pill px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.12em] ${isActive ? 'ah-toggle-pill--active' : ''}`}
+                                                            >
+                                                                {isActive ? 'ON · ' : 'OFF · '}
+                                                                {month.label}
+                                                            </button>
+                                                        )
+                                                    }) : (
+                                                        <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                                            Aún no hay meses disponibles en el dataset.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
 

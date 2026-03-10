@@ -42,6 +42,15 @@ type NegotiationAgingRow = {
     tamano_empresa: number | null
 }
 
+function normalizeLeadStageForEditing(stage: unknown): string {
+    const normalized = String(stage || '').trim().toLowerCase()
+    if (normalized === 'cerrado ganado' || normalized === 'cerrada ganada') return 'Cerrado Ganado'
+    if (normalized === 'cerrado perdido' || normalized === 'cerrada perdida') return 'Cerrado Perdido'
+    if (normalized === 'negociación' || normalized === 'negociacion') return 'Negociación'
+    if (normalized === 'prospección' || normalized === 'prospeccion') return 'Negociación'
+    return 'Negociación'
+}
+
 // Helper to normalize lead data for the form (handle nulls)
 const normalizeLead = (lead: Lead) => ({
     id: lead.id,
@@ -49,7 +58,7 @@ const normalizeLead = (lead: Lead) => ({
     nombre: lead.nombre || '',
     email: lead.email || '',
     telefono: lead.telefono || '',
-    etapa: lead.etapa || 'Negociación',
+    etapa: normalizeLeadStageForEditing(lead.etapa),
     valor_estimado: lead.valor_estimado ?? null,
     valor_real_cierre: (lead as any).valor_real_cierre ?? null,
     valor_implementacion_estimado: (lead as any).valor_implementacion_estimado ?? null,
@@ -179,7 +188,7 @@ export default function LeadsPage() {
     // Filtering State
     const [filterSearch, setFilterSearch] = useState('')
     const [filterOwner, setFilterOwner] = useState('All')
-    const [pipelineScope, setPipelineScope] = useState<'active' | 'prospection' | 'negotiation' | 'all'>('active')
+    const [pipelineScope, setPipelineScope] = useState<'active' | 'negotiation' | 'all'>('active')
 
     // Email Composer State
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
@@ -251,16 +260,13 @@ export default function LeadsPage() {
 
             const stageNormalized = String(lead.etapa || '').trim().toLowerCase()
             const isClosedStage = isWonStage(lead.etapa) || isLostStage(lead.etapa)
-            const isProspectionStage = stageNormalized === 'prospección' || stageNormalized === 'prospeccion'
             const isNegotiationStage = stageNormalized === 'negociación' || stageNormalized === 'negociacion'
 
             const matchesScope = pipelineScope === 'all'
                 ? true
                 : pipelineScope === 'active'
                     ? !isClosedStage
-                    : pipelineScope === 'prospection'
-                        ? isProspectionStage
-                        : isNegotiationStage
+                    : isNegotiationStage
 
             return matchesSearch && matchesOwner && matchesScope
         })
@@ -316,7 +322,6 @@ export default function LeadsPage() {
 
     const pipelineScopeLabel = useMemo(() => {
         if (pipelineScope === 'active') return 'Activas'
-        if (pipelineScope === 'prospection') return 'Prospección'
         if (pipelineScope === 'negotiation') return 'Negociación'
         return 'Todas'
     }, [pipelineScope])
@@ -626,6 +631,10 @@ export default function LeadsPage() {
         if (modalMode === 'create') {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
+            if (isWon && (((leadData as any).proyectos_implementados_reales_ids || []).length === 0)) {
+                alert('Para guardar un cierre ganado debes asignar al menos 1 proyecto implementado real.')
+                return
+            }
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? null)
                 : null
@@ -701,6 +710,29 @@ export default function LeadsPage() {
                 return
             } else if (data && data[0]) {
                 const newId = data[0].id
+                const syncParams = {
+                    empresaId: finalEmpresaId as string,
+                    leadId: newId,
+                    inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
+                    prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
+                    futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
+                    implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                    implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                    assignedByUserId: currentUser.id
+                }
+
+                let assignmentsSyncedBeforeClose = false
+                if (isWon) {
+                    try {
+                        await syncCompanyProjectAssignmentsFromLead(syncParams)
+                        assignmentsSyncedBeforeClose = true
+                    } catch (projectSyncError: any) {
+                        console.error('Lead created but project assignments sync failed before won close:', projectSyncError)
+                        await (supabase.from('clientes') as any).delete().eq('id', newId)
+                        alert(`No se pudo sincronizar proyectos implementados para cierre ganado: ${parseSupabaseError(projectSyncError, 'Error sincronizando proyectos.')}`)
+                        return
+                    }
+                }
 
                 if (isWon) {
                     const wonUpdatePayload: any = {
@@ -750,19 +782,12 @@ export default function LeadsPage() {
                     ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
                 ])
 
-                try {
-                    await syncCompanyProjectAssignmentsFromLead({
-                        empresaId: finalEmpresaId as string,
-                        leadId: newId,
-                        inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
-                        prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
-                        futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
-                        implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
-                        implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
-                        assignedByUserId: currentUser.id
-                    })
-                } catch (projectSyncError) {
-                    console.warn('Lead created but project assignments sync failed:', projectSyncError)
+                if (!assignmentsSyncedBeforeClose) {
+                    try {
+                        await syncCompanyProjectAssignmentsFromLead(syncParams)
+                    } catch (projectSyncError) {
+                        console.warn('Lead created but project assignments sync failed:', projectSyncError)
+                    }
                 }
             }
         } else if (modalMode === 'edit' && currentLead) {
@@ -810,6 +835,10 @@ export default function LeadsPage() {
 
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
+            if (isWon && (((leadData as any).proyectos_implementados_reales_ids || []).length === 0)) {
+                alert('Para guardar un cierre ganado debes asignar al menos 1 proyecto implementado real.')
+                return
+            }
             const realClosureValue = isWon
                 ? (leadData.valor_real_cierre ?? null)
                 : null
@@ -877,6 +906,27 @@ export default function LeadsPage() {
                 payload.loss_recorded_by = (leadData as any).loss_recorded_by
                     || ((currentLead as any).loss_recorded_by ?? null)
                     || currentUser.id
+            }
+
+            const syncParams = {
+                empresaId: finalEmpresaId as string,
+                leadId: currentLead.id,
+                inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
+                prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
+                futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
+                implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                assignedByUserId: currentUser.id
+            }
+            let assignmentsSyncedBeforeUpdate = false
+            if (isWon) {
+                try {
+                    await syncCompanyProjectAssignmentsFromLead(syncParams)
+                    assignmentsSyncedBeforeUpdate = true
+                } catch (projectSyncError: any) {
+                    alert(`No se pudo sincronizar proyectos implementados para cierre ganado: ${parseSupabaseError(projectSyncError, 'Error sincronizando proyectos.')}`)
+                    return
+                }
             }
 
             // SCORING LOGIC
@@ -962,19 +1012,12 @@ export default function LeadsPage() {
                     await (supabase.from('lead_history') as any).insert(historyEntries)
                 }
 
-                try {
-                    await syncCompanyProjectAssignmentsFromLead({
-                        empresaId: finalEmpresaId as string,
-                        leadId: currentLead.id,
-                        inNegotiationProjectIds: (leadData as any).proyectos_pronosticados_ids || [],
-                        prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
-                        futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
-                        implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
-                        implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
-                        assignedByUserId: currentUser.id
-                    })
-                } catch (projectSyncError) {
-                    console.warn('Lead updated but project assignments sync failed:', projectSyncError)
+                if (!assignmentsSyncedBeforeUpdate) {
+                    try {
+                        await syncCompanyProjectAssignmentsFromLead(syncParams)
+                    } catch (projectSyncError) {
+                        console.warn('Lead updated but project assignments sync failed:', projectSyncError)
+                    }
                 }
             }
         }
@@ -1123,10 +1166,10 @@ export default function LeadsPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Leads
+                                    Leads Comerciales
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Pipeline operativo comercial: prospección y negociación. Los cierres se consultan en Empresas Cerradas.
+                                    Suspects y leads en un flujo comercial unificado. Los cierres ganados se consultan en Proyectos Activos.
                                 </p>
                             </div>
                         </div>
@@ -1156,6 +1199,16 @@ export default function LeadsPage() {
                             </div>
                         </button>
                         <button
+                            onClick={() => router.push('/empresas')}
+                            className='px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer bg-transparent hover:bg-blue-500/10 hover:border-blue-500 hover:text-blue-500 hover:scale-105 active:scale-95'
+                            style={{
+                                borderColor: 'var(--card-border)',
+                                color: 'var(--text-primary)'
+                            }}
+                        >
+                            Registrar Empresa
+                        </button>
+                        <button
                             onClick={openCreateModal}
                             className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
                         >
@@ -1173,8 +1226,8 @@ export default function LeadsPage() {
                                     <ListFilter size={22} strokeWidth={2} />
                                 </div>
                                 <div>
-                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Pipeline activo</h2>
-                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Prospección + Negociación (con vista segmentada)</p>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Leads activos</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Leads comerciales con vista segmentada</p>
                                 </div>
                             </div>
 
@@ -1192,7 +1245,6 @@ export default function LeadsPage() {
                         <div className='flex flex-wrap items-center gap-2'>
                             {[
                                 { key: 'active', label: 'Activas' },
-                                { key: 'prospection', label: 'Prospección' },
                                 { key: 'negotiation', label: 'Negociación' },
                                 { key: 'all', label: 'Todas' }
                             ].map((scope) => {
@@ -1215,7 +1267,7 @@ export default function LeadsPage() {
                                 className={`${toneChipHoverButtonClassName} ml-auto px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em]`}
                                 style={toneVars('emerald')}
                             >
-                                Ver Empresas Cerradas
+                                Ver Proyectos Activos
                             </button>
                         </div>
 
