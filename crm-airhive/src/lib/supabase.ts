@@ -211,6 +211,35 @@ export type Database = {
                     prospect_is_family_member?: boolean | null
                 }
             }
+            lead_user_assignments: {
+                Row: {
+                    id: string
+                    lead_id: number
+                    user_id: string
+                    is_primary: boolean
+                    assigned_by: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    lead_id: number
+                    user_id: string
+                    is_primary?: boolean
+                    assigned_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    lead_id?: number
+                    user_id?: string
+                    is_primary?: boolean
+                    assigned_by?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
             lead_prospect_roles_catalog: {
                 Row: {
                     id: string
