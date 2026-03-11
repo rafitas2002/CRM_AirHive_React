@@ -274,6 +274,18 @@ export default function LeadsPage() {
         }
     }, [isModalOpen, currentLead, leadAssigneesByLeadId])
 
+    const selectedLeadWithAssignees = useMemo(() => {
+        if (!selectedLead) return null
+        const assignedUserIds = uniqueStringIds(
+            leadAssigneesByLeadId[selectedLead.id]
+            || (selectedLead.owner_id ? [selectedLead.owner_id] : [])
+        )
+        return {
+            ...selectedLead,
+            assigned_user_ids: assignedUserIds
+        }
+    }, [selectedLead, leadAssigneesByLeadId])
+
     // Sort & Filter Logic
     const sortedAndFilteredLeads = useMemo(() => {
         const result = leads.filter(lead => {
@@ -1733,7 +1745,7 @@ export default function LeadsPage() {
 
             {/* Detail View */}
             <ClientDetailView
-                client={selectedLead as any}
+                client={selectedLeadWithAssignees as any}
                 isOpen={isDetailViewOpen}
                 onClose={handleCloseDetailView}
                 onEditClient={(lead) => handleEditLeadFromDetail(lead as any)}

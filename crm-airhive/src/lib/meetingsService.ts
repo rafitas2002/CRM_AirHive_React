@@ -52,15 +52,24 @@ export async function createMeeting(meetingData: MeetingInsert) {
 
     if (!session?.user) {
         console.error('❌ NO ACTIVE SESSION. Database request will likely fail RLS.')
-    } else if (session.user.id !== meetingData.seller_id) {
-        console.warn('⚠️ WARNING: Session User ID does not match Seller ID in payload!')
-        console.warn(`Session: ${session.user.id} vs Payload: ${meetingData.seller_id}`)
+        throw new Error('No hay sesión activa para registrar la junta. Vuelve a iniciar sesión.')
+    }
+
+    const schedulerUserId = String(session.user.id)
+    if (schedulerUserId !== String(meetingData.seller_id || '')) {
+        console.warn('⚠️ Seller ID del payload no coincide con la sesión. Se usará auth.uid() para cumplir RLS.')
+        console.warn(`Session: ${schedulerUserId} vs Payload: ${meetingData.seller_id}`)
+    }
+
+    const sanitizedMeetingData: MeetingInsert = {
+        ...meetingData,
+        seller_id: schedulerUserId
     }
 
     // Attempt Insert
     const response = await (supabase
         .from('meetings') as any)
-        .insert([meetingData])
+        .insert([sanitizedMeetingData])
         .select()
 
     // Log raw response
@@ -82,15 +91,15 @@ export async function createMeeting(meetingData: MeetingInsert) {
     const createdMeeting = data[0]
 
     try {
-        await updateLeadNextMeeting(meetingData.lead_id)
+        await updateLeadNextMeeting(sanitizedMeetingData.lead_id)
 
         // Track Event: meeting_scheduled
         trackEvent({
             eventType: 'meeting_scheduled',
             entityType: 'meeting',
             entityId: (createdMeeting as any).id,
-            userId: meetingData.seller_id,
-            metadata: { lead_id: meetingData.lead_id, title: meetingData.title }
+            userId: schedulerUserId,
+            metadata: { lead_id: sanitizedMeetingData.lead_id, title: sanitizedMeetingData.title }
         })
     } catch (updateError) {
         console.error('⚠️ Error updating lead next meeting (non-critical):', updateError)

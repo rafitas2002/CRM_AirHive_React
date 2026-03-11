@@ -10,7 +10,7 @@ import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable 
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, CalendarDays, Camera, CheckCircle2, CheckSquare, ChevronDown, ChevronUp, Mail, MessageCircle, Minus, PencilLine, Plus, User, NotebookPen, Link2, X } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, CalendarDays, Camera, CheckSquare, ChevronDown, ChevronUp, Mail, MessageCircle, Minus, PencilLine, Plus, User, NotebookPen, Link2, X } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
 type ClientData = {
@@ -26,6 +26,7 @@ type ClientData = {
     empresa_id?: string
     owner_username?: string
     owner_id?: string
+    assigned_user_ids?: string[]
     probabilidad?: number
     fecha_registro?: string
     forecast_logloss?: number | null
@@ -102,7 +103,6 @@ export default function ClientDetailView({
 
     // Meetings & Snapshots State
     const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
-    const [meetingCreationMode, setMeetingCreationMode] = useState<'schedule' | 'past_record'>('schedule')
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
     const [snapshotOwnerProfilesById, setSnapshotOwnerProfilesById] = useState<Record<string, { fullName?: string | null, username?: string | null }>>({})
@@ -368,6 +368,44 @@ export default function ClientDetailView({
         return 'Captura de pronóstico'
     }
 
+    const getLeadStageTone = (stage?: string | null) => {
+        const normalized = String(stage || '')
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+
+        if (normalized === 'cerrado ganado') {
+            return {
+                background: 'color-mix(in srgb, #10b981 14%, var(--card-bg))',
+                borderColor: 'color-mix(in srgb, #10b981 34%, var(--card-border))',
+                color: 'color-mix(in srgb, #10b981 86%, var(--text-primary))'
+            }
+        }
+
+        if (normalized === 'cerrado perdido') {
+            return {
+                background: 'color-mix(in srgb, #ef4444 14%, var(--card-bg))',
+                borderColor: 'color-mix(in srgb, #ef4444 34%, var(--card-border))',
+                color: 'color-mix(in srgb, #ef4444 84%, var(--text-primary))'
+            }
+        }
+
+        if (normalized === 'negociacion') {
+            return {
+                background: 'color-mix(in srgb, #f59e0b 15%, var(--card-bg))',
+                borderColor: 'color-mix(in srgb, #f59e0b 36%, var(--card-border))',
+                color: 'color-mix(in srgb, #f59e0b 88%, var(--text-primary))'
+            }
+        }
+
+        return {
+            background: 'color-mix(in srgb, var(--input-focus) 13%, var(--card-bg))',
+            borderColor: 'color-mix(in srgb, var(--input-focus) 32%, var(--card-border))',
+            color: 'color-mix(in srgb, var(--input-focus) 82%, var(--text-primary))'
+        }
+    }
+
     const formatSnapshotOwnerDisplay = (raw?: string | null) => {
         const value = String(raw || '').trim()
         if (!value) return 'Sin asignar'
@@ -557,6 +595,9 @@ export default function ClientDetailView({
 
     if (!isOpen || !client) return null
     const isLostLead = ['cerrado perdido', 'cerrada perdida'].includes(String(client.etapa || '').trim().toLowerCase())
+    const assignedUsersCount = Array.isArray((client as any).assigned_user_ids)
+        ? new Set((client as any).assigned_user_ids.map((value: any) => String(value || '').trim()).filter(Boolean)).size
+        : (client.owner_id ? 1 : 0)
 
     const headerTheme = {
         claro: {
@@ -584,6 +625,19 @@ export default function ClientDetailView({
                     <p className='text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]'>Ficha Detallada del Lead</p>
                 </div>
                 <div className='flex gap-4'>
+                    <button
+                        onClick={() => onEditClient(client)}
+                        className='h-11 px-6 rounded-2xl font-black transition-all border uppercase text-[10px] tracking-widest hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer'
+                        style={{
+                            background: 'color-mix(in srgb, #10b981 10%, var(--card-bg))',
+                            color: 'color-mix(in srgb, #10b981 78%, var(--text-primary))',
+                            borderColor: 'color-mix(in srgb, #10b981 30%, var(--card-border))'
+                        }}
+                        title='Agregar o editar participantes internos del lead'
+                    >
+                        <User size={14} />
+                        Participantes ({assignedUsersCount})
+                    </button>
                     <button
                         onClick={() => onEditClient(client)}
                         className='h-11 px-6 bg-[#2048FF] text-white rounded-2xl font-black hover:bg-[#1700AC] transition-all shadow-xl shadow-blue-500/20 flex items-center gap-2 transform active:scale-95 uppercase text-[10px] tracking-widest cursor-pointer'
@@ -687,11 +741,10 @@ export default function ClientDetailView({
                                     <div className='space-y-1.5'>
                                         <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block'>Etapa Actual</label>
                                         <div className='inline-block'>
-                                            <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2
-                                                ${client.etapa === 'Cerrado Ganado' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                    client.etapa === 'Negociación' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                        client.etapa === 'Cerrado Perdido' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                            'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                            <span
+                                                className='px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2'
+                                                style={getLeadStageTone(client.etapa)}
+                                            >
                                                 {client.etapa}
                                             </span>
                                         </div>
@@ -839,29 +892,19 @@ export default function ClientDetailView({
                                     </button>
                                     <button
                                         onClick={() => {
-                                            setMeetingCreationMode('schedule')
                                             setIsMeetingModalOpen(true)
                                         }}
                                         className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
                                         style={{ background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))', color: 'var(--input-focus)' }}
-                                        title='Agendar junta'
+                                        title='Nueva junta'
                                     >
                                         <Plus size={18} />
                                     </button>
-                                    <button
-                                        onClick={() => {
-                                            setMeetingCreationMode('past_record')
-                                            setIsMeetingModalOpen(true)
-                                        }}
-                                        className='h-10 px-3 rounded-2xl flex items-center justify-center gap-1.5 transition-all transform hover:scale-105 shadow-sm cursor-pointer text-[10px] font-black uppercase tracking-[0.12em]'
-                                        style={{ background: 'color-mix(in srgb, #10b981 10%, var(--card-bg))', color: 'color-mix(in srgb, #10b981 78%, var(--text-primary))' }}
-                                        title='Registrar junta realizada'
-                                    >
-                                        <CheckCircle2 size={14} />
-                                        Realizada
-                                    </button>
                                 </div>
                             </div>
+                            <p className='-mt-6 mb-6 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)] text-right'>
+                                En el popup podrás elegir: futura o pasada
+                            </p>
 
                             {isMeetingsPanelExpanded ? (
                                 <div className='flex-1 min-h-[300px]'>
@@ -1103,12 +1146,11 @@ export default function ClientDetailView({
                     isOpen={isMeetingModalOpen}
                     onClose={() => {
                         setIsMeetingModalOpen(false)
-                        setMeetingCreationMode('schedule')
                     }}
                     onSave={handleCreateMeeting}
                     leadId={client.id}
-                    sellerId={client.owner_id || currentUser.id}
-                    creationMode={meetingCreationMode}
+                    sellerId={String(currentUser.id)}
+                    creationMode='schedule'
                     leadContactSeed={{
                         contactName: client.contacto || client.nombre || null,
                         contactEmail: client.email || null,
