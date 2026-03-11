@@ -7,6 +7,7 @@ import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
 import ConfirmModal from '@/components/ConfirmModal'
 import ClientDetailView from '@/components/ClientDetailView'
+import { type LeadAssigneeOption } from '@/components/LeadAssigneesSelect'
 import { Search, Users, Pencil, RotateCw, ListFilter, Clock3, TriangleAlert } from 'lucide-react'
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
@@ -17,6 +18,7 @@ import { syncLeadProjectAssignments } from '@/lib/leadProjectAssignments'
 type Lead = Database['public']['Tables']['clientes']['Row']
 type LeadInsert = Database['public']['Tables']['clientes']['Insert']
 type LeadUpdate = Database['public']['Tables']['clientes']['Update']
+type LeadAssigneeRow = Database['public']['Tables']['lead_user_assignments']['Row']
 
 type NegotiationAgingRow = {
     lead_id: number
@@ -159,10 +161,17 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
     return Number.isNaN(dt.getTime()) ? null : dt.toISOString()
 }
 
+function uniqueStringIds(values: unknown): string[] {
+    if (!Array.isArray(values)) return []
+    return Array.from(new Set(values.map((entry) => String(entry || '').trim()).filter(Boolean)))
+}
+
 export default function LeadsPage() {
     const { theme } = useTheme()
     const [leads, setLeads] = useState<Lead[]>([])
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; avatarUrl?: string | null }>>({})
+    const [leadAssigneesByLeadId, setLeadAssigneesByLeadId] = useState<Record<number, string[]>>({})
+    const [assignableUsers, setAssignableUsers] = useState<LeadAssigneeOption[]>([])
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
     const router = useRouter()
@@ -207,6 +216,15 @@ export default function LeadsPage() {
     const toneVars = (lane: UiToneLane): CSSProperties => buildSemanticToneCssVars(getSemanticTonePalette(lane, theme)) as CSSProperties
     const toneChipClassName = 'border shadow-sm [background:var(--tone-chip-bg)] [border-color:var(--tone-chip-border)] [color:var(--tone-chip-text)]'
     const toneChipHoverButtonClassName = `${toneChipClassName} transition-all cursor-pointer hover:-translate-y-px hover:[background:var(--tone-chip-hover-bg)] hover:[border-color:var(--tone-chip-hover-border)] hover:[color:var(--tone-chip-hover-text)] hover:[box-shadow:0_10px_22px_-14px_var(--tone-shadow)] active:translate-y-0`
+    const assignableUsersById = useMemo(() => {
+        const map: Record<string, LeadAssigneeOption> = {}
+        for (const user of assignableUsers) {
+            const userId = String(user.id || '')
+            if (!userId) continue
+            map[userId] = user
+        }
+        return map
+    }, [assignableUsers])
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -245,8 +263,16 @@ export default function LeadsPage() {
     // Memoized initial data to avoid reference changes on every render
     const memoizedInitialLead = useMemo(() => {
         if (!isModalOpen) return null
-        return currentLead ? normalizeLead(currentLead) : null
-    }, [isModalOpen, currentLead])
+        if (!currentLead) return null
+        const assignedUserIds = uniqueStringIds(
+            leadAssigneesByLeadId[currentLead.id]
+            || (currentLead.owner_id ? [currentLead.owner_id] : [])
+        )
+        return {
+            ...normalizeLead(currentLead),
+            assigned_user_ids: assignedUserIds
+        }
+    }, [isModalOpen, currentLead, leadAssigneesByLeadId])
 
     // Sort & Filter Logic
     const sortedAndFilteredLeads = useMemo(() => {
@@ -352,6 +378,108 @@ export default function LeadsPage() {
         [filteredAgingRows]
     )
 
+    const buildOwnerFallbackAssigneeMap = (rows: Lead[]) => {
+        const fallback: Record<number, string[]> = {}
+        for (const row of rows) {
+            const leadId = Number(row.id || 0)
+            if (!leadId) continue
+            fallback[leadId] = row.owner_id ? [String(row.owner_id)] : []
+        }
+        return fallback
+    }
+
+    const fetchAssignableUsers = async () => {
+        const { data, error } = await (supabase.from('profiles') as any)
+            .select('id, full_name, username, role')
+            .in('role', ['seller', 'admin'])
+            .order('full_name', { ascending: true })
+
+        if (error) {
+            console.warn('No se pudo cargar catálogo de usuarios asignables para leads:', error)
+            setAssignableUsers([])
+            return
+        }
+
+        const rows = (Array.isArray(data) ? data : []).map((row: any) => ({
+            id: String(row?.id || ''),
+            fullName: row?.full_name ? String(row.full_name) : null,
+            username: row?.username ? String(row.username) : null,
+            role: row?.role ? String(row.role) : null
+        })).filter((row: LeadAssigneeOption) => row.id)
+
+        setAssignableUsers(rows)
+    }
+
+    const fetchLeadAssignees = async (rows: Lead[]) => {
+        const fallback = buildOwnerFallbackAssigneeMap(rows)
+        const leadIds = rows.map((row) => Number(row.id || 0)).filter((id) => id > 0)
+        if (leadIds.length === 0) {
+            setLeadAssigneesByLeadId({})
+            return
+        }
+
+        const { data, error } = await (supabase.from('lead_user_assignments') as any)
+            .select('lead_id, user_id')
+            .in('lead_id', leadIds)
+
+        if (error) {
+            const raw = String(error?.message || '').toLowerCase()
+            const isMissingTable = raw.includes('lead_user_assignments') || raw.includes('42p01') || raw.includes('does not exist')
+            if (!isMissingTable) {
+                console.warn('No se pudieron cargar asignaciones de usuarios por lead:', error)
+            }
+            setLeadAssigneesByLeadId(fallback)
+            return
+        }
+
+        const nextMap: Record<number, string[]> = { ...fallback }
+        for (const row of (data || []) as LeadAssigneeRow[]) {
+            const leadId = Number((row as any)?.lead_id || 0)
+            const userId = String((row as any)?.user_id || '')
+            if (!leadId || !userId) continue
+            const prev = nextMap[leadId] || []
+            nextMap[leadId] = uniqueStringIds([...prev, userId])
+        }
+
+        setLeadAssigneesByLeadId(nextMap)
+    }
+
+    const syncLeadAssignees = async (params: {
+        leadId: number
+        assignedUserIds: string[]
+        primaryOwnerId: string
+        assignedByUserId?: string | null
+    }) => {
+        const leadId = Number(params.leadId || 0)
+        if (!leadId) return
+
+        const primaryOwnerId = String(params.primaryOwnerId || '').trim()
+        const normalized = uniqueStringIds([...(params.assignedUserIds || []), primaryOwnerId])
+        const assignedByUserId = String(params.assignedByUserId || '').trim() || null
+
+        const { error: deleteError } = await (supabase.from('lead_user_assignments') as any)
+            .delete()
+            .eq('lead_id', leadId)
+        if (deleteError) throw deleteError
+
+        if (normalized.length > 0) {
+            const rows = normalized.map((userId) => ({
+                lead_id: leadId,
+                user_id: userId,
+                is_primary: userId === primaryOwnerId,
+                assigned_by: assignedByUserId
+            }))
+            const { error: insertError } = await (supabase.from('lead_user_assignments') as any)
+                .insert(rows)
+            if (insertError) throw insertError
+        }
+
+        setLeadAssigneesByLeadId((prev) => ({
+            ...prev,
+            [leadId]: normalized
+        }))
+    }
+
     const fetchLeads = async () => {
         setLoading(true)
         const { data, error } = await supabase
@@ -364,6 +492,7 @@ export default function LeadsPage() {
         } else {
             const rows = (data || []) as Lead[]
             setLeads(rows)
+            await fetchLeadAssignees(rows)
 
             const ownerIds = Array.from(new Set(
                 rows.map((row: any) => String(row?.owner_id || '')).filter(Boolean)
@@ -464,6 +593,7 @@ export default function LeadsPage() {
     useEffect(() => {
         refreshLeadsAndAging()
         fetchCompaniesList()
+        fetchAssignableUsers()
         fetchUser()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
@@ -576,6 +706,23 @@ export default function LeadsPage() {
         ])
     }
 
+    const resolveOwnerUsername = (ownerId: string, fallbackCurrentUser: any) => {
+        const ownerProfile = assignableUsersById[ownerId]
+        const fromProfile = String(ownerProfile?.username || '').trim()
+        if (fromProfile) return fromProfile
+
+        if (String(fallbackCurrentUser?.id || '') === ownerId) {
+            const currentUsername = String(
+                fallbackCurrentUser?.user_metadata?.username
+                || fallbackCurrentUser?.email?.split('@')?.[0]
+                || ''
+            ).trim()
+            if (currentUsername) return currentUsername
+        }
+
+        return null
+    }
+
     const handleSaveLead = async (leadData: ReturnType<typeof normalizeLead> & { empresa_id?: string }) => {
         if (!currentUser) {
             alert('No se pudo identificar al usuario actual.')
@@ -587,6 +734,21 @@ export default function LeadsPage() {
         if (finalEmpresaId) {
             const officialCompany = companiesList.find(c => c.id === finalEmpresaId)
             if (officialCompany) finalEmpresaName = officialCompany.nombre
+        }
+
+        const requestedAssignees = uniqueStringIds((leadData as any).assigned_user_ids)
+        const fallbackOwnerId = String(
+            (modalMode === 'edit'
+                ? (currentLead?.owner_id || currentUser.id)
+                : currentUser.id) || ''
+        ).trim()
+        const primaryOwnerId = String(requestedAssignees[0] || fallbackOwnerId || '').trim()
+        const assignedUserIds = uniqueStringIds([...requestedAssignees, primaryOwnerId])
+        const primaryOwnerUsername = resolveOwnerUsername(primaryOwnerId, currentUser)
+
+        if (!primaryOwnerId || assignedUserIds.length === 0) {
+            alert('Debes definir al menos un usuario asignado para el lead.')
+            return
         }
 
         if (modalMode === 'create') {
@@ -637,8 +799,8 @@ export default function LeadsPage() {
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
                 probabilidad: leadData.probabilidad,
-                owner_id: currentUser.id,
-                owner_username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'Unknown',
+                owner_id: primaryOwnerId,
+                owner_username: primaryOwnerUsername || 'Unknown',
                 empresa_id: finalEmpresaId as string,
                 loss_reason_id: isLost ? ((leadData as any).loss_reason_id || null) : ((leadData as any).loss_reason_id || null),
                 loss_subreason_id: isLost ? ((leadData as any).loss_subreason_id || null) : ((leadData as any).loss_subreason_id || null),
@@ -671,6 +833,25 @@ export default function LeadsPage() {
                 return
             } else if (data && data[0]) {
                 const newId = data[0].id
+                try {
+                    await syncLeadAssignees({
+                        leadId: newId,
+                        assignedUserIds,
+                        primaryOwnerId,
+                        assignedByUserId: currentUser.id
+                    })
+                } catch (assignmentError: any) {
+                    console.error('Lead created but assignee sync failed:', assignmentError)
+                    await (supabase.from('clientes') as any).delete().eq('id', newId)
+                    alert(`No se pudo guardar la asignación de usuarios del lead: ${parseSupabaseError(assignmentError, 'Error sincronizando usuarios asignados.')}`)
+                    return
+                }
+                try {
+                    await (supabase.rpc as any)('refresh_seller_badges_for_lead', { p_lead_id: newId })
+                } catch (badgeRefreshError) {
+                    console.warn('Lead assignee sync completed but badge refresh failed:', badgeRefreshError)
+                }
+
                 const syncParams = {
                     empresaId: finalEmpresaId as string,
                     leadId: newId,
@@ -842,9 +1023,8 @@ export default function LeadsPage() {
                 notas: leadData.notas,
                 probabilidad: leadData.probabilidad,
                 empresa_id: finalEmpresaId as string,
-                // Preserve original owner on edits; editor and owner are different concepts.
-                owner_id: currentLead.owner_id || null,
-                owner_username: currentLead.owner_username || null,
+                owner_id: primaryOwnerId,
+                owner_username: primaryOwnerUsername || null,
                 loss_reason_id: (leadData as any).loss_reason_id || null,
                 loss_subreason_id: (leadData as any).loss_subreason_id || null,
                 loss_notes: ((leadData as any).loss_notes || '').trim() || null
@@ -922,9 +1102,26 @@ export default function LeadsPage() {
                 alert(`Error al actualizar el lead: ${parseSupabaseError(error, 'No se pudo actualizar el lead.')}`)
                 return
             } else {
+                try {
+                    await syncLeadAssignees({
+                        leadId: currentLead.id,
+                        assignedUserIds,
+                        primaryOwnerId,
+                        assignedByUserId: currentUser.id
+                    })
+                } catch (assignmentError: any) {
+                    alert(`El lead se actualizó, pero no se pudo sincronizar la asignación de usuarios: ${parseSupabaseError(assignmentError, 'Error sincronizando usuarios asignados.')}`)
+                    return
+                }
+                try {
+                    await (supabase.rpc as any)('refresh_seller_badges_for_lead', { p_lead_id: currentLead.id })
+                } catch (badgeRefreshError) {
+                    console.warn('Lead assignee sync completed but badge refresh failed:', badgeRefreshError)
+                }
+
                 const wasWonBefore = isWonStage(currentLead.etapa)
                 const isWonNow = isWonStage(leadData.etapa)
-                const ownerId = String(currentLead.owner_id || currentUser.id || '')
+                const ownerId = String(primaryOwnerId || currentUser.id || '')
 
                 // Keep size/special badges fully synced to lead outcome changes.
                 if (isWonNow) {
@@ -1528,6 +1725,9 @@ export default function LeadsPage() {
                 mode={modalMode}
                 onNavigateToCompanies={() => router.push('/empresas')}
                 companies={companiesList}
+                enableLeadAssignees
+                assignableUsers={assignableUsers}
+                defaultAssignedUserIds={currentUser?.id ? [String(currentUser.id)] : []}
             />
 
 

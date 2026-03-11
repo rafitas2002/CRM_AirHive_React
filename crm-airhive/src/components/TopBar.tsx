@@ -732,7 +732,7 @@ export default function TopBar() {
                     className='inline-flex items-center justify-start shrink-0 leading-none hover:opacity-80 transition-opacity'
                 >
                     <Image
-                        src='/airhive_logo_nav.svg'
+                        src='/airhive_logo_nav_v2.svg'
                         alt='Air Hive'
                         width={logoDimensions.width}
                         height={logoDimensions.height}

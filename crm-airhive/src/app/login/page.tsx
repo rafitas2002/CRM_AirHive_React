@@ -54,7 +54,7 @@ export default function LoginPage() {
                         {/* header sutil */}
                         <div className='h-[90px] bg-black/5 flex items-center justify-center'>
                             <Image
-                                src='/airhive_logo_azul_sinfondo.svg'
+                                src='/airhive_logo_azul_sinfondo_v2.svg'
                                 alt='Air Hive'
                                 width={325}
                                 height={100}

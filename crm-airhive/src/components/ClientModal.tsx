@@ -6,6 +6,7 @@ import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { FriendlyDatePicker } from './FriendlyDatePickers'
+import LeadAssigneesSelect, { type LeadAssigneeOption } from './LeadAssigneesSelect'
 import {
     fetchLeadProjectAssignments,
     mapAssignmentsToLeadProjectSelection
@@ -54,6 +55,7 @@ export type ClientData = {
     prospect_preferred_contact_channel?: 'whatsapp' | 'llamada' | 'email' | 'video' | 'presencial' | 'sin_preferencia' | null
     prospect_linkedin_url?: string | null
     prospect_is_family_member?: boolean | null
+    assigned_user_ids?: string[]
 }
 
 function formatCurrencyInputNumber(value: number | null | undefined): string {
@@ -108,6 +110,11 @@ function todayDateOnly() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
+function uniqueStringIds(values: unknown): string[] {
+    if (!Array.isArray(values)) return []
+    return Array.from(new Set(values.map((entry) => String(entry || '').trim()).filter(Boolean)))
+}
+
 interface ClientModalProps {
     isOpen: boolean
     onClose: () => void
@@ -116,6 +123,9 @@ interface ClientModalProps {
     mode: 'create' | 'edit' | 'convert'
     onNavigateToCompanies?: () => void
     companies?: { id: string, nombre: string, industria?: string | null, ubicacion?: string | null }[]
+    enableLeadAssignees?: boolean
+    assignableUsers?: LeadAssigneeOption[]
+    defaultAssignedUserIds?: string[]
 }
 
 type ProjectCatalogItem = {
@@ -207,7 +217,10 @@ export default function ClientModal({
     initialData,
     mode,
     onNavigateToCompanies,
-    companies = []
+    companies = [],
+    enableLeadAssignees = false,
+    assignableUsers = [],
+    defaultAssignedUserIds = []
 }: ClientModalProps) {
     useBodyScrollLock(isOpen)
     const [formData, setFormData] = useState<ClientData>({
@@ -246,7 +259,8 @@ export default function ClientModal({
         prospect_decision_role: null,
         prospect_preferred_contact_channel: null,
         prospect_linkedin_url: '',
-        prospect_is_family_member: false
+        prospect_is_family_member: false,
+        assigned_user_ids: []
     })
     const [phoneError, setPhoneError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -278,10 +292,15 @@ export default function ClientModal({
     const [ageRangesCatalogLoading, setAgeRangesCatalogLoading] = useState(false)
     const [ageRangesCatalogError, setAgeRangesCatalogError] = useState<string | null>(null)
     const [selectedProspectRoleOption, setSelectedProspectRoleOption] = useState<string>('')
+    const [resolvedAssignableUsers, setResolvedAssignableUsers] = useState<LeadAssigneeOption[]>([])
     const areRealCloseValueFieldsLockedInForm = true
     const lastLoadedProjectsScopeRef = useRef<string | null>(null)
     const lastManualEstimatedValueRef = useRef<number | null>(null)
     const lastManualImplementationEstimatedValueRef = useRef<number | null>(null)
+    const effectiveAssignableUsers = useMemo(
+        () => (assignableUsers.length > 0 ? assignableUsers : resolvedAssignableUsers),
+        [assignableUsers, resolvedAssignableUsers]
+    )
 
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
@@ -320,7 +339,8 @@ export default function ClientModal({
                     prospect_decision_role: (initialData as any).prospect_decision_role ?? null,
                     prospect_preferred_contact_channel: (initialData as any).prospect_preferred_contact_channel ?? null,
                     prospect_linkedin_url: (initialData as any).prospect_linkedin_url ?? '',
-                    prospect_is_family_member: (initialData as any).prospect_is_family_member ?? false
+                    prospect_is_family_member: (initialData as any).prospect_is_family_member ?? false,
+                    assigned_user_ids: uniqueStringIds((initialData as any).assigned_user_ids)
                 })
                 if ((initialData as any).prospect_role_catalog_id) {
                     setSelectedProspectRoleOption(String((initialData as any).prospect_role_catalog_id))
@@ -369,7 +389,8 @@ export default function ClientModal({
                     prospect_decision_role: null,
                     prospect_preferred_contact_channel: null,
                     prospect_linkedin_url: '',
-                    prospect_is_family_member: false
+                    prospect_is_family_member: false,
+                    assigned_user_ids: uniqueStringIds(defaultAssignedUserIds)
                 })
                 setSelectedProspectRoleOption('')
                 setPhoneError('')
@@ -669,6 +690,56 @@ export default function ClientModal({
         const { data: { user } } = await supabase.auth.getUser()
         setCurrentUser(user)
     }
+
+    useEffect(() => {
+        if (!isOpen || !enableLeadAssignees) return
+        if (assignableUsers.length > 0) {
+            setResolvedAssignableUsers(assignableUsers)
+            return
+        }
+        let cancelled = false
+        const loadAssignableUsers = async () => {
+            const { data, error } = await (supabase.from('profiles') as any)
+                .select('id, full_name, username, role')
+                .in('role', ['seller', 'admin'])
+                .order('full_name', { ascending: true })
+
+            if (cancelled) return
+            if (error) {
+                console.warn('No se pudo cargar usuarios asignables para leads:', error)
+                setResolvedAssignableUsers([])
+                return
+            }
+
+            const mapped = (Array.isArray(data) ? data : []).map((row: any) => ({
+                id: String(row?.id || ''),
+                fullName: row?.full_name ? String(row.full_name) : null,
+                username: row?.username ? String(row.username) : null,
+                role: row?.role ? String(row.role) : null
+            })).filter((row: LeadAssigneeOption) => row.id)
+
+            setResolvedAssignableUsers(mapped)
+        }
+
+        void loadAssignableUsers()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, enableLeadAssignees, assignableUsers, supabase])
+
+    useEffect(() => {
+        if (!isOpen || !enableLeadAssignees) return
+        if (!currentUser?.id) return
+
+        setFormData((prev) => {
+            const existing = uniqueStringIds((prev as any).assigned_user_ids)
+            if (existing.length > 0) return prev
+            return {
+                ...prev,
+                assigned_user_ids: [String(currentUser.id)]
+            }
+        })
+    }, [isOpen, enableLeadAssignees, currentUser?.id])
 
     const checkProbabilityEditability = async () => {
         // For new leads or conversions, it's always editable
@@ -972,6 +1043,7 @@ export default function ClientModal({
             asNum(formData.probabilidad) === asNum(initialData.probabilidad) &&
             norm(formData.forecast_close_date) === norm(initialData.forecast_close_date) &&
             norm(formData.closed_at_real) === norm((initialData as any).closed_at_real) &&
+            sameArray((formData as any).assigned_user_ids, (initialData as any).assigned_user_ids) &&
             sameArray((formData as any).proyectos_pronosticados_ids, (initialData as any).proyectos_pronosticados_ids) &&
             sameArray((formData as any).proyectos_prospeccion_mismo_cierre_ids, (initialData as any).proyectos_prospeccion_mismo_cierre_ids) &&
             sameArray((formData as any).proyectos_futuro_lead_ids, (initialData as any).proyectos_futuro_lead_ids) &&
@@ -1255,6 +1327,20 @@ export default function ClientModal({
             prospect_preferred_contact_channel: normalizedPreferredContactChannel,
             prospect_linkedin_url: normalizedLinkedin,
             prospect_is_family_member: Boolean((formData as any).prospect_is_family_member)
+        }
+
+        if (enableLeadAssignees) {
+            const normalizedAssignedUserIds = uniqueStringIds((formData as any).assigned_user_ids)
+            if (normalizedAssignedUserIds.length === 0) {
+                alert('Debes asignar al menos un usuario interno al lead.')
+                return
+            }
+            normalizedFormData = {
+                ...normalizedFormData,
+                assigned_user_ids: normalizedAssignedUserIds
+            }
+        } else {
+            delete (normalizedFormData as any).assigned_user_ids
         }
 
         if (isWonStageLocal(normalizedFormData.etapa) && (((normalizedFormData as any).proyectos_implementados_reales_ids || []).length === 0)) {
@@ -1647,6 +1733,27 @@ export default function ClientModal({
                             </div>
                         </div>
                     </div>
+
+                    {enableLeadAssignees && (
+                        <div className='space-y-3'>
+                            <LeadAssigneesSelect
+                                value={uniqueStringIds((formData as any).assigned_user_ids)}
+                                onChange={(nextIds) => setFormData((prev) => ({
+                                    ...prev,
+                                    assigned_user_ids: uniqueStringIds(nextIds)
+                                }))}
+                                users={effectiveAssignableUsers}
+                                label='Usuarios Asignados al Lead *'
+                                placeholder='Selecciona uno o más usuarios...'
+                                helperText='Todos los usuarios asignados recibirán badges cuando este lead desbloquee o suba nivel.'
+                            />
+                            {effectiveAssignableUsers.length === 0 && (
+                                <p className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                    No se encontró catálogo de usuarios internos para asignación.
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-2'>

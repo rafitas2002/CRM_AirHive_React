@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
                     <div className='rounded-[18px] bg-white border border-black/10 shadow-[0_12px_30px_rgba(0,0,0,0.25)] overflow-hidden'>
                         <div className='h-[90px] bg-black/5 flex items-center justify-center'>
                             <Image
-                                src='/airhive_logo_azul_sinfondo.svg'
+                                src='/airhive_logo_azul_sinfondo_v2.svg'
                                 alt='Air Hive'
                                 width={325}
                                 height={100}
