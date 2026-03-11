@@ -15,6 +15,10 @@ type ProjectRow = {
     descripcion: string | null
     valor_real_mensualidad_usd: number | null
     valor_real_implementacion_usd: number | null
+    rango_mensualidad_min_usd: number | null
+    rango_mensualidad_max_usd: number | null
+    rango_implementacion_min_usd: number | null
+    rango_implementacion_max_usd: number | null
     tiempo_implementacion_dias: number | null
     costo_interno_mensualidad_usd: number | null
     costo_interno_implementacion_usd: number | null
@@ -35,6 +39,12 @@ type ProjectForm = {
     descripcion: string
     valor_real_mensualidad_usd: string
     valor_real_implementacion_usd: string
+    rango_mensualidad_min_usd: string
+    rango_mensualidad_max_usd: string
+    rango_implementacion_min_usd: string
+    rango_implementacion_max_usd: string
+    useMonthlyRange: boolean
+    useImplementationRange: boolean
     tiempo_implementacion_dias: string
     costo_interno_mensualidad_usd: string
     costo_interno_implementacion_usd: string
@@ -49,6 +59,12 @@ const EMPTY_FORM: ProjectForm = {
     descripcion: '',
     valor_real_mensualidad_usd: '',
     valor_real_implementacion_usd: '',
+    rango_mensualidad_min_usd: '',
+    rango_mensualidad_max_usd: '',
+    rango_implementacion_min_usd: '',
+    rango_implementacion_max_usd: '',
+    useMonthlyRange: false,
+    useImplementationRange: false,
     tiempo_implementacion_dias: '',
     costo_interno_mensualidad_usd: '',
     costo_interno_implementacion_usd: '',
@@ -87,7 +103,11 @@ function formatMoneyInput(raw: string): string {
 
 function formatUsd(value: number | null | undefined) {
     if (value == null || !Number.isFinite(Number(value))) return 'N/D'
-    return `$${Math.round(Number(value)).toLocaleString('es-MX')}`
+    return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+        maximumFractionDigits: 0
+    }).format(Number(value))
 }
 
 export default function ProyectosPage() {
@@ -193,6 +213,12 @@ export default function ProyectosPage() {
             descripcion: project.descripcion || '',
             valor_real_mensualidad_usd: project.valor_real_mensualidad_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.valor_real_mensualidad_usd)))),
             valor_real_implementacion_usd: project.valor_real_implementacion_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.valor_real_implementacion_usd)))),
+            rango_mensualidad_min_usd: project.rango_mensualidad_min_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.rango_mensualidad_min_usd)))),
+            rango_mensualidad_max_usd: project.rango_mensualidad_max_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.rango_mensualidad_max_usd)))),
+            rango_implementacion_min_usd: project.rango_implementacion_min_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.rango_implementacion_min_usd)))),
+            rango_implementacion_max_usd: project.rango_implementacion_max_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.rango_implementacion_max_usd)))),
+            useMonthlyRange: project.rango_mensualidad_min_usd != null || project.rango_mensualidad_max_usd != null,
+            useImplementationRange: project.rango_implementacion_min_usd != null || project.rango_implementacion_max_usd != null,
             tiempo_implementacion_dias: project.tiempo_implementacion_dias == null ? '' : String(Math.max(0, Math.round(Number(project.tiempo_implementacion_dias)))),
             costo_interno_mensualidad_usd: project.costo_interno_mensualidad_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.costo_interno_mensualidad_usd)))),
             costo_interno_implementacion_usd: project.costo_interno_implementacion_usd == null ? '' : formatMoneyInput(String(Math.round(Number(project.costo_interno_implementacion_usd)))),
@@ -267,6 +293,10 @@ export default function ProyectosPage() {
             const userId = authUserData.user?.id || null
             const realMonthly = parseMoneyInput(form.valor_real_mensualidad_usd)
             const realImplementation = parseMoneyInput(form.valor_real_implementacion_usd)
+            const monthlyRangeMin = form.useMonthlyRange ? parseMoneyInput(form.rango_mensualidad_min_usd) : null
+            const monthlyRangeMax = form.useMonthlyRange ? parseMoneyInput(form.rango_mensualidad_max_usd) : null
+            const implementationRangeMin = form.useImplementationRange ? parseMoneyInput(form.rango_implementacion_min_usd) : null
+            const implementationRangeMax = form.useImplementationRange ? parseMoneyInput(form.rango_implementacion_max_usd) : null
             const internalMonthlyCost = parseMoneyInput(form.costo_interno_mensualidad_usd)
             const internalImplementationCost = parseMoneyInput(form.costo_interno_implementacion_usd)
             const implementationTimeDays = parseIntegerInput(form.tiempo_implementacion_dias)
@@ -277,6 +307,46 @@ export default function ProyectosPage() {
             }
             if (realImplementation !== null && (!Number.isFinite(realImplementation) || realImplementation < 0)) {
                 alert('El valor real de implementación del proyecto no es válido.')
+                setSaving(false)
+                return
+            }
+            if (form.useMonthlyRange && (monthlyRangeMin === null || monthlyRangeMax === null)) {
+                alert('Si activas el rango mensual, debes capturar mínimo y máximo.')
+                setSaving(false)
+                return
+            }
+            if (form.useImplementationRange && (implementationRangeMin === null || implementationRangeMax === null)) {
+                alert('Si activas el rango de implementación, debes capturar mínimo y máximo.')
+                setSaving(false)
+                return
+            }
+            if (monthlyRangeMin !== null && (!Number.isFinite(monthlyRangeMin) || monthlyRangeMin < 0)) {
+                alert('El rango mínimo mensual no es válido.')
+                setSaving(false)
+                return
+            }
+            if (monthlyRangeMax !== null && (!Number.isFinite(monthlyRangeMax) || monthlyRangeMax < 0)) {
+                alert('El rango máximo mensual no es válido.')
+                setSaving(false)
+                return
+            }
+            if (implementationRangeMin !== null && (!Number.isFinite(implementationRangeMin) || implementationRangeMin < 0)) {
+                alert('El rango mínimo de implementación no es válido.')
+                setSaving(false)
+                return
+            }
+            if (implementationRangeMax !== null && (!Number.isFinite(implementationRangeMax) || implementationRangeMax < 0)) {
+                alert('El rango máximo de implementación no es válido.')
+                setSaving(false)
+                return
+            }
+            if (monthlyRangeMin != null && monthlyRangeMax != null && monthlyRangeMin > monthlyRangeMax) {
+                alert('El rango de mensualidad no es válido: mínimo no puede ser mayor al máximo.')
+                setSaving(false)
+                return
+            }
+            if (implementationRangeMin != null && implementationRangeMax != null && implementationRangeMin > implementationRangeMax) {
+                alert('El rango de implementación no es válido: mínimo no puede ser mayor al máximo.')
                 setSaving(false)
                 return
             }
@@ -317,7 +387,14 @@ export default function ProyectosPage() {
                 costo_interno_mensualidad_usd: internalMonthlyCost,
                 costo_interno_implementacion_usd: internalImplementationCost
             }
-            const payloadCandidates = [extendedPayload, corePayload]
+            const extendedPayloadWithRanges = {
+                ...extendedPayload,
+                rango_mensualidad_min_usd: monthlyRangeMin,
+                rango_mensualidad_max_usd: monthlyRangeMax,
+                rango_implementacion_min_usd: implementationRangeMin,
+                rango_implementacion_max_usd: implementationRangeMax
+            }
+            const payloadCandidates = [extendedPayloadWithRanges, extendedPayload, corePayload]
 
             let projectId = form.id
             if (form.id) {
@@ -449,7 +526,7 @@ export default function ProyectosPage() {
                             <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                                 <div>
                                     <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
-                                        Mensualidad real (USD)
+                                        Costo exacto mensual (MXN)
                                     </label>
                                     <input
                                         value={form.valor_real_mensualidad_usd}
@@ -462,7 +539,7 @@ export default function ProyectosPage() {
                                 </div>
                                 <div>
                                     <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
-                                        Implementación real (USD)
+                                        Costo exacto implementación (MXN)
                                     </label>
                                     <input
                                         value={form.valor_real_implementacion_usd}
@@ -472,6 +549,107 @@ export default function ProyectosPage() {
                                         style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                         placeholder='10000'
                                     />
+                                </div>
+                            </div>
+                            <div className='rounded-2xl border p-3 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-blue-300'>
+                                    Rango opcional por negociación (MXN)
+                                </p>
+                                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                                    <div className='rounded-xl border p-3 space-y-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                        <label className='flex items-center gap-2 cursor-pointer'>
+                                            <input
+                                                type='checkbox'
+                                                checked={form.useMonthlyRange}
+                                                onChange={(e) => setForm((prev) => ({
+                                                    ...prev,
+                                                    useMonthlyRange: e.target.checked,
+                                                    rango_mensualidad_min_usd: e.target.checked ? prev.rango_mensualidad_min_usd : '',
+                                                    rango_mensualidad_max_usd: e.target.checked ? prev.rango_mensualidad_max_usd : ''
+                                                }))}
+                                            />
+                                            <span className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>
+                                                Usar rango mensualidad
+                                            </span>
+                                        </label>
+                                        {form.useMonthlyRange ? (
+                                            <div className='grid grid-cols-2 gap-2'>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Mín mensual
+                                                    </label>
+                                                    <input
+                                                        value={form.rango_mensualidad_min_usd}
+                                                        onChange={(e) => setForm((prev) => ({ ...prev, rango_mensualidad_min_usd: formatMoneyInput(e.target.value) }))}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='2000'
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Máx mensual
+                                                    </label>
+                                                    <input
+                                                        value={form.rango_mensualidad_max_usd}
+                                                        onChange={(e) => setForm((prev) => ({ ...prev, rango_mensualidad_max_usd: formatMoneyInput(e.target.value) }))}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='5000'
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <div className='rounded-xl border p-3 space-y-2' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                                        <label className='flex items-center gap-2 cursor-pointer'>
+                                            <input
+                                                type='checkbox'
+                                                checked={form.useImplementationRange}
+                                                onChange={(e) => setForm((prev) => ({
+                                                    ...prev,
+                                                    useImplementationRange: e.target.checked,
+                                                    rango_implementacion_min_usd: e.target.checked ? prev.rango_implementacion_min_usd : '',
+                                                    rango_implementacion_max_usd: e.target.checked ? prev.rango_implementacion_max_usd : ''
+                                                }))}
+                                            />
+                                            <span className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-primary)' }}>
+                                                Usar rango implementación
+                                            </span>
+                                        </label>
+                                        {form.useImplementationRange ? (
+                                            <div className='grid grid-cols-2 gap-2'>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Mín implementación
+                                                    </label>
+                                                    <input
+                                                        value={form.rango_implementacion_min_usd}
+                                                        onChange={(e) => setForm((prev) => ({ ...prev, rango_implementacion_min_usd: formatMoneyInput(e.target.value) }))}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='10000'
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Máx implementación
+                                                    </label>
+                                                    <input
+                                                        value={form.rango_implementacion_max_usd}
+                                                        onChange={(e) => setForm((prev) => ({ ...prev, rango_implementacion_max_usd: formatMoneyInput(e.target.value) }))}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='25000'
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
                             <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
@@ -490,7 +668,7 @@ export default function ProyectosPage() {
                                 </div>
                                 <div>
                                     <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
-                                        Costo interno mensual (USD)
+                                        Costo interno mensual (MXN)
                                     </label>
                                     <input
                                         value={form.costo_interno_mensualidad_usd}
@@ -503,7 +681,7 @@ export default function ProyectosPage() {
                                 </div>
                                 <div>
                                     <label className='min-h-[42px] flex items-end text-[10px] font-black uppercase tracking-[0.16em] leading-tight' style={{ color: 'var(--text-secondary)' }}>
-                                        Costo interno implementación (USD)
+                                        Costo interno implementación (MXN)
                                     </label>
                                     <input
                                         value={form.costo_interno_implementacion_usd}
@@ -515,6 +693,9 @@ export default function ProyectosPage() {
                                     />
                                 </div>
                             </div>
+                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                Los costos internos son editables para que se ajusten conforme avanzan los proyectos.
+                            </p>
                             <div>
                                 <label className='text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>Descripción</label>
                                 <textarea
@@ -650,7 +831,7 @@ export default function ProyectosPage() {
                             <table className='w-full min-w-[1240px]'>
                                 <thead>
                                     <tr className='text-left border-b' style={{ borderColor: 'var(--card-border)' }}>
-                                        {['Proyecto', 'Real mensualidad', 'Real implementación', 'Promedio vendido', 'Implementado', 'Posible', 'Antigüedad', 'Estado', 'Acciones'].map((h) => (
+                                        {['Proyecto', 'Base mensualidad', 'Base implementación', 'Promedio REAL vendido', 'Implementado', 'Posible', 'Antigüedad', 'Estado', 'Acciones'].map((h) => (
                                             <th key={h} className='px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>
                                                 {h}
                                             </th>
@@ -687,6 +868,16 @@ export default function ProyectosPage() {
                                                         <p className='text-xs mt-1 line-clamp-2' style={{ color: 'var(--text-secondary)' }}>{project.descripcion}</p>
                                                     )}
                                                     <div className='mt-2 space-y-0.5'>
+                                                        <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                            Rango M: {project.rango_mensualidad_min_usd != null || project.rango_mensualidad_max_usd != null
+                                                                ? `${formatUsd(project.rango_mensualidad_min_usd)} - ${formatUsd(project.rango_mensualidad_max_usd)}`
+                                                                : 'N/D'}
+                                                        </p>
+                                                        <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                            Rango I: {project.rango_implementacion_min_usd != null || project.rango_implementacion_max_usd != null
+                                                                ? `${formatUsd(project.rango_implementacion_min_usd)} - ${formatUsd(project.rango_implementacion_max_usd)}`
+                                                                : 'N/D'}
+                                                        </p>
                                                         <p className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
                                                             Tiempo implementación: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(Number(project.tiempo_implementacion_dias)))} días` : 'N/D'}
                                                         </p>

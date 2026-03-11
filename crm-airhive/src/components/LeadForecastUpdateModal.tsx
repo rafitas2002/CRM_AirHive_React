@@ -335,7 +335,7 @@ export default function LeadForecastUpdateModal({
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                         <div className='space-y-1.5'>
                             <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
-                                Mensualidad pronosticada (USD)
+                                Mensualidad pronosticada (MXN)
                             </label>
                             <input
                                 type='text'
@@ -349,7 +349,7 @@ export default function LeadForecastUpdateModal({
                         </div>
                         <div className='space-y-1.5'>
                             <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>
-                                Implementación pronosticada (USD)
+                                Implementación pronosticada (MXN)
                             </label>
                             <input
                                 type='text'

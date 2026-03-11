@@ -27,6 +27,24 @@ export async function createMeeting(meetingData: MeetingInsert) {
     console.log('🚀 Starting createMeeting')
     console.log('📦 Payload:', meetingData)
 
+    const parsedStart = new Date(String(meetingData.start_time || ''))
+    if (Number.isNaN(parsedStart.getTime())) {
+        throw new Error('La fecha de la junta es inválida.')
+    }
+
+    const nowTs = Date.now()
+    const startTs = parsedStart.getTime()
+    const isPastDate = startTs < nowTs
+    const isHistoricalRegistration = String(meetingData.meeting_status || '').trim().toLowerCase() === 'pending_confirmation'
+
+    if (isPastDate && !isHistoricalRegistration) {
+        throw new Error('No se puede agendar una junta en el pasado. Usa la opción "Registrar junta realizada".')
+    }
+
+    if (!isPastDate && isHistoricalRegistration) {
+        throw new Error('La opción "Registrar junta realizada" solo permite fechas pasadas.')
+    }
+
     // Check Auth State
     const { data: { session }, error: authError } = await supabase.auth.getSession()
     console.log('👤 Auth Session User:', session?.user?.id)

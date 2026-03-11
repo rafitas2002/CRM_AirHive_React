@@ -473,7 +473,8 @@ export async function bootstrapLegacyQuotesIfEmpty() {
             if (insertError) throw insertError
         }
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true, inserted: payload.length }
     } catch (error: any) {
         return { success: false, error: error.message, inserted: 0 }
@@ -649,7 +650,8 @@ export async function toggleQuoteReaction(quoteId: number, reactionType: QuoteRe
         }
 
         const reactionStats = await buildReactionStatsByQuote(dbClient, [quoteId], current.userId)
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return {
             success: true,
             data: reactionStats[quoteId] || { likes_count: 0, dislikes_count: 0, current_user_reaction: null }
@@ -876,7 +878,8 @@ export async function createQuote(input: CreateQuoteInput) {
 
         if (error) throw error
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
@@ -948,7 +951,8 @@ export async function createQuoteRequest(input: CreateQuoteInput) {
 
         if (error) throw error
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
@@ -1119,7 +1123,8 @@ export async function reviewQuoteRequest(requestId: number, decision: QuoteReque
 
         if (updateError) throw updateError
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
@@ -1211,7 +1216,8 @@ export async function toggleQuoteActive(id: number, isActive: boolean) {
 
         if (error) throw error
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
@@ -1283,7 +1289,8 @@ export async function updateQuote(id: number, input: UpdateQuoteInput) {
 
         if (error) throw error
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
@@ -1315,7 +1322,8 @@ export async function deleteQuote(id: number) {
 
         if (error) throw error
 
-        revalidatePath('/settings/personalizacion')
+        revalidatePath('/settings/frases');
+        revalidatePath('/settings/aprobaciones')
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }

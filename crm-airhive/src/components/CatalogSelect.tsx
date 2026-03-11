@@ -19,6 +19,12 @@ interface CatalogSelectProps {
     onDeleteOption?: (id: string) => void
     disabled?: boolean
     canDeleteOptions?: boolean
+    createContext?: {
+        module?: string
+        entityType?: string
+        entityId?: string
+        entityName?: string
+    }
 }
 
 export default function CatalogSelect({
@@ -30,7 +36,8 @@ export default function CatalogSelect({
     onNewOption,
     onDeleteOption,
     canDeleteOptions = false,
-    disabled = false
+    disabled = false,
+    createContext
 }: CatalogSelectProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
@@ -48,7 +55,7 @@ export default function CatalogSelect({
         if (!newItemName.trim()) return
 
         setLoading(true)
-        const result = await createCatalogItem(tableName, newItemName)
+        const result = await createCatalogItem(tableName, newItemName, createContext)
         setLoading(false)
 
         if (result.success && result.data) {
@@ -58,6 +65,10 @@ export default function CatalogSelect({
             setIsCreating(false)
             setIsOpen(false)
             setDeleteModeEnabled(false)
+            if (result.pendingApproval) {
+                const approverName = String(result?.approver?.name || 'admin')
+                alert(`Industria registrada temporalmente. ${approverName} debe aprobarla o mapearla desde Settings.`)
+            }
         } else {
             alert('Error al crear opción: ' + (result.error || 'Desconocido'))
         }

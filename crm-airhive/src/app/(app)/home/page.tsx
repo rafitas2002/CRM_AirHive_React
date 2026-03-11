@@ -19,7 +19,8 @@ import {
     Clock3,
     Percent,
     ShieldAlert,
-    Activity
+    Activity,
+    Cake
 } from 'lucide-react'
 import SellerRace from '@/components/SellerRace'
 import PipelineVisualizer from '@/components/PipelineVisualizer'
@@ -31,11 +32,12 @@ import {
     computeSellerForecastRaceReliability,
     computeSellerOverallForecastReliability
 } from '@/lib/forecastRaceAdjustments'
-import { getAdminExecutiveDashboardSupportData } from '@/app/actions/dashboard'
+import { getAdminExecutiveDashboardSupportData, getHomeBirthdaysSupportData } from '@/app/actions/dashboard'
 import { getLeadLossExecutiveSummarySupportData, type LeadLossExecutiveSummaryPayload } from '@/app/actions/lossAnalytics'
 import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
 import { useTheme } from '@/lib/ThemeContext'
 import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
+import { parseLocalDateOnly } from '@/lib/dateUtils'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type ForecastReliabilityMetric = Database['public']['Tables']['seller_forecast_reliability_metrics']['Row']
@@ -45,6 +47,21 @@ type CrmEventRow = {
     event_type?: string | null
     created_at?: string | null
 }
+
+type HomeBirthdaySupportRow = {
+    userId: string
+    fullName: string
+    birthDate: string
+}
+
+type HomeBirthdayComputedRow = HomeBirthdaySupportRow & {
+    nextBirthdayDate: Date
+    daysUntil: number
+    nextAge: number | null
+}
+
+const BIRTHDAY_LOOKAHEAD_DAYS = 10
+const DAY_MS = 1000 * 60 * 60 * 24
 
 const normalizeStage = (stage: string | null | undefined) => String(stage || '').trim().toLowerCase()
 const isWonStage = (stage: string | null | undefined) => normalizeStage(stage).includes('ganad')
@@ -157,16 +174,190 @@ const HERO_DRONE_PATTERN: HeroDronePatternItem[] = (() => {
     )
 })()
 
+function toStartOfLocalDay(date: Date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+}
+
+function resolveBirthdayForYear(birthDate: Date, year: number) {
+    const month = birthDate.getMonth()
+    const day = birthDate.getDate()
+    const candidate = new Date(year, month, day, 12, 0, 0, 0)
+
+    // Handle invalid calendar carry-over (e.g., Feb 29 in non-leap years).
+    if (candidate.getMonth() !== month) {
+        return new Date(year, month + 1, 0, 12, 0, 0, 0)
+    }
+
+    return candidate
+}
+
+function computeUpcomingBirthdays(rows: HomeBirthdaySupportRow[], lookaheadDays: number) {
+    const today = toStartOfLocalDay(new Date())
+    return rows
+        .map<HomeBirthdayComputedRow | null>((row) => {
+            const birthDate = parseLocalDateOnly(row.birthDate)
+            if (!birthDate) return null
+
+            let nextBirthdayDate = resolveBirthdayForYear(birthDate, today.getFullYear())
+            if (toStartOfLocalDay(nextBirthdayDate).getTime() < today.getTime()) {
+                nextBirthdayDate = resolveBirthdayForYear(birthDate, today.getFullYear() + 1)
+            }
+
+            const daysUntil = Math.floor((toStartOfLocalDay(nextBirthdayDate).getTime() - today.getTime()) / DAY_MS)
+            if (daysUntil < 0 || daysUntil > lookaheadDays) return null
+
+            return {
+                ...row,
+                nextBirthdayDate,
+                daysUntil,
+                nextAge: Number.isFinite(birthDate.getFullYear()) ? nextBirthdayDate.getFullYear() - birthDate.getFullYear() : null
+            }
+        })
+        .filter((row: HomeBirthdayComputedRow | null): row is HomeBirthdayComputedRow => !!row)
+        .sort((a, b) => {
+            if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil
+            return a.fullName.localeCompare(b.fullName, 'es', { sensitivity: 'base' })
+        })
+}
+
+function BirthdayTrackerPanel({
+    rows,
+    loading,
+    warning,
+    lookaheadDays = BIRTHDAY_LOOKAHEAD_DAYS
+}: {
+    rows: HomeBirthdaySupportRow[]
+    loading: boolean
+    warning?: string | null
+    lookaheadDays?: number
+}) {
+    const birthdayRows = useMemo(
+        () => computeUpcomingBirthdays(rows, lookaheadDays),
+        [rows, lookaheadDays]
+    )
+    const todayRows = birthdayRows.filter((row) => row.daysUntil === 0)
+
+    return (
+        <div className='rounded-[32px] border shadow-sm overflow-hidden' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+            <div className='px-6 py-5 border-b flex items-center justify-between gap-3' style={{ borderColor: 'var(--card-border)' }}>
+                <div>
+                    <h3 className='text-sm font-black tracking-tight flex items-center gap-2' style={{ color: 'var(--text-primary)' }}>
+                        <Cake size={15} className='text-rose-400' />
+                        Cumpleaños Próximos
+                    </h3>
+                    <p className='text-[10px] font-black uppercase tracking-[0.18em]' style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
+                        Próximos {lookaheadDays} días
+                    </p>
+                </div>
+                <span
+                    className='inline-flex items-center rounded-xl border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]'
+                    style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
+                >
+                    {birthdayRows.length} en ventana
+                </span>
+            </div>
+
+            <div className='p-5 space-y-3'>
+                {todayRows.length > 0 && (
+                    <div
+                        className='rounded-2xl border px-4 py-3'
+                        style={{
+                            background: 'color-mix(in srgb, #ec4899 10%, var(--card-bg))',
+                            borderColor: 'color-mix(in srgb, #ec4899 30%, var(--card-border))'
+                        }}
+                    >
+                        <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'color-mix(in srgb, #ec4899 75%, var(--text-primary))' }}>
+                            Cumpleaños de hoy
+                        </p>
+                        <p className='text-sm font-black mt-1' style={{ color: 'var(--text-primary)' }}>
+                            {todayRows.map((row) => row.fullName).join(', ')}
+                        </p>
+                    </div>
+                )}
+
+                {warning && (
+                    <div
+                        className='rounded-2xl border px-3 py-2 text-xs font-semibold'
+                        style={{
+                            background: 'color-mix(in srgb, #f59e0b 10%, var(--card-bg))',
+                            borderColor: 'color-mix(in srgb, #f59e0b 28%, var(--card-border))',
+                            color: 'color-mix(in srgb, #b45309 75%, var(--text-primary))'
+                        }}
+                    >
+                        {warning}
+                    </div>
+                )}
+
+                {loading ? (
+                    <div className='py-6 text-center text-sm font-semibold animate-pulse' style={{ color: 'var(--text-secondary)' }}>
+                        Cargando cumpleaños...
+                    </div>
+                ) : birthdayRows.length === 0 ? (
+                    <div className='py-6 text-center text-sm font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                        Sin cumpleaños en los próximos {lookaheadDays} días.
+                    </div>
+                ) : (
+                    <div className='overflow-x-auto'>
+                        <table className='w-full min-w-[520px]'>
+                            <thead>
+                                <tr className='text-left border-b' style={{ borderColor: 'var(--card-border)' }}>
+                                    <th className='py-2 pr-3 text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>Usuario</th>
+                                    <th className='py-2 pr-3 text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>Cumpleaños</th>
+                                    <th className='py-2 text-[10px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-secondary)' }}>Cuenta regresiva</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {birthdayRows.map((row) => (
+                                    <tr key={`home-birthday-${row.userId}`} className='border-b last:border-b-0' style={{ borderColor: 'var(--card-border)' }}>
+                                        <td className='py-2.5 pr-3 text-sm font-black' style={{ color: 'var(--text-primary)' }}>{row.fullName}</td>
+                                        <td className='py-2.5 pr-3 text-sm font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                            {row.nextBirthdayDate.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                                            {row.nextAge != null && (
+                                                <span className='ml-2 text-[11px] font-black' style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+                                                    ({row.nextAge} años)
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className='py-2.5'>
+                                            {row.daysUntil === 0 ? (
+                                                <span className='inline-flex items-center rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]'
+                                                    style={{
+                                                        background: 'color-mix(in srgb, #ec4899 12%, var(--card-bg))',
+                                                        borderColor: 'color-mix(in srgb, #ec4899 34%, var(--card-border))',
+                                                        color: 'color-mix(in srgb, #ec4899 78%, var(--text-primary))'
+                                                    }}>
+                                                    Hoy
+                                                </span>
+                                            ) : (
+                                                <span className='text-sm font-black tabular-nums' style={{ color: 'var(--text-primary)' }}>
+                                                    {row.daysUntil} día{row.daysUntil === 1 ? '' : 's'}
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
 function AdminDashboardView({ displayName }: { displayName: string }) {
     const { theme } = useTheme()
     const [leads, setLeads] = useState<Lead[]>([])
     const [reliabilityMetricsBySellerId, setReliabilityMetricsBySellerId] = useState<Record<string, ForecastReliabilityMetric>>({})
     const [sellerProfilesById, setSellerProfilesById] = useState<Record<string, { fullName?: string | null; role?: string | null; banned?: boolean | null }>>({})
     const [crmEvents, setCrmEvents] = useState<CrmEventRow[]>([])
+    const [birthdaySupportRows, setBirthdaySupportRows] = useState<HomeBirthdaySupportRow[]>([])
     const [activeCompaniesCountSupport, setActiveCompaniesCountSupport] = useState<number | null>(null)
     const [executiveSupportWarning, setExecutiveSupportWarning] = useState<string | null>(null)
     const [lossExecutiveSummary, setLossExecutiveSummary] = useState<LeadLossExecutiveSummaryPayload | null>(null)
     const [lossExecutiveWarning, setLossExecutiveWarning] = useState<string | null>(null)
+    const [birthdayWarning, setBirthdayWarning] = useState<string | null>(null)
+    const [birthdaysLoading, setBirthdaysLoading] = useState(true)
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
 
@@ -179,17 +370,20 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
+            setBirthdaysLoading(true)
             try {
                 const [
                     { data: leadData },
                     { data: reliabilityData },
                     supportDataRes,
-                    lossExecutiveRes
+                    lossExecutiveRes,
+                    birthdaySupportRes
                 ] = await Promise.all([
                     supabase.from('clientes').select('*'),
                     (supabase.from('seller_forecast_reliability_metrics') as any).select('*'),
                     getAdminExecutiveDashboardSupportData(),
-                    getLeadLossExecutiveSummarySupportData('month')
+                    getLeadLossExecutiveSummarySupportData('month'),
+                    getHomeBirthdaysSupportData()
                 ])
 
                 if (leadData) setLeads(leadData)
@@ -230,6 +424,14 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     setLossExecutiveSummary(null)
                     setLossExecutiveWarning(lossExecutiveRes?.error || 'Sin acceso a analytics de pérdidas')
                 }
+
+                if (birthdaySupportRes?.success) {
+                    setBirthdaySupportRows(Array.isArray(birthdaySupportRes.data) ? birthdaySupportRes.data as HomeBirthdaySupportRow[] : [])
+                    setBirthdayWarning(null)
+                } else {
+                    setBirthdaySupportRows([])
+                    setBirthdayWarning(birthdaySupportRes?.error || 'No se pudo cargar la tabla de cumpleaños')
+                }
             } catch (error: any) {
                 console.error('Error loading admin dashboard:', error)
                 setSellerProfilesById({})
@@ -238,8 +440,11 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                 setExecutiveSupportWarning(error?.message || 'Fallo al cargar señales ejecutivas')
                 setLossExecutiveSummary(null)
                 setLossExecutiveWarning(error?.message || 'Fallo al cargar analytics de pérdidas')
+                setBirthdaySupportRows([])
+                setBirthdayWarning(error?.message || 'Fallo al cargar cumpleaños')
             } finally {
                 setLoading(false)
+                setBirthdaysLoading(false)
             }
         }
         fetchData()
@@ -683,6 +888,13 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                     </div>
                 </div>
 
+                <BirthdayTrackerPanel
+                    rows={birthdaySupportRows}
+                    loading={birthdaysLoading}
+                    warning={birthdayWarning}
+                    lookaheadDays={BIRTHDAY_LOOKAHEAD_DAYS}
+                />
+
                 {/* Main Content Sections */}
                 <div className='grid grid-cols-1 xl:grid-cols-3 gap-8'>
                     {/* Left & Middle: Sales Performance */}
@@ -953,30 +1165,60 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
 function SellerHomeView({ displayName }: { displayName: string }) {
     const [supabase] = useState(() => createClient())
     const [stats, setStats] = useState({ activeLeads: 0, negotiationLeads: 0, totalValue: 0 })
+    const [birthdaySupportRows, setBirthdaySupportRows] = useState<HomeBirthdaySupportRow[]>([])
+    const [birthdayWarning, setBirthdayWarning] = useState<string | null>(null)
+    const [birthdaysLoading, setBirthdaysLoading] = useState(true)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         const fetchStats = async () => {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            setLoading(true)
+            setBirthdaysLoading(true)
+            try {
+                const [{ data: authData }, birthdaySupportRes] = await Promise.all([
+                    supabase.auth.getUser(),
+                    getHomeBirthdaysSupportData()
+                ])
+                const user = authData?.user
+                if (!user) {
+                    setStats({ activeLeads: 0, negotiationLeads: 0, totalValue: 0 })
+                } else {
+                    const { data: leads } = await (supabase
+                        .from('clientes') as any)
+                        .select('*')
+                        .eq('owner_id', user.id)
 
-            const { data: leads } = await (supabase
-                .from('clientes') as any)
-                .select('*')
-                .eq('owner_id', user.id)
+                    if (leads) {
+                        const active = leads.filter((l: any) => !l.etapa?.toLowerCase().includes('cerrado'))
+                        const negotiation = leads.filter((l: any) => l.etapa === 'Negociación')
+                        const totalValue = negotiation.reduce((acc: number, l: any) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
 
-            if (leads) {
-                const active = leads.filter((l: any) => !l.etapa?.toLowerCase().includes('cerrado'))
-                const negotiation = leads.filter((l: any) => l.etapa === 'Negociación')
-                const totalValue = negotiation.reduce((acc: number, l: any) => acc + ((l.probabilidad || 0) / 100 * (l.valor_estimado || 0)), 0)
+                        setStats({
+                            activeLeads: active.length,
+                            negotiationLeads: negotiation.length,
+                            totalValue
+                        })
+                    } else {
+                        setStats({ activeLeads: 0, negotiationLeads: 0, totalValue: 0 })
+                    }
+                }
 
-                setStats({
-                    activeLeads: active.length,
-                    negotiationLeads: negotiation.length,
-                    totalValue
-                })
+                if (birthdaySupportRes?.success) {
+                    setBirthdaySupportRows(Array.isArray(birthdaySupportRes.data) ? birthdaySupportRes.data as HomeBirthdaySupportRow[] : [])
+                    setBirthdayWarning(null)
+                } else {
+                    setBirthdaySupportRows([])
+                    setBirthdayWarning(birthdaySupportRes?.error || 'No se pudo cargar la tabla de cumpleaños')
+                }
+            } catch (error: any) {
+                console.error('Error loading seller dashboard:', error)
+                setStats({ activeLeads: 0, negotiationLeads: 0, totalValue: 0 })
+                setBirthdaySupportRows([])
+                setBirthdayWarning(error?.message || 'No se pudo cargar la tabla de cumpleaños')
+            } finally {
+                setLoading(false)
+                setBirthdaysLoading(false)
             }
-            setLoading(false)
         }
         fetchStats()
     }, [supabase])
@@ -1049,6 +1291,13 @@ function SellerHomeView({ displayName }: { displayName: string }) {
                         <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>Valor esperado</p>
                     </div>
                 </div>
+
+                <BirthdayTrackerPanel
+                    rows={birthdaySupportRows}
+                    loading={birthdaysLoading}
+                    warning={birthdayWarning}
+                    lookaheadDays={BIRTHDAY_LOOKAHEAD_DAYS}
+                />
 
                 {/* Main Content Grid */}
                 <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
