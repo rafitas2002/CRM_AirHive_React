@@ -1,17 +1,22 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Check, ChevronsUpDown, X } from 'lucide-react'
 import { getEmployeesList } from '@/app/actions/employees'
 
 interface UserSelectProps {
-    value: string[] // Array of emails or IDs
+    value: string[]
     onChange: (value: string[]) => void
     label?: string
     placeholder?: string
 }
 
-export default function UserSelect({ value = [], onChange, label = 'Usuarios', placeholder = 'Seleccionar usuarios...' }: UserSelectProps) {
+export default function UserSelect({
+    value = [],
+    onChange,
+    label = 'Usuarios',
+    placeholder = 'Seleccionar usuarios...'
+}: UserSelectProps) {
     const [open, setOpen] = useState(false)
     const [users, setUsers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
@@ -26,12 +31,11 @@ export default function UserSelect({ value = [], onChange, label = 'Usuarios', p
             }
             setLoading(false)
         }
-        fetchUsers()
+        void fetchUsers()
     }, [])
 
     useEffect(() => {
-        // Close on click outside
-        const handleClickOutside = (event: MouseEvent) => {
+        const handleClickOutside = (event: globalThis.MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setOpen(false)
             }
@@ -40,138 +44,131 @@ export default function UserSelect({ value = [], onChange, label = 'Usuarios', p
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    const filteredUsers = users.filter(u =>
-        (u.full_name?.toLowerCase() || '').includes(search.toLowerCase()) ||
-        (u.username?.toLowerCase() || '').includes(search.toLowerCase())
+    const filteredUsers = users.filter((user) =>
+        (user.full_name?.toLowerCase() || '').includes(search.toLowerCase())
+        || (user.username?.toLowerCase() || '').includes(search.toLowerCase())
     )
 
-    const handleSelect = (email: string) => {
-        if (value.includes(email)) {
-            onChange(value.filter(v => v !== email))
-        } else {
-            onChange([...value, email])
+    const handleSelect = (userKey: string) => {
+        if (value.includes(userKey)) {
+            onChange(value.filter((entry) => entry !== userKey))
+            return
         }
+        onChange([...value, userKey])
     }
 
-    const removeTag = (email: string, e: React.MouseEvent) => {
+    const removeTag = (userKey: string, e: ReactMouseEvent<HTMLButtonElement>) => {
         e.stopPropagation()
-        onChange(value.filter(v => v !== email))
+        onChange(value.filter((entry) => entry !== userKey))
     }
 
     return (
         <div className='space-y-1.5' ref={wrapperRef}>
-            {label && <label className='block text-sm font-bold text-[#0F2A44]'>{label}</label>}
+            {label && (
+                <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                    {label}
+                </label>
+            )}
 
             <div className='relative'>
                 <div
-                    className='min-h-[42px] w-full px-3 py-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-[#2048FF] focus-within:border-transparent bg-white cursor-text flex flex-wrap gap-2 items-center'
+                    className='min-h-[42px] w-full px-3 py-2 border rounded-lg focus-within:ring-2 focus-within:ring-[#2048FF]/30 focus-within:border-[#2048FF] cursor-text flex flex-wrap gap-2 items-center transition-colors'
+                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)' }}
                     onClick={() => setOpen(true)}
                 >
                     {value.length > 0 ? (
-                        value.map(email => {
-                            const user = users.find(u => u.username === email || u.email === email) // fallback if we stored email
-                            // Actually username is email based on previous context, but let's be safe.
-                            // The backend implementation of getEmployeesList returns username which IS the email prefix or email. 
-                            // Wait, getEmployeesList returns `username` which is `email.split('@')[0]` usually.
-                            // But usually attendees are full emails.
-                            // Let's check getEmployeesList implementation again. 
-                            // It returns `username` from `profiles`.
-                            // `profiles` table might not have full email.
-                            // Wait, `profiles` table has `username`. Is it the email?
-
-                            // Checking implementation: 
-                            // `updateEmployee` updates `username`.
-                            // `createEmployee` sets `username: data.email.split('@')[0]`.
-                            // So `username` is NOT the email. It's the handle.
-                            // Attendees in Calendar usually need EMAIL for invites.
-                            // I need to update `getEmployeesList` to return the EMAIL.
-                            // `profiles` table does NOT usually store email unless added.
-                            // BUT `createEmployee` sets it.
-                            // I may need to fetch `users` from auth? No, admin can't easily fetch all emails of users via Client SDK w/o Admin API.
-                            // But `getEmployeesList` uses `createClient` (server component logic?) NO, it uses standart `createClient` with cookies.
-                            // If `profiles` doesn't have email, I'm in trouble for invites.
-                            // Let's re-read `createEmployee`. 
-                            // It does NOT insert email into profiles. It inserts into Auth.
-                            // However, `updateEmployee` allows updating email in Auth.
-
-                            // Constraint: We need Email for calendar invites.
-                            // IF profiles doesn't have email, we can't invite them effectively to Google Calendar unless we guess @domain.
-                            // Or, we accept that for now we match by name/username.
-                            // But `MeetingModal` expects emails for `attendees` array usually.
-
-                            // For now, I will assume the username + domain or simply use the username if email is unavailable, 
-                            // BUT checking `getEmployeesList` again: it only selects `username`.
-                            // I should verify if `profiles` has an `email` column. 
-                            // If not, I should probably rely on `username` and display that, 
-                            // OR I should use `supabaseAdmin` to fetch users with emails if possible, but that's heavy.
-
-                            // Alternative: `createEmployee` creates a profile. Maybe I should've added email to profile.
-                            // Let's assume for this component we display `full_name` and value is what is stored.
-
-                            const display = user ? user.full_name : email
+                        value.map((userKey) => {
+                            const user = users.find((entry) => entry.username === userKey || entry.email === userKey)
+                            const displayName = user?.full_name || userKey
                             return (
-                                <span key={email} className='inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-bold'>
-                                    {display}
-                                    <button onClick={(e) => removeTag(email, e)} className='hover:text-blue-900'><X size={12} /></button>
+                                <span
+                                    key={userKey}
+                                    className='inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold border'
+                                    style={{
+                                        background: 'color-mix(in srgb, #3b82f6 10%, var(--card-bg))',
+                                        borderColor: 'color-mix(in srgb, #3b82f6 26%, var(--card-border))',
+                                        color: 'color-mix(in srgb, #2563eb 78%, var(--text-primary))'
+                                    }}
+                                >
+                                    {displayName}
+                                    <button
+                                        onClick={(e) => removeTag(userKey, e)}
+                                        className='cursor-pointer hover:opacity-80 transition-opacity'
+                                        style={{ color: 'inherit' }}
+                                    >
+                                        <X size={12} />
+                                    </button>
                                 </span>
                             )
                         })
                     ) : (
-                        <span className='text-gray-400 text-sm'>{placeholder}</span>
+                        <span className='text-sm' style={{ color: 'var(--text-secondary)' }}>
+                            {placeholder}
+                        </span>
                     )}
 
-                    <div className='flex-1 min-w-[60px]'>
-                        {/* Invisible logic to keep layout, search input could go here but dropdown search is better */}
-                    </div>
-
-                    <ChevronsUpDown className='w-4 h-4 text-gray-400 ml-auto' />
+                    <div className='flex-1 min-w-[60px]' />
+                    <ChevronsUpDown className='w-4 h-4 ml-auto' style={{ color: 'var(--text-secondary)' }} />
                 </div>
 
                 {open && (
-                    <div className='absolute z-50 top-full mt-1 w-full bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden max-h-60 flex flex-col'>
-                        <div className='p-2 border-b border-gray-100'>
+                    <div
+                        className='absolute z-50 top-full mt-1 w-full rounded-xl border overflow-hidden max-h-60 flex flex-col shadow-xl'
+                        style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                    >
+                        <div className='p-2 border-b' style={{ borderColor: 'var(--card-border)' }}>
                             <input
                                 autoFocus
-                                className='w-full px-3 py-1.5 bg-gray-50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#2048FF]'
+                                className='w-full px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#2048FF] transition-colors'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
                                 placeholder='Buscar...'
                                 value={search}
-                                onChange={e => setSearch(e.target.value)}
+                                onChange={(e) => setSearch(e.target.value)}
                             />
                         </div>
                         <div className='overflow-y-auto flex-1 p-1'>
                             {loading ? (
-                                <div className='p-4 text-center text-xs text-gray-400'>Cargando...</div>
+                                <div className='p-4 text-center text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                    Cargando...
+                                </div>
                             ) : filteredUsers.length > 0 ? (
-                                filteredUsers.map(user => {
-                                    // Construct an email-like value or ID.
-                                    // If we don't have email, we use username. 
-                                    // Ideally we want email.
-                                    // Let's use `user.username` for now as the ID.
-                                    // The user asked to "select from users".
-                                    const val = user.username;
-                                    const isSelected = value.includes(val)
+                                filteredUsers.map((user) => {
+                                    const userKey = user.username
+                                    const isSelected = value.includes(userKey)
                                     return (
                                         <button
                                             key={user.id}
-                                            onClick={() => handleSelect(val)}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50 text-[#2048FF]' : 'hover:bg-gray-50 text-gray-700'}`}
+                                            type='button'
+                                            onClick={() => handleSelect(userKey)}
+                                            className='w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors cursor-pointer'
+                                            style={isSelected
+                                                ? {
+                                                    background: 'color-mix(in srgb, #3b82f6 10%, var(--card-bg))',
+                                                    color: 'color-mix(in srgb, #2563eb 78%, var(--text-primary))'
+                                                }
+                                                : { color: 'var(--text-primary)' }}
                                         >
                                             <div className='flex flex-col'>
                                                 <span className='font-bold'>{user.full_name}</span>
-                                                <span className='text-xs opacity-70'>{user.username}</span>
+                                                <span className='text-xs opacity-70' style={{ color: 'var(--text-secondary)' }}>
+                                                    {user.username}
+                                                </span>
                                             </div>
                                             {isSelected && <Check size={16} />}
                                         </button>
                                     )
                                 })
                             ) : (
-                                <div className='p-4 text-center text-xs text-gray-400'>No se encontraron usuarios</div>
+                                <div className='p-4 text-center text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                    No se encontraron usuarios
+                                </div>
                             )}
                         </div>
                     </div>
                 )}
             </div>
-            <p className='text-xs text-gray-400 text-right'>
+
+            <p className='text-xs text-right' style={{ color: 'var(--text-secondary)' }}>
                 Selecciona los usuarios internos para la reunión
             </p>
         </div>

@@ -70,11 +70,26 @@ export default function TasksList({ leadId, onRefresh }: TasksListProps) {
         setTaskToDelete(null)
     }
 
-    if (loading) return <div className='py-4 text-center text-xs text-gray-400 animate-pulse'>Cargando tareas...</div>
+    if (loading) return (
+        <div className='py-4 text-center text-xs animate-pulse' style={{ color: 'var(--text-secondary)' }}>
+            Cargando tareas...
+        </div>
+    )
 
     if (tasks.length === 0) return (
-        <div className='py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200'>
-            <p className='text-[10px] font-bold text-gray-400 uppercase tracking-widest'>Sin tareas pendientes</p>
+        <div
+            className='py-8 text-center rounded-xl border border-dashed'
+            style={{
+                background: 'color-mix(in srgb, var(--hover-bg) 82%, var(--card-bg))',
+                borderColor: 'color-mix(in srgb, var(--text-secondary) 20%, var(--card-border))'
+            }}
+        >
+            <p
+                className='text-[10px] font-bold uppercase tracking-widest'
+                style={{ color: 'color-mix(in srgb, var(--text-secondary) 82%, var(--text-primary))' }}
+            >
+                Sin tareas pendientes
+            </p>
         </div>
     )
 
