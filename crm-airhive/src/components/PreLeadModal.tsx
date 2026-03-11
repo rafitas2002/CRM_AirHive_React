@@ -24,6 +24,8 @@ interface PreLeadModalProps {
     mode: 'create' | 'edit'
 }
 
+const isPendingIndustryOptionId = (value?: string | null) => String(value || '').startsWith('pending_industry:')
+
 export default function PreLeadModal({
     isOpen,
     onClose,
@@ -227,6 +229,9 @@ export default function PreLeadModal({
 
             const cleaned = {
                 ...formData,
+                industria_id: isPendingIndustryOptionId(formData.industria_id) ? '' : formData.industria_id,
+                industria: formData.industria || formData.giro_empresa || 'Sin clasificar',
+                giro_empresa: formData.industria || formData.giro_empresa || 'Sin clasificar',
                 ubicacion: locationResolution.valueToPersist,
                 tamano_confianza: normalizeCompanySizeEvidenceText(formData.tamano_confianza),
                 tamano_fuente: normalizeCompanySizeEvidenceText(formData.tamano_fuente),
@@ -339,7 +344,7 @@ export default function PreLeadModal({
                                 label="Industria"
                                 value={formData.industria_id || ''}
                                 onChange={(val) => {
-                                    const name = catalogs.industrias?.find(i => i.id === val)?.name || ''
+                                    const name = catalogs.industrias?.find(i => i.id === val)?.name || formData.industria || ''
                                     setFormData({ ...formData, industria_id: val, industria: name, giro_empresa: name })
                                 }}
                                 options={catalogs.industrias || []}
@@ -349,8 +354,22 @@ export default function PreLeadModal({
                                         ...prev,
                                         industrias: [...(prev.industrias || []), opt].sort((a, b) => a.name.localeCompare(b.name))
                                     }))
+                                    if (isPendingIndustryOptionId(opt.id)) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            industria_id: opt.id,
+                                            industria: opt.name,
+                                            giro_empresa: opt.name
+                                        }))
+                                    }
                                 }}
                                 canDeleteOptions={isAdmin}
+                                createContext={{
+                                    module: 'pre_lead_modal',
+                                    entityType: 'pre_lead',
+                                    entityId: String(initialData?.id || ''),
+                                    entityName: formData.nombre_empresa || ''
+                                }}
                                 onDeleteOption={(deletedId) => {
                                     setCatalogs(prev => ({
                                         ...prev,

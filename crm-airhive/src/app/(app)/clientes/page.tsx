@@ -12,6 +12,7 @@ import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { Database } from '@/lib/supabase'
 import { useTheme } from '@/lib/ThemeContext'
 import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
+import { syncLeadProjectAssignments } from '@/lib/leadProjectAssignments'
 
 type Lead = Database['public']['Tables']['clientes']['Row']
 type LeadInsert = Database['public']['Tables']['clientes']['Insert']
@@ -474,6 +475,7 @@ export default function LeadsPage() {
         prospectionSameCloseProjectIds?: string[]
         futureLeadOpportunityProjectIds?: string[]
         implementedRealProjectIds?: string[]
+        forecastProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         implementedRealProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         assignedByUserId?: string | null
     }) => {
@@ -485,58 +487,17 @@ export default function LeadsPage() {
         const prospectionSameClose = Array.from(new Set((params.prospectionSameCloseProjectIds || []).filter(Boolean)))
         const futureLeadOpportunity = Array.from(new Set((params.futureLeadOpportunityProjectIds || []).filter(Boolean)))
         const implementedReal = Array.from(new Set((params.implementedRealProjectIds || []).filter(Boolean)))
-        const implementedRealProjectValues = params.implementedRealProjectValues || {}
-
-        const { error: deleteError } = await (supabase.from('empresa_proyecto_asignaciones') as any)
-            .delete()
-            .eq('empresa_id', empresaId)
-            .eq('source_lead_id', leadId)
-
-        if (deleteError) {
-            throw deleteError
-        }
-
-        const rows = [
-            ...inNegotiation.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'in_negotiation',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...prospectionSameClose.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'prospection_same_close',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...futureLeadOpportunity.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'future_lead_opportunity',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...implementedReal.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'implemented_real',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null,
-                mensualidad_pactada_usd: implementedRealProjectValues[projectId]?.mensualidad_usd ?? null,
-                implementacion_pactada_usd: implementedRealProjectValues[projectId]?.implementacion_usd ?? null
-            }))
-        ]
-
-        if (rows.length === 0) return
-
-        const { error: upsertError } = await ((supabase.from('empresa_proyecto_asignaciones') as any))
-            .upsert(rows, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
-
-        if (upsertError) {
-            throw upsertError
-        }
+        await syncLeadProjectAssignments(supabase as any, {
+            leadId,
+            empresaId,
+            inNegotiationProjectIds: inNegotiation,
+            prospectionSameCloseProjectIds: prospectionSameClose,
+            futureLeadOpportunityProjectIds: futureLeadOpportunity,
+            implementedRealProjectIds: implementedReal,
+            forecastProjectValues: params.forecastProjectValues || {},
+            implementedRealProjectValues: params.implementedRealProjectValues || {},
+            assignedByUserId: params.assignedByUserId || null
+        })
 
         // Auto-register implemented industries for the project based on the company's industries
         // once the project is marked as implemented_real.
@@ -717,6 +678,7 @@ export default function LeadsPage() {
                     prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
                     futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
                     implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                    forecastProjectValues: (leadData as any).proyectos_pronosticados_valores || {},
                     implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
                     assignedByUserId: currentUser.id
                 }
@@ -915,6 +877,7 @@ export default function LeadsPage() {
                 prospectionSameCloseProjectIds: (leadData as any).proyectos_prospeccion_mismo_cierre_ids || [],
                 futureLeadOpportunityProjectIds: (leadData as any).proyectos_futuro_lead_ids || [],
                 implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
+                forecastProjectValues: (leadData as any).proyectos_pronosticados_valores || {},
                 implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
                 assignedByUserId: currentUser.id
             }
@@ -1533,7 +1496,7 @@ export default function LeadsPage() {
                                                 <td className='px-4 py-3 align-top text-sm font-black' style={{ color: 'var(--text-primary)' }}>
                                                     {row.valor_estimado == null
                                                         ? 'N/D'
-                                                        : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(row.valor_estimado))}
+                                                        : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(row.valor_estimado))}
                                                 </td>
                                                 <td className='px-4 py-3 align-top'>
                                                     <span

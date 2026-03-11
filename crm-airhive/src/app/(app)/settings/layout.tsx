@@ -3,24 +3,40 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { Settings, Palette, Link2, UserRound, Users } from 'lucide-react'
+import { Settings, MessageSquareQuote, Link2, UserRound, Users, ShieldCheck } from 'lucide-react'
 
 const settingsLinks = [
-    { href: '/settings/personalizacion', label: 'Personalización', icon: Palette },
-    { href: '/settings/cuentas', label: 'Conectar Cuentas', icon: Link2 },
-    { href: '/settings/perfil', label: 'Perfil de Usuario', icon: UserRound }
+    { href: '/settings/perfil', label: 'Perfil de Usuario', icon: UserRound },
+    { href: '/settings/frases', label: 'Frases', icon: MessageSquareQuote },
+    { href: '/settings/cuentas', label: 'Conectar Cuentas', icon: Link2 }
 ]
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
-    const { profile } = useAuth()
+    const { profile, user } = useAuth()
 
-    // Check if user is Admin or RH
+    const normalizeSignature = (value: unknown) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+
+    // Check if user is Admin/RH or designated approver (Jesus)
     const isAdminOrRH = profile?.role === 'admin' || profile?.role === 'rh'
+    const isDesignatedApprover = normalizeSignature(profile?.username) === 'jesus.gracia'
+        || normalizeSignature(profile?.full_name) === 'jesus gracia'
+        || normalizeSignature(String(user?.email || '').split('@')[0]) === 'jesus.gracia'
 
     const displayedLinks = [
         ...settingsLinks,
-        ...(isAdminOrRH ? [{ href: '/settings/equipo', label: 'Equipo', icon: Users }] : [])
+        ...(isAdminOrRH
+            ? [
+                { href: '/settings/equipo', label: 'Equipo', icon: Users },
+                { href: '/settings/aprobaciones', label: 'Aprobaciones', icon: ShieldCheck }
+            ]
+            : isDesignatedApprover
+                ? [{ href: '/settings/aprobaciones', label: 'Aprobaciones', icon: ShieldCheck }]
+            : [])
     ]
 
     return (
@@ -36,7 +52,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                             Configuración
                         </h1>
                     </div>
-                    <p className='text-sm mt-1' style={{ color: 'var(--text-secondary)' }}>Personaliza tu experiencia</p>
+                    <p className='text-sm mt-1' style={{ color: 'var(--text-secondary)' }}>Gestiona tu perfil, frases y aprobaciones</p>
                 </div>
 
                 <nav className='flex-1 p-4 space-y-2'>

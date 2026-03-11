@@ -10,7 +10,7 @@ import TaskModal from './TaskModal'
 import MeetingModal from './MeetingModal'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { createMeeting } from '@/lib/meetingsService'
-import { FileText, MapPin, Globe, Users2, ClipboardList, FolderClosed, CalendarClock, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil, Camera, ArrowUpRight, ArrowDownRight, Minus, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, MapPin, Globe, Users2, ClipboardList, FolderClosed, CalendarClock, CheckCircle2, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil, Camera, ArrowUpRight, ArrowDownRight, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
@@ -25,6 +25,11 @@ import {
     getTaskStatusToneLane,
     type UiToneLane
 } from '@/lib/semanticUiTones'
+import {
+    fetchLeadProjectAssignments,
+    mapAssignmentsToLeadProjectSelection,
+    syncLeadProjectAssignments
+} from '@/lib/leadProjectAssignments'
 
 type Cliente = Database['public']['Tables']['clientes']['Row']
 type MeetingRow = Database['public']['Tables']['meetings']['Row']
@@ -219,6 +224,7 @@ export default function AdminCompanyDetailView({
     const [isQuickTaskModalOpen, setIsQuickTaskModalOpen] = useState(false)
     const [isQuickMeetingLeadPickerOpen, setIsQuickMeetingLeadPickerOpen] = useState(false)
     const [isQuickMeetingModalOpen, setIsQuickMeetingModalOpen] = useState(false)
+    const [quickMeetingCreationMode, setQuickMeetingCreationMode] = useState<'schedule' | 'past_record'>('schedule')
     const [isForecastHistoryModalOpen, setIsForecastHistoryModalOpen] = useState(false)
     const [selectedMeetingLeadId, setSelectedMeetingLeadId] = useState<number | null>(null)
     const [isQuickNoteModalOpen, setIsQuickNoteModalOpen] = useState(false)
@@ -500,6 +506,7 @@ export default function AdminCompanyDetailView({
         prospectionSameCloseProjectIds?: string[]
         futureLeadOpportunityProjectIds?: string[]
         implementedRealProjectIds?: string[]
+        forecastProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         implementedRealProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         assignedByUserId?: string | null
     }) => {
@@ -511,53 +518,17 @@ export default function AdminCompanyDetailView({
         const prospectionSameClose = Array.from(new Set((params.prospectionSameCloseProjectIds || []).filter(Boolean)))
         const futureLeadOpportunity = Array.from(new Set((params.futureLeadOpportunityProjectIds || []).filter(Boolean)))
         const implementedReal = Array.from(new Set((params.implementedRealProjectIds || []).filter(Boolean)))
-        const implementedRealProjectValues = params.implementedRealProjectValues || {}
-
-        const { error: deleteError } = await (supabase.from('empresa_proyecto_asignaciones') as any)
-            .delete()
-            .eq('empresa_id', empresaId)
-            .eq('source_lead_id', leadId)
-
-        if (deleteError) throw deleteError
-
-        const rows = [
-            ...inNegotiation.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'in_negotiation',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...prospectionSameClose.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'prospection_same_close',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...futureLeadOpportunity.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'future_lead_opportunity',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null
-            })),
-            ...implementedReal.map((projectId) => ({
-                empresa_id: empresaId,
-                proyecto_id: projectId,
-                assignment_stage: 'implemented_real',
-                source_lead_id: leadId,
-                assigned_by: params.assignedByUserId || null,
-                mensualidad_pactada_usd: implementedRealProjectValues[projectId]?.mensualidad_usd ?? null,
-                implementacion_pactada_usd: implementedRealProjectValues[projectId]?.implementacion_usd ?? null
-            }))
-        ]
-
-        if (rows.length > 0) {
-            const { error: upsertError } = await ((supabase.from('empresa_proyecto_asignaciones') as any))
-                .upsert(rows, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
-            if (upsertError) throw upsertError
-        }
+        await syncLeadProjectAssignments(supabase as any, {
+            leadId,
+            empresaId,
+            inNegotiationProjectIds: inNegotiation,
+            prospectionSameCloseProjectIds: prospectionSameClose,
+            futureLeadOpportunityProjectIds: futureLeadOpportunity,
+            implementedRealProjectIds: implementedReal,
+            forecastProjectValues: params.forecastProjectValues || {},
+            implementedRealProjectValues: params.implementedRealProjectValues || {},
+            assignedByUserId: params.assignedByUserId || null
+        })
 
         if (implementedReal.length > 0) {
             const [{ data: companyRow }, { data: companyIndustryRows }] = await Promise.all([
@@ -699,6 +670,7 @@ export default function AdminCompanyDetailView({
                     prospectionSameCloseProjectIds: leadData.proyectos_prospeccion_mismo_cierre_ids || [],
                     futureLeadOpportunityProjectIds: leadData.proyectos_futuro_lead_ids || [],
                     implementedRealProjectIds: leadData.proyectos_implementados_reales_ids || [],
+                    forecastProjectValues: leadData.proyectos_pronosticados_valores || {},
                     implementedRealProjectValues: leadData.proyectos_implementados_reales_valores || {},
                     assignedByUserId: currentUser.id
                 })
@@ -806,27 +778,75 @@ export default function AdminCompanyDetailView({
             setQuickActionError('Selecciona un proyecto.')
             return
         }
+        if (!quickProjectForm.source_lead_id) {
+            setQuickActionError('Selecciona el lead al que pertenece este proyecto.')
+            return
+        }
         setQuickProjectSaving(true)
         try {
-            const payload: any = {
-                empresa_id: String(company.id),
-                proyecto_id: quickProjectForm.proyecto_id,
-                assignment_stage: quickProjectForm.assignment_stage,
-                source_lead_id: quickProjectForm.source_lead_id ? Number(quickProjectForm.source_lead_id) : null,
-                assigned_by: currentUserProfile?.id || null,
-                notes: quickProjectForm.notes.trim() || null
-            }
-            if (quickProjectForm.assignment_stage === 'implemented_real') {
-                payload.mensualidad_pactada_usd = quickProjectForm.mensualidad_pactada_usd.trim() ? Number(quickProjectForm.mensualidad_pactada_usd.replace(/[^\d]/g, '')) : null
-                payload.implementacion_pactada_usd = quickProjectForm.implementacion_pactada_usd.trim() ? Number(quickProjectForm.implementacion_pactada_usd.replace(/[^\d]/g, '')) : null
-            } else {
-                payload.mensualidad_pactada_usd = null
-                payload.implementacion_pactada_usd = null
+            const leadId = Number(quickProjectForm.source_lead_id)
+            if (!Number.isFinite(leadId) || leadId <= 0) {
+                setQuickActionError('Lead inválido para asignar el proyecto.')
+                return
             }
 
-            const { error } = await (supabase.from('empresa_proyecto_asignaciones') as any)
-                .upsert([payload], { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
-            if (error) throw error
+            const existingRows = await fetchLeadProjectAssignments(supabase as any, {
+                leadId,
+                empresaId: String(company.id)
+            })
+            const currentSelection = mapAssignmentsToLeadProjectSelection(existingRows as any)
+
+            const inNegotiation = new Set(currentSelection.inNegotiationProjectIds.map(String))
+            const prospectionSameClose = new Set(currentSelection.prospectionSameCloseProjectIds.map(String))
+            const futureLeadOpportunity = new Set(currentSelection.futureLeadOpportunityProjectIds.map(String))
+            const implementedReal = new Set(currentSelection.implementedRealProjectIds.map(String))
+            const forecastProjectValues = { ...(currentSelection.forecastProjectValues || {}) }
+            const implementedRealProjectValues = { ...(currentSelection.implementedRealProjectValues || {}) }
+            const projectId = quickProjectForm.proyecto_id
+
+            if (quickProjectForm.assignment_stage === 'implemented_real') {
+                implementedReal.add(projectId)
+                implementedRealProjectValues[projectId] = {
+                    mensualidad_usd: quickProjectForm.mensualidad_pactada_usd.trim()
+                        ? Number(quickProjectForm.mensualidad_pactada_usd.replace(/[^\d]/g, ''))
+                        : null,
+                    implementacion_usd: quickProjectForm.implementacion_pactada_usd.trim()
+                        ? Number(quickProjectForm.implementacion_pactada_usd.replace(/[^\d]/g, ''))
+                        : null
+                }
+            } else {
+                // Mantener semántica de exclusión entre etapas forecast.
+                inNegotiation.delete(projectId)
+                prospectionSameClose.delete(projectId)
+                futureLeadOpportunity.delete(projectId)
+
+                if (quickProjectForm.assignment_stage === 'in_negotiation') inNegotiation.add(projectId)
+                if (quickProjectForm.assignment_stage === 'prospection_same_close') prospectionSameClose.add(projectId)
+                if (quickProjectForm.assignment_stage === 'future_lead_opportunity') futureLeadOpportunity.add(projectId)
+
+                const monthly = quickProjectForm.mensualidad_pactada_usd.trim()
+                    ? Number(quickProjectForm.mensualidad_pactada_usd.replace(/[^\d]/g, ''))
+                    : null
+                const implementation = quickProjectForm.implementacion_pactada_usd.trim()
+                    ? Number(quickProjectForm.implementacion_pactada_usd.replace(/[^\d]/g, ''))
+                    : null
+                forecastProjectValues[projectId] = {
+                    mensualidad_usd: Number.isFinite(monthly as number) ? monthly : null,
+                    implementacion_usd: Number.isFinite(implementation as number) ? implementation : null
+                }
+            }
+
+            await syncLeadProjectAssignments(supabase as any, {
+                leadId,
+                empresaId: String(company.id),
+                inNegotiationProjectIds: Array.from(inNegotiation),
+                prospectionSameCloseProjectIds: Array.from(prospectionSameClose),
+                futureLeadOpportunityProjectIds: Array.from(futureLeadOpportunity),
+                implementedRealProjectIds: Array.from(implementedReal),
+                forecastProjectValues,
+                implementedRealProjectValues,
+                assignedByUserId: currentUserProfile?.id || null
+            })
 
             if (quickProjectForm.assignment_stage === 'implemented_real') {
                 await syncImplementedProjectIndustries([quickProjectForm.proyecto_id])
@@ -868,8 +888,9 @@ export default function AdminCompanyDetailView({
         }
     }
 
-    const handleOpenQuickMeeting = () => {
+    const handleOpenQuickMeeting = (creationMode: 'schedule' | 'past_record' = 'schedule') => {
         setQuickActionError(null)
+        setQuickMeetingCreationMode(creationMode)
         if (clients.length === 0) {
             alert('Primero crea un lead para esta empresa.')
             return
@@ -1284,7 +1305,11 @@ export default function AdminCompanyDetailView({
 
     const formatCurrency = (value?: number | null) => {
         if (value == null || Number.isNaN(Number(value))) return '-'
-        return `$${Number(value).toLocaleString('es-MX')}`
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+            maximumFractionDigits: 0
+        }).format(Number(value))
     }
 
     const formatDateTime = (value?: string | null) => {
@@ -1828,11 +1853,18 @@ export default function AdminCompanyDetailView({
                                     <Plus size={13} /> Nuevo Lead
                                 </button>
                                 <button
-                                    onClick={handleOpenQuickMeeting}
+                                    onClick={() => handleOpenQuickMeeting('schedule')}
                                     className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
                                     style={toneVars('violet')}
                                 >
                                     <CalendarPlus size={13} /> Nueva Junta
+                                </button>
+                                <button
+                                    onClick={() => handleOpenQuickMeeting('past_record')}
+                                    className={`h-10 px-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] inline-flex items-center gap-2 ${toneChipHoverButtonClassName}`}
+                                    style={toneVars('emerald')}
+                                >
+                                    <CheckCircle2 size={13} /> Junta Realizada
                                 </button>
                                 <button
                                     onClick={() => setIsQuickTaskModalOpen(true)}
@@ -2496,11 +2528,13 @@ export default function AdminCompanyDetailView({
                     onClose={() => {
                         setIsQuickMeetingModalOpen(false)
                         setSelectedMeetingLeadId(null)
+                        setQuickMeetingCreationMode('schedule')
                     }}
                     onSave={handleQuickMeetingSave}
                     leadId={selectedMeetingLeadId}
                     sellerId={String(currentUserProfile?.id || '')}
                     mode='create'
+                    creationMode={quickMeetingCreationMode}
                     leadContactSeed={{
                         contactName: clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.contacto
                             || clients.find((lead) => Number(lead.id) === selectedMeetingLeadId)?.nombre
@@ -2519,8 +2553,16 @@ export default function AdminCompanyDetailView({
                     <div className='ah-modal-panel w-full max-w-xl'>
                         <div className='ah-modal-header'>
                             <div>
-                                <h3 className='ah-modal-title text-lg'>Seleccionar Lead para Junta</h3>
-                                <p className='ah-modal-subtitle'>Elige un lead de esta empresa</p>
+                                <h3 className='ah-modal-title text-lg'>
+                                    {quickMeetingCreationMode === 'past_record'
+                                        ? 'Seleccionar Lead para Junta Realizada'
+                                        : 'Seleccionar Lead para Junta'}
+                                </h3>
+                                <p className='ah-modal-subtitle'>
+                                    {quickMeetingCreationMode === 'past_record'
+                                        ? 'Elige el lead para registrar la junta histórica'
+                                        : 'Elige un lead de esta empresa'}
+                                </p>
                             </div>
                             <button className='ah-modal-close cursor-pointer' onClick={() => setIsQuickMeetingLeadPickerOpen(false)}>
                                 <X size={18} />
@@ -2873,7 +2915,7 @@ export default function AdminCompanyDetailView({
                             {quickProjectForm.assignment_stage === 'implemented_real' && (
                                 <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                                     <div className='space-y-1.5'>
-                                        <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Mensualidad pactada (USD)</label>
+                                        <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Mensualidad pactada (MXN)</label>
                                         <input
                                             type='text'
                                             inputMode='numeric'
@@ -2884,7 +2926,7 @@ export default function AdminCompanyDetailView({
                                         />
                                     </div>
                                     <div className='space-y-1.5'>
-                                        <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Implementación pactada (USD)</label>
+                                        <label className='text-xs font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]'>Implementación pactada (MXN)</label>
                                         <input
                                             type='text'
                                             inputMode='numeric'

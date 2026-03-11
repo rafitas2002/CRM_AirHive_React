@@ -33,6 +33,10 @@ export type CompanyData = {
     descripcion: string
 }
 
+const isPendingIndustryOptionId = (value?: string | null) => String(value || '').startsWith('pending_industry:')
+const sanitizeIndustryOptionIds = (ids: string[] | undefined) =>
+    (ids || []).filter((id) => !!id && !isPendingIndustryOptionId(id))
+
 interface CompanyModalProps {
     isOpen: boolean
     onClose: () => void
@@ -182,6 +186,7 @@ export default function CompanyModal({
     }
 
     const toggleIndustrySelection = (industryId: string) => {
+        if (isPendingIndustryOptionId(industryId)) return
         const ids = formData.industria_ids || []
         const isSelected = ids.includes(industryId)
         const nextIds = isSelected
@@ -315,16 +320,20 @@ export default function CompanyModal({
                 )
             }
 
-            const fallbackPrimary = (formData.industria_ids || [])[0] || ''
-            const primaryIndustryId = formData.industria_id || fallbackPrimary
+            const sanitizedIndustryIds = sanitizeIndustryOptionIds(formData.industria_ids)
+            const fallbackPrimary = sanitizedIndustryIds[0] || ''
+            const rawPrimaryIndustryId = formData.industria_id || fallbackPrimary
+            const primaryIndustryId = isPendingIndustryOptionId(rawPrimaryIndustryId) ? '' : rawPrimaryIndustryId
             const mergedIndustryIds = Array.from(new Set([
                 ...(primaryIndustryId ? [primaryIndustryId] : []),
-                ...(formData.industria_ids || [])
+                ...sanitizedIndustryIds
             ])).filter(Boolean)
             const mergedIndustryNames = mergedIndustryIds
                 .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
                 .filter((n): n is string => !!n)
-            const primaryIndustryName = catalogs.industrias?.find(i => i.id === primaryIndustryId)?.name || formData.industria
+            const primaryIndustryName = catalogs.industrias?.find(i => i.id === primaryIndustryId)?.name
+                || formData.industria
+                || 'Sin clasificar'
 
             await onSave({
                 ...formData,
@@ -455,9 +464,12 @@ export default function CompanyModal({
                                 label="Industria"
                                 value={formData.industria_id || ''}
                                 onChange={(val) => {
-                                    const name = catalogs.industrias?.find(i => i.id === val)?.name || ''
+                                    const name = catalogs.industrias?.find(i => i.id === val)?.name || formData.industria || ''
                                     setFormData(prev => {
-                                        const nextIndustryIds = Array.from(new Set([val, ...(prev.industria_ids || [])])).filter(Boolean)
+                                        const baseIndustryIds = sanitizeIndustryOptionIds(prev.industria_ids)
+                                        const nextIndustryIds = isPendingIndustryOptionId(val)
+                                            ? []
+                                            : Array.from(new Set([val, ...baseIndustryIds])).filter(Boolean)
                                         const nextNames = nextIndustryIds
                                             .map(id => catalogs.industrias?.find(i => i.id === id)?.name)
                                             .filter((n): n is string => !!n)
@@ -477,8 +489,23 @@ export default function CompanyModal({
                                         ...prev,
                                         industrias: [...(prev.industrias || []), opt].sort((a, b) => a.name.localeCompare(b.name))
                                     }))
+                                    if (isPendingIndustryOptionId(opt.id)) {
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            industria_id: opt.id,
+                                            industria: opt.name,
+                                            industria_ids: [],
+                                            industrias: []
+                                        }))
+                                    }
                                 }}
                                 canDeleteOptions={isAdmin}
+                                createContext={{
+                                    module: 'company_modal',
+                                    entityType: 'company',
+                                    entityId: formData.id || '',
+                                    entityName: formData.nombre || ''
+                                }}
                                 onDeleteOption={(deletedId) => {
                                     setCatalogs(prev => ({
                                         ...prev,

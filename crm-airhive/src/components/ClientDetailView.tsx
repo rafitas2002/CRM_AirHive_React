@@ -10,7 +10,7 @@ import { createMeeting, getNextMeeting, getLeadSnapshots, isProbabilityEditable 
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, CalendarDays, Camera, CheckSquare, ChevronDown, ChevronUp, Mail, MessageCircle, Minus, PencilLine, Plus, User, NotebookPen, Link2, X } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, CalendarDays, Camera, CheckCircle2, CheckSquare, ChevronDown, ChevronUp, Mail, MessageCircle, Minus, PencilLine, Plus, User, NotebookPen, Link2, X } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 
 type ClientData = {
@@ -102,6 +102,7 @@ export default function ClientDetailView({
 
     // Meetings & Snapshots State
     const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false)
+    const [meetingCreationMode, setMeetingCreationMode] = useState<'schedule' | 'past_record'>('schedule')
     const [nextMeeting, setNextMeeting] = useState<Meeting | null>(null)
     const [snapshots, setSnapshots] = useState<Snapshot[]>([])
     const [snapshotOwnerProfilesById, setSnapshotOwnerProfilesById] = useState<Record<string, { fullName?: string | null, username?: string | null }>>({})
@@ -837,11 +838,27 @@ export default function ClientDetailView({
                                         {isMeetingsPanelExpanded ? 'Ocultar' : 'Mostrar'}
                                     </button>
                                     <button
-                                        onClick={() => setIsMeetingModalOpen(true)}
+                                        onClick={() => {
+                                            setMeetingCreationMode('schedule')
+                                            setIsMeetingModalOpen(true)
+                                        }}
                                         className='w-10 h-10 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 shadow-sm cursor-pointer'
                                         style={{ background: 'color-mix(in srgb, var(--input-focus) 10%, var(--card-bg))', color: 'var(--input-focus)' }}
+                                        title='Agendar junta'
                                     >
                                         <Plus size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setMeetingCreationMode('past_record')
+                                            setIsMeetingModalOpen(true)
+                                        }}
+                                        className='h-10 px-3 rounded-2xl flex items-center justify-center gap-1.5 transition-all transform hover:scale-105 shadow-sm cursor-pointer text-[10px] font-black uppercase tracking-[0.12em]'
+                                        style={{ background: 'color-mix(in srgb, #10b981 10%, var(--card-bg))', color: 'color-mix(in srgb, #10b981 78%, var(--text-primary))' }}
+                                        title='Registrar junta realizada'
+                                    >
+                                        <CheckCircle2 size={14} />
+                                        Realizada
                                     </button>
                                 </div>
                             </div>
@@ -1025,22 +1042,26 @@ export default function ClientDetailView({
                         )}
 
                         {/* Snapshots Columnar */}
-                        {snapshots.length > 0 && (
-                            <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
-                                <div className='mb-6 border-b border-[var(--card-border)] pb-4 flex items-center justify-between gap-3'>
-                                    <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
-                                        <Camera size={14} style={{ color: 'var(--input-focus)' }} /> Snapshots
-                                    </h2>
-                                    <button
-                                        type='button'
-                                        onClick={() => setIsSnapshotsModalOpen(true)}
-                                        className='px-3 py-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors cursor-pointer'
-                                    >
-                                        Abrir Popup
-                                    </button>
-                                </div>
-                                <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
-                                    {sortedSnapshots.slice(0, 3).map((snapshot) => (
+                        <div className='bg-[var(--card-bg)] p-8 rounded-[40px] shadow-2xl shadow-[#0A1635]/5 border border-[var(--card-border)]'>
+                            <div className='mb-6 border-b border-[var(--card-border)] pb-4 flex items-center justify-between gap-3'>
+                                <h2 className='text-xs font-black text-[var(--text-secondary)] uppercase tracking-[0.3em] flex items-center gap-2'>
+                                    <Camera size={14} style={{ color: 'var(--input-focus)' }} /> Snapshots
+                                </h2>
+                                <button
+                                    type='button'
+                                    onClick={() => setIsSnapshotsModalOpen(true)}
+                                    className='px-3 py-1.5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-primary)] hover:border-blue-400 hover:text-blue-500 transition-colors cursor-pointer'
+                                >
+                                    Abrir Popup
+                                </button>
+                            </div>
+                            <div className='space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-3'>
+                                {sortedSnapshots.length === 0 ? (
+                                    <div className='rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-5 text-center text-[var(--text-secondary)] text-sm font-bold'>
+                                        Sin snapshots por ahora.
+                                    </div>
+                                ) : (
+                                    sortedSnapshots.slice(0, 3).map((snapshot) => (
                                         <div key={snapshot.id} className='flex justify-between items-center p-4 bg-[var(--hover-bg)] rounded-3xl border border-[var(--card-border)] group hover:border-blue-100 hover:bg-[var(--card-bg)] transition-all'>
                                             <div className='space-y-1'>
                                                 <p className='text-[10px] font-black text-[var(--text-primary)] uppercase tracking-widest group-hover:text-blue-600 transition-colors'>Corte #{snapshot.snapshot_number}</p>
@@ -1063,15 +1084,15 @@ export default function ClientDetailView({
                                                 </span>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                                {sortedSnapshots.length > 3 && (
-                                    <p className='mt-4 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>
-                                        Mostrando 3 de {sortedSnapshots.length} capturas · abre el popup para ver todo
-                                    </p>
+                                    ))
                                 )}
                             </div>
-                        )}
+                            {sortedSnapshots.length > 3 && (
+                                <p className='mt-4 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]'>
+                                    Mostrando 3 de {sortedSnapshots.length} capturas · abre el popup para ver todo
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1080,10 +1101,14 @@ export default function ClientDetailView({
             {currentUser && (
                 <MeetingModal
                     isOpen={isMeetingModalOpen}
-                    onClose={() => setIsMeetingModalOpen(false)}
+                    onClose={() => {
+                        setIsMeetingModalOpen(false)
+                        setMeetingCreationMode('schedule')
+                    }}
                     onSave={handleCreateMeeting}
                     leadId={client.id}
                     sellerId={client.owner_id || currentUser.id}
+                    creationMode={meetingCreationMode}
                     leadContactSeed={{
                         contactName: client.contacto || client.nombre || null,
                         contactEmail: client.email || null,

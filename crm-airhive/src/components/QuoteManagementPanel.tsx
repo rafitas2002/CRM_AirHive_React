@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Check, MessageSquareQuote, Pencil, Plus, ToggleLeft, ToggleRight, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
@@ -112,6 +113,7 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
     const [showSavePopup, setShowSavePopup] = useState(false)
     const [airHiveAuthors, setAirHiveAuthors] = useState<Array<{ id: string, full_name: string, author_context: string }>>([])
     const [pendingRequests, setPendingRequests] = useState<QuoteRequestRow[]>([])
+    const [showQuotesTable, setShowQuotesTable] = useState(false)
     const [reactionModal, setReactionModal] = useState<{
         isOpen: boolean
         quoteId: number | null
@@ -722,114 +724,70 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
                 <div id='solicitudes-frases' className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                     <div className='px-4 py-3 border-b' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                         <p className='text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>
-                            Solicitudes pendientes de frases
+                            Centro de aprobaciones
                         </p>
                     </div>
-                    {pendingRequests.length === 0 ? (
-                        <div className='px-4 py-4 text-sm font-medium' style={{ color: 'var(--text-secondary)' }}>
-                            No hay solicitudes pendientes.
-                        </div>
-                    ) : (
-                        <div className='overflow-x-auto'>
-                            <table className='w-full min-w-[900px]'>
-                                <thead>
-                                    <tr style={{ background: 'var(--hover-bg)' }}>
-                                        <th className='px-4 py-3 text-left text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Frase</th>
-                                        <th className='px-4 py-3 text-left text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Autor</th>
-                                        <th className='px-4 py-3 text-left text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Aportador</th>
-                                        <th className='px-4 py-3 text-left text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Solicitó</th>
-                                        <th className='px-4 py-3 text-left text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pendingRequests.map((request) => (
-                                        <tr key={`pending-request-${request.id}`} className='border-t' style={{ borderColor: 'var(--card-border)' }}>
-                                            <td className='px-4 py-4 align-top'>
-                                                <p className='text-sm italic leading-relaxed' style={{ color: 'var(--text-primary)' }}>
-                                                    &quot;{request.quote_text}&quot;
-                                                </p>
-                                            </td>
-                                            <td className='px-4 py-4 align-top'>
-                                                <p className='text-xs font-bold uppercase tracking-[0.12em]' style={{ color: 'var(--text-primary)' }}>
-                                                    {request.quote_author}
-                                                </p>
-                                                {!!request.quote_author_context && (
-                                                    <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                                        {request.quote_author_context}
-                                                    </p>
-                                                )}
-                                            </td>
-                                            <td className='px-4 py-4 align-top'>
-                                                <p className='text-sm font-semibold' style={{ color: 'var(--text-primary)' }}>
-                                                    {request.contributed_by_name}
-                                                </p>
-                                            </td>
-                                            <td className='px-4 py-4 align-top'>
-                                                <p className='text-sm font-semibold' style={{ color: 'var(--text-primary)' }}>
-                                                    {request.requester_name}
-                                                </p>
-                                                <p className='text-xs mt-1' style={{ color: 'var(--text-secondary)' }}>
-                                                    {new Date(request.created_at).toLocaleDateString('es-MX')}
-                                                </p>
-                                            </td>
-                                            <td className='px-4 py-4 align-top'>
-                                                <div className='flex items-center gap-1.5'>
-                                                    <button
-                                                        type='button'
-                                                        onClick={() => onReviewRequest(request.id, 'approved')}
-                                                        disabled={isPending}
-                                                        className='p-2 rounded-xl border border-transparent text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/35 hover:text-emerald-400 transition-all disabled:opacity-60 disabled:cursor-not-allowed'
-                                                        style={{ cursor: isPending ? 'not-allowed' : 'pointer' }}
-                                                        title='Aprobar solicitud'
-                                                    >
-                                                        <Check size={16} strokeWidth={2.4} />
-                                                    </button>
-                                                    <button
-                                                        type='button'
-                                                        onClick={() => onReviewRequest(request.id, 'rejected')}
-                                                        disabled={isPending}
-                                                        className='p-2 rounded-xl border border-transparent text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400 transition-all disabled:opacity-60 disabled:cursor-not-allowed'
-                                                        style={{ cursor: isPending ? 'not-allowed' : 'pointer' }}
-                                                        title='Rechazar solicitud'
-                                                    >
-                                                        <X size={16} strokeWidth={2.4} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                    <div className='px-4 py-4 flex flex-wrap items-center justify-between gap-3'>
+                        <p className='text-sm font-bold' style={{ color: 'var(--text-secondary)' }}>
+                            Solicitudes de frases pendientes: <span style={{ color: 'var(--text-primary)' }}>{pendingRequests.length}</span>
+                        </p>
+                        <Link
+                            href='/settings/aprobaciones#solicitudes-frases'
+                            className='px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-[0.14em] transition-all cursor-pointer'
+                            style={{ borderColor: 'rgba(32,72,255,0.45)', color: '#7ea0ff', background: 'rgba(32,72,255,0.08)' }}
+                        >
+                            Ir a aprobaciones
+                        </Link>
+                    </div>
                 </div>
             )}
 
             <div className='rounded-2xl border overflow-hidden' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                 <div className='px-4 py-3 border-b flex items-center justify-between gap-3' style={{ borderColor: 'var(--card-border)', background: 'var(--hover-bg)' }}>
                     <p className='text-xs font-black uppercase tracking-[0.2em]' style={{ color: 'var(--text-secondary)' }}>
-                        Repertorio de frases
+                        Repertorio de frases ({quotes.length})
                     </p>
-                    {isAdmin && (
+                    <div className='flex items-center gap-2'>
                         <button
                             type='button'
-                            onClick={toggleEditMode}
-                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] border transition-all cursor-pointer ${
-                                isEditMode
-                                    ? 'text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400'
-                                    : 'text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400'
-                            }`}
+                            onClick={() => setShowQuotesTable((prev) => !prev)}
+                            className='inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] border transition-all cursor-pointer'
                             style={{
-                                borderColor: isEditMode ? 'rgba(244, 63, 94, 0.7)' : 'rgba(245, 158, 11, 0.7)',
-                                background: 'transparent'
+                                borderColor: showQuotesTable ? 'rgba(52, 211, 153, 0.55)' : 'var(--card-border)',
+                                color: showQuotesTable ? '#34d399' : 'var(--text-primary)',
+                                background: showQuotesTable ? 'rgba(16,185,129,0.09)' : 'transparent'
                             }}
                         >
-                            <Pencil size={13} />
-                            {isEditMode ? 'Salir edición' : 'Editar frases'}
+                            {showQuotesTable ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                            {showQuotesTable ? 'Ocultar' : 'Mostrar'}
                         </button>
-                    )}
+                        {isAdmin && showQuotesTable && (
+                            <button
+                                type='button'
+                                onClick={toggleEditMode}
+                                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] border transition-all cursor-pointer ${
+                                    isEditMode
+                                        ? 'text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/35 hover:text-rose-400'
+                                        : 'text-amber-500 hover:bg-amber-500/10 hover:border-amber-500/35 hover:text-amber-400'
+                                }`}
+                                style={{
+                                    borderColor: isEditMode ? 'rgba(244, 63, 94, 0.7)' : 'rgba(245, 158, 11, 0.7)',
+                                    background: 'transparent'
+                                }}
+                            >
+                                <Pencil size={13} />
+                                {isEditMode ? 'Salir edición' : 'Editar frases'}
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <div className='px-4 py-4 border-b' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
+                {!showQuotesTable ? (
+                    <div className='px-4 py-5 text-sm font-bold' style={{ color: 'var(--text-secondary)' }}>
+                        Tabla oculta para reducir ruido visual. Activa <span style={{ color: 'var(--text-primary)' }}>Mostrar</span> para revisar o editar frases.
+                    </div>
+                ) : (
+                    <>
+                        <div className='px-4 py-4 border-b' style={{ borderColor: 'var(--card-border)', background: 'var(--card-bg)' }}>
                     <div className='grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-3'>
                         <select
                             value={filters.author}
@@ -1219,6 +1177,8 @@ export default function QuoteManagementPanel({ initialQuotes, initialLoadError =
                     <div className='border-t px-6 py-5 text-sm font-medium' style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}>
                         No hay frases que coincidan con los filtros.
                     </div>
+                )}
+                    </>
                 )}
             </div>
 

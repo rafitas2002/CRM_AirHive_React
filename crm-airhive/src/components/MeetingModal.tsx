@@ -9,7 +9,7 @@ import UserSelect from './UserSelect'
 import { FriendlyDateTimePicker } from './FriendlyDatePickers'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { Building2, CalendarDays, Link2, PencilLine, Phone, Plus, Sparkles, Trash2, Video, X } from 'lucide-react'
+import { Building2, CalendarDays, CheckCircle2, Link2, PencilLine, Phone, Plus, Sparkles, Trash2, Video, X } from 'lucide-react'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 type CompanyContactRow = Database['public']['Tables']['company_contacts']['Row']
@@ -22,6 +22,7 @@ interface MeetingModalProps {
     sellerId: string
     initialData?: any
     mode?: 'create' | 'edit'
+    creationMode?: 'schedule' | 'past_record'
     leadContactSeed?: {
         contactName?: string | null
         contactEmail?: string | null
@@ -211,6 +212,7 @@ export default function MeetingModal({
     sellerId,
     initialData,
     mode = 'create',
+    creationMode = 'schedule',
     leadContactSeed
 }: MeetingModalProps) {
     useBodyScrollLock(isOpen)
@@ -227,6 +229,7 @@ export default function MeetingModal({
     })
 
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [formAttempted, setFormAttempted] = useState(false)
     const [isGoogleConnected, setIsGoogleConnected] = useState(false)
     const [contactsLoading, setContactsLoading] = useState(false)
     const [meetingSequencePreview, setMeetingSequencePreview] = useState<number | null>(null)
@@ -259,6 +262,7 @@ export default function MeetingModal({
         const init = async () => {
             const supabase = createClient()
             setContactsLoading(true)
+            setFormAttempted(false)
             setContactOptions([])
             setPrimaryContactKey('')
             setSelectedExternalKeys([])
@@ -518,7 +522,7 @@ export default function MeetingModal({
         return () => {
             isActive = false
         }
-    }, [isOpen, sellerId, leadId, initialData, mode])
+    }, [isOpen, sellerId, leadId, initialData, mode, creationMode])
 
     const sequenceNumber = mode === 'edit'
         ? (initialData?.meeting_sequence_number || null)
@@ -570,17 +574,35 @@ export default function MeetingModal({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!formData.start_time) {
+
+        setFormAttempted(true)
+
+        if (titleMissing) {
+            alert('Escribe el título de la reunión')
+            return
+        }
+
+        if (startTimeMissing) {
             alert('Selecciona la fecha y hora de la reunión')
             return
         }
 
-        if (!primaryContactKey && mode === 'create') {
+        if (scheduleDateInvalid) {
+            alert('No se puede agendar una junta en el pasado. Usa la opción "Registrar junta realizada".')
+            return
+        }
+
+        if (pastRecordDateInvalid) {
+            alert('Para registrar una junta realizada debes elegir una fecha pasada.')
+            return
+        }
+
+        if (primaryContactMissing) {
             alert('Selecciona la persona principal con la que tomarás la junta')
             return
         }
 
-        if (primaryContactKey === OTHER_CONTACT_KEY && !newPrimaryContact.name.trim()) {
+        if (newPrimaryContactNameMissing) {
             alert('Escribe el nombre del nuevo contacto principal')
             return
         }
@@ -675,7 +697,7 @@ export default function MeetingModal({
             const meetingData: MeetingInsert = {
                 lead_id: leadId,
                 seller_id: sellerId,
-                title: formData.title,
+                title: formData.title.trim(),
                 start_time: fromLocalISOString(formData.start_time).toISOString(),
                 duration_minutes: formData.duration_minutes,
                 meeting_type: formData.meeting_type,
@@ -685,7 +707,8 @@ export default function MeetingModal({
                 primary_company_contact_name: resolvedPrimaryContact?.name || null,
                 external_participants: participantLabels.length > 0 ? participantLabels : null,
                 calendar_provider: formData.calendar_provider,
-                status: 'scheduled'
+                status: 'scheduled',
+                meeting_status: isPastRecordMode ? 'pending_confirmation' : 'scheduled'
             }
 
             const leadNameForCalendar = leadContext.leadName || leadContext.companyName || 'Cliente'
@@ -746,6 +769,26 @@ export default function MeetingModal({
 
     const selectedExternalLabels = getSelectedExternalContactLabels()
     const selectedPrimaryOption = contactOptions.find(option => option.key === primaryContactKey) || null
+    const isCreateMode = mode === 'create'
+    const isPastRecordMode = isCreateMode && creationMode === 'past_record'
+    const isScheduleMode = isCreateMode && creationMode === 'schedule'
+
+    const titleMissing = !formData.title.trim()
+    const startTimeMissing = !formData.start_time
+    const primaryContactMissing = isCreateMode && !primaryContactKey
+    const newPrimaryContactNameMissing = primaryContactKey === OTHER_CONTACT_KEY && !newPrimaryContact.name.trim()
+
+    const selectedStartDate = formData.start_time ? fromLocalISOString(formData.start_time) : null
+    const dateInPast = selectedStartDate ? selectedStartDate.getTime() < Date.now() : false
+    const dateInFuture = selectedStartDate ? selectedStartDate.getTime() > Date.now() : false
+    const scheduleDateInvalid = isScheduleMode && !!selectedStartDate && dateInPast
+    const pastRecordDateInvalid = isPastRecordMode && !!selectedStartDate && dateInFuture
+    const dateFieldInvalid = formAttempted && (startTimeMissing || scheduleDateInvalid || pastRecordDateInvalid)
+    const nowLocalBoundary = toLocalISOString(new Date())
+
+    const titleFieldInvalid = formAttempted && titleMissing
+    const primaryContactFieldInvalid = formAttempted && primaryContactMissing
+    const newPrimaryContactFieldInvalid = formAttempted && newPrimaryContactNameMissing
 
     return (
         <div className='ah-modal-overlay'>
@@ -754,9 +797,17 @@ export default function MeetingModal({
                 <div className='ah-modal-header' style={{ background: headerTheme.background, borderBottomColor: headerTheme.border }}>
                     <h2 className='ah-modal-title flex items-center gap-3'>
                         <span className='ah-icon-card ah-icon-card-sm'>
-                            {mode === 'create' ? <CalendarDays size={18} strokeWidth={2} /> : <PencilLine size={18} strokeWidth={2} />}
+                            {mode === 'edit'
+                                ? <PencilLine size={18} strokeWidth={2} />
+                                : isPastRecordMode
+                                    ? <CheckCircle2 size={18} strokeWidth={2} />
+                                    : <CalendarDays size={18} strokeWidth={2} />}
                         </span>
-                        {mode === 'create' ? 'Nueva Reunión' : 'Editar Reunión'}
+                        {mode === 'edit'
+                            ? 'Editar Reunión'
+                            : isPastRecordMode
+                                ? 'Registrar Junta Realizada'
+                                : 'Nueva Reunión'}
                     </h2>
                     <button
                         onClick={onClose}
@@ -768,11 +819,30 @@ export default function MeetingModal({
 
                 {/* Body */}
                 <div className='p-6 overflow-y-auto custom-scrollbar space-y-4'>
-                    <form id='meeting-form' onSubmit={handleSubmit} className='space-y-4'>
+                    <form id='meeting-form' onSubmit={handleSubmit} noValidate className={`space-y-4 ${formAttempted ? 'ah-form-attempted' : ''}`}>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
                             Campos obligatorios: se marcan en rojo solo si faltan al confirmar
                         </div>
+
+                        {isCreateMode && (
+                            <div
+                                className='rounded-xl border px-3 py-2 text-xs font-semibold'
+                                style={{
+                                    background: isPastRecordMode
+                                        ? 'color-mix(in srgb, #10b981 8%, var(--card-bg))'
+                                        : 'color-mix(in srgb, #2048FF 8%, var(--card-bg))',
+                                    borderColor: isPastRecordMode
+                                        ? 'color-mix(in srgb, #10b981 26%, var(--card-border))'
+                                        : 'color-mix(in srgb, #2048FF 26%, var(--card-border))',
+                                    color: 'var(--text-secondary)'
+                                }}
+                            >
+                                {isPastRecordMode
+                                    ? 'Registro histórico: aquí capturas juntas que ya ocurrieron. Debe elegirse una fecha pasada.'
+                                    : 'Agenda de junta: aquí solo se permiten fechas futuras.'}
+                            </div>
+                        )}
 
                         {/* Título */}
                         <div className='space-y-1.5'>
@@ -784,8 +854,10 @@ export default function MeetingModal({
                                 required
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                className='w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
-                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                aria-invalid={titleFieldInvalid}
+                                data-invalid={titleFieldInvalid ? 'true' : undefined}
+                                className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                style={{ background: 'var(--background)', borderColor: titleFieldInvalid ? 'color-mix(in srgb, #ef4444 52%, var(--input-border))' : 'var(--card-border)', color: 'var(--text-primary)' }}
                                 placeholder='Ej: Presentación de propuesta'
                             />
                         </div>
@@ -819,9 +891,21 @@ export default function MeetingModal({
                                     value={formData.start_time}
                                     onChange={(next) => setFormData({ ...formData, start_time: next })}
                                     minuteStep={5}
+                                    min={isScheduleMode ? nowLocalBoundary : undefined}
+                                    max={isPastRecordMode ? nowLocalBoundary : undefined}
                                     panelClassName='left-0 right-auto w-full min-w-[17rem] max-w-full sm:w-[min(46rem,calc(100vw-5rem))] sm:min-w-[40rem]'
-                                    className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer'
+                                    className={`ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors text-left font-medium cursor-pointer ${dateFieldInvalid ? '!border-red-400' : ''}`}
                                 />
+                                {formAttempted && scheduleDateInvalid && (
+                                    <p className='text-[11px] font-semibold mt-1' style={{ color: '#ef4444' }}>
+                                        No se puede agendar en pasado. Usa “Registrar junta realizada”.
+                                    </p>
+                                )}
+                                {formAttempted && pastRecordDateInvalid && (
+                                    <p className='text-[11px] font-semibold mt-1' style={{ color: '#ef4444' }}>
+                                        Esta opción es solo para juntas ya realizadas (fecha pasada).
+                                    </p>
+                                )}
                             </div>
 
                             <div className='space-y-1.5'>
@@ -883,8 +967,10 @@ export default function MeetingModal({
                                         setSelectedExternalKeys(prev => Array.from(new Set([...prev, nextKey])))
                                     }
                                 }}
+                                aria-invalid={primaryContactFieldInvalid}
+                                data-invalid={primaryContactFieldInvalid ? 'true' : undefined}
                                 className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
-                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                style={{ background: 'var(--background)', borderColor: primaryContactFieldInvalid ? 'color-mix(in srgb, #ef4444 52%, var(--input-border))' : 'var(--card-border)', color: 'var(--text-primary)' }}
                             >
                                 <option value=''>Seleccionar contacto...</option>
                                 {contactOptions.map((option) => (
@@ -941,8 +1027,10 @@ export default function MeetingModal({
                                         value={newPrimaryContact.name}
                                         onChange={(e) => setNewPrimaryContact(prev => ({ ...prev, name: e.target.value }))}
                                         placeholder='Nombre completo *'
+                                        aria-invalid={newPrimaryContactFieldInvalid}
+                                        data-invalid={newPrimaryContactFieldInvalid ? 'true' : undefined}
                                         className='ah-required-control px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
-                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        style={{ background: 'var(--background)', borderColor: newPrimaryContactFieldInvalid ? 'color-mix(in srgb, #ef4444 52%, var(--input-border))' : 'var(--card-border)', color: 'var(--text-primary)' }}
                                     />
                                     <input
                                         type='email'
@@ -1189,7 +1277,13 @@ export default function MeetingModal({
                         disabled={isSubmitting}
                         className='px-6 py-2 bg-[#2048FF] text-white font-black rounded-lg shadow-md hover:bg-[#1700AC] transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 uppercase text-xs tracking-widest'
                     >
-                        {isSubmitting ? 'Guardando...' : mode === 'create' ? 'Crear Reunión' : 'Guardar Cambios'}
+                        {isSubmitting
+                            ? 'Guardando...'
+                            : mode === 'edit'
+                                ? 'Guardar Cambios'
+                                : isPastRecordMode
+                                    ? 'Registrar Junta'
+                                    : 'Crear Reunión'}
                     </button>
                 </div>
             </div>

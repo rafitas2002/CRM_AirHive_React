@@ -90,3 +90,87 @@ export async function getAdminExecutiveDashboardSupportData() {
         }
     }
 }
+
+type HomeBirthdaySupportRow = {
+    userId: string
+    fullName: string
+    birthDate: string
+}
+
+export async function getHomeBirthdaysSupportData() {
+    try {
+        const cookieStore = await cookies()
+        const supabase = createServerSupabaseClient(cookieStore)
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+            return { success: false as const, error: 'Sesión no encontrada' }
+        }
+
+        const adminClient = createAdminClient()
+        const { data: employeeProfiles, error: employeeProfilesError } = await (adminClient.from('employee_profiles') as any)
+            .select('user_id, birth_date')
+            .not('birth_date', 'is', null)
+            .limit(5000)
+
+        if (employeeProfilesError) {
+            throw employeeProfilesError
+        }
+
+        const rows = Array.isArray(employeeProfiles) ? employeeProfiles : []
+        const userIds = Array.from(new Set(
+            rows
+                .map((row: any) => String(row?.user_id || ''))
+                .filter(Boolean)
+        ))
+
+        if (userIds.length === 0) {
+            return { success: true as const, data: [] as HomeBirthdaySupportRow[] }
+        }
+
+        const { data: profiles, error: profilesError } = await (adminClient.from('profiles') as any)
+            .select('id, full_name, username')
+            .in('id', userIds)
+
+        if (profilesError) {
+            throw profilesError
+        }
+
+        const profileById = new Map<string, { full_name?: string | null; username?: string | null }>()
+        ;(Array.isArray(profiles) ? profiles : []).forEach((profile: any) => {
+            const id = String(profile?.id || '')
+            if (!id) return
+            profileById.set(id, {
+                full_name: profile?.full_name ? String(profile.full_name) : null,
+                username: profile?.username ? String(profile.username) : null
+            })
+        })
+
+        const normalizedRows = rows
+            .map((row: any) => {
+                const userId = String(row?.user_id || '')
+                const birthDate = String(row?.birth_date || '').trim()
+                if (!userId || !birthDate) return null
+                const profile = profileById.get(userId)
+                const fullName = String(profile?.full_name || profile?.username || 'Usuario').trim() || 'Usuario'
+
+                return {
+                    userId,
+                    fullName,
+                    birthDate
+                } as HomeBirthdaySupportRow
+            })
+            .filter((row: HomeBirthdaySupportRow | null): row is HomeBirthdaySupportRow => !!row)
+            .sort((a, b) => a.fullName.localeCompare(b.fullName, 'es', { sensitivity: 'base' }))
+
+        return {
+            success: true as const,
+            data: normalizedRows
+        }
+    } catch (error: any) {
+        return {
+            success: false as const,
+            error: error?.message || 'No se pudo cargar soporte de cumpleaños'
+        }
+    }
+}

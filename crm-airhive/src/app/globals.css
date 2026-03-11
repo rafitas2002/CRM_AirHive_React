@@ -345,7 +345,7 @@ body {
 
 .ah-modal-panel label :is(.text-red-500, .text-rose-600),
 .ah-modal-panel .ah-required-asterisk {
-  color: color-mix(in srgb, var(--text-secondary) 72%, var(--text-primary)) !important;
+  color: color-mix(in srgb, #ef4444 82%, var(--text-primary)) !important;
   font-weight: 900;
 }
 

@@ -6,6 +6,10 @@ import { isProbabilityEditable, getNextMeeting } from '@/lib/meetingsService'
 import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { FriendlyDatePicker } from './FriendlyDatePickers'
+import {
+    fetchLeadProjectAssignments,
+    mapAssignmentsToLeadProjectSelection
+} from '@/lib/leadProjectAssignments'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 
@@ -30,6 +34,7 @@ export type ClientData = {
     proyectos_prospeccion_mismo_cierre_ids?: string[]
     proyectos_futuro_lead_ids?: string[]
     proyectos_implementados_reales_ids?: string[]
+    proyectos_pronosticados_valores?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
     proyectos_implementados_reales_valores?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
     probability_locked?: boolean | null
     next_meeting_id?: string | null
@@ -87,6 +92,17 @@ function normalizeLeadStageForModal(stage: unknown): string {
     return 'Negociación'
 }
 
+function getPrimaryLeadProjectId(data: ClientData): string | null {
+    const byPriority = [
+        ...(Array.isArray((data as any).proyectos_pronosticados_ids) ? (data as any).proyectos_pronosticados_ids : []),
+        ...(Array.isArray((data as any).proyectos_prospeccion_mismo_cierre_ids) ? (data as any).proyectos_prospeccion_mismo_cierre_ids : []),
+        ...(Array.isArray((data as any).proyectos_futuro_lead_ids) ? (data as any).proyectos_futuro_lead_ids : []),
+        ...(Array.isArray((data as any).proyectos_implementados_reales_ids) ? (data as any).proyectos_implementados_reales_ids : [])
+    ]
+    const first = byPriority.find((id) => String(id || '').trim().length > 0)
+    return first ? String(first).trim() : null
+}
+
 function todayDateOnly() {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -107,6 +123,12 @@ type ProjectCatalogItem = {
     nombre: string
     valor_real_mensualidad_usd?: number | null
     valor_real_implementacion_usd?: number | null
+    rango_mensualidad_min_usd?: number | null
+    rango_mensualidad_max_usd?: number | null
+    rango_implementacion_min_usd?: number | null
+    rango_implementacion_max_usd?: number | null
+    avg_real_mensualidad_usd?: number | null
+    avg_real_implementacion_usd?: number | null
     tiempo_implementacion_dias?: number | null
     costo_interno_mensualidad_usd?: number | null
     costo_interno_implementacion_usd?: number | null
@@ -165,15 +187,6 @@ const PROSPECT_DECISION_ROLE_OPTIONS: Array<{ value: NonNullable<ClientData['pro
     { value: 'unknown', label: 'Rol en decisión no especificado' }
 ]
 
-const PREFERRED_CONTACT_CHANNEL_OPTIONS: Array<{ value: NonNullable<ClientData['prospect_preferred_contact_channel']>; label: string }> = [
-    { value: 'whatsapp', label: 'WhatsApp' },
-    { value: 'llamada', label: 'Llamada' },
-    { value: 'email', label: 'Email' },
-    { value: 'video', label: 'Video' },
-    { value: 'presencial', label: 'Presencial' },
-    { value: 'sin_preferencia', label: 'Sin preferencia declarada' }
-]
-
 function findAgeRangeIdForAge(age: number | null | undefined, ranges: AgeRangeCatalogItem[]): string | null {
     if (age == null || !Number.isFinite(age)) return null
     for (const range of ranges) {
@@ -216,6 +229,7 @@ export default function ClientModal({
         proyectos_prospeccion_mismo_cierre_ids: [],
         proyectos_futuro_lead_ids: [],
         proyectos_implementados_reales_ids: [],
+        proyectos_pronosticados_valores: {},
         proyectos_implementados_reales_valores: {},
         email: '',
         telefono: '',
@@ -265,7 +279,7 @@ export default function ClientModal({
     const [ageRangesCatalogError, setAgeRangesCatalogError] = useState<string | null>(null)
     const [selectedProspectRoleOption, setSelectedProspectRoleOption] = useState<string>('')
     const areRealCloseValueFieldsLockedInForm = true
-    const lastLoadedProjectsCompanyRef = useRef<string | null>(null)
+    const lastLoadedProjectsScopeRef = useRef<string | null>(null)
     const lastManualEstimatedValueRef = useRef<number | null>(null)
     const lastManualImplementationEstimatedValueRef = useRef<number | null>(null)
 
@@ -284,6 +298,9 @@ export default function ClientModal({
                     proyectos_prospeccion_mismo_cierre_ids: Array.isArray((initialData as any).proyectos_prospeccion_mismo_cierre_ids) ? (initialData as any).proyectos_prospeccion_mismo_cierre_ids : [],
                     proyectos_futuro_lead_ids: Array.isArray((initialData as any).proyectos_futuro_lead_ids) ? (initialData as any).proyectos_futuro_lead_ids : [],
                     proyectos_implementados_reales_ids: Array.isArray((initialData as any).proyectos_implementados_reales_ids) ? (initialData as any).proyectos_implementados_reales_ids : [],
+                    proyectos_pronosticados_valores: (initialData as any).proyectos_pronosticados_valores && typeof (initialData as any).proyectos_pronosticados_valores === 'object'
+                        ? (initialData as any).proyectos_pronosticados_valores
+                        : {},
                     proyectos_implementados_reales_valores: (initialData as any).proyectos_implementados_reales_valores && typeof (initialData as any).proyectos_implementados_reales_valores === 'object'
                         ? (initialData as any).proyectos_implementados_reales_valores
                         : {},
@@ -335,6 +352,7 @@ export default function ClientModal({
                     proyectos_prospeccion_mismo_cierre_ids: [],
                     proyectos_futuro_lead_ids: [],
                     proyectos_implementados_reales_ids: [],
+                    proyectos_pronosticados_valores: {},
                     proyectos_implementados_reales_valores: {},
                     email: '',
                     telefono: '',
@@ -395,32 +413,54 @@ export default function ClientModal({
                 const message = String(error?.message || '').toLowerCase()
                 return message.includes('does not exist') || message.includes('42p01')
             }
-            const extendedSelect = 'id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, tiempo_implementacion_dias, costo_interno_mensualidad_usd, costo_interno_implementacion_usd, is_active'
+            const extendedSelect = 'id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, rango_mensualidad_min_usd, rango_mensualidad_max_usd, rango_implementacion_min_usd, rango_implementacion_max_usd, tiempo_implementacion_dias, costo_interno_mensualidad_usd, costo_interno_implementacion_usd, is_active'
             const coreSelect = 'id, nombre, valor_real_mensualidad_usd, valor_real_implementacion_usd, is_active'
 
             let response: any = await (supabase.from('proyectos_catalogo') as any)
                 .select(extendedSelect)
-                .eq('is_active', true)
                 .order('nombre', { ascending: true })
 
             if (response?.error && isUnknownColumnError(response.error)) {
                 response = await (supabase.from('proyectos_catalogo') as any)
                     .select(coreSelect)
-                    .eq('is_active', true)
                     .order('nombre', { ascending: true })
             }
 
+            const summaryResponse = await (supabase.from('proyectos_catalogo_sales_summary') as any)
+                .select('proyecto_id, avg_mensualidad_pactada_usd, avg_implementacion_pactada_usd')
+            const summaryByProjectId = new Map<string, { avgM: number | null, avgI: number | null }>()
+            if (Array.isArray(summaryResponse?.data)) {
+                for (const row of summaryResponse.data as any[]) {
+                    const projectId = String(row?.proyecto_id || '').trim()
+                    if (!projectId) continue
+                    summaryByProjectId.set(projectId, {
+                        avgM: row?.avg_mensualidad_pactada_usd == null ? null : Number(row.avg_mensualidad_pactada_usd),
+                        avgI: row?.avg_implementacion_pactada_usd == null ? null : Number(row.avg_implementacion_pactada_usd)
+                    })
+                }
+            }
+
             if (!cancelled && Array.isArray(response?.data)) {
-                setProjectsCatalog((response.data as any[]).map((row) => ({
-                    id: String(row.id),
-                    nombre: String(row.nombre || 'Proyecto'),
-                    valor_real_mensualidad_usd: row.valor_real_mensualidad_usd == null ? null : Number(row.valor_real_mensualidad_usd),
-                    valor_real_implementacion_usd: row.valor_real_implementacion_usd == null ? null : Number(row.valor_real_implementacion_usd),
-                    tiempo_implementacion_dias: row.tiempo_implementacion_dias == null ? null : Number(row.tiempo_implementacion_dias),
-                    costo_interno_mensualidad_usd: row.costo_interno_mensualidad_usd == null ? null : Number(row.costo_interno_mensualidad_usd),
-                    costo_interno_implementacion_usd: row.costo_interno_implementacion_usd == null ? null : Number(row.costo_interno_implementacion_usd),
-                    is_active: !!row.is_active
-                })))
+                setProjectsCatalog((response.data as any[]).map((row) => {
+                    const projectId = String(row.id)
+                    const summary = summaryByProjectId.get(projectId)
+                    return {
+                        id: projectId,
+                        nombre: String(row.nombre || 'Proyecto'),
+                        valor_real_mensualidad_usd: row.valor_real_mensualidad_usd == null ? null : Number(row.valor_real_mensualidad_usd),
+                        valor_real_implementacion_usd: row.valor_real_implementacion_usd == null ? null : Number(row.valor_real_implementacion_usd),
+                        rango_mensualidad_min_usd: row.rango_mensualidad_min_usd == null ? null : Number(row.rango_mensualidad_min_usd),
+                        rango_mensualidad_max_usd: row.rango_mensualidad_max_usd == null ? null : Number(row.rango_mensualidad_max_usd),
+                        rango_implementacion_min_usd: row.rango_implementacion_min_usd == null ? null : Number(row.rango_implementacion_min_usd),
+                        rango_implementacion_max_usd: row.rango_implementacion_max_usd == null ? null : Number(row.rango_implementacion_max_usd),
+                        avg_real_mensualidad_usd: summary?.avgM ?? null,
+                        avg_real_implementacion_usd: summary?.avgI ?? null,
+                        tiempo_implementacion_dias: row.tiempo_implementacion_dias == null ? null : Number(row.tiempo_implementacion_dias),
+                        costo_interno_mensualidad_usd: row.costo_interno_mensualidad_usd == null ? null : Number(row.costo_interno_mensualidad_usd),
+                        costo_interno_implementacion_usd: row.costo_interno_implementacion_usd == null ? null : Number(row.costo_interno_implementacion_usd),
+                        is_active: !!row.is_active
+                    }
+                }))
             }
 
             const { data: relationsData, error: relationsError } = await (supabase.from('proyecto_industrias') as any)
@@ -691,8 +731,10 @@ export default function ClientModal({
     useEffect(() => {
         if (!isOpen) return
         const companyId = formData.empresa_id || ''
+        const leadId = initialData?.id ? Number(initialData.id) : null
+        const scopeKey = companyId ? `${companyId}:${leadId || 'new'}` : null
         if (!companyId) {
-            lastLoadedProjectsCompanyRef.current = null
+            lastLoadedProjectsScopeRef.current = null
             setCompanyIndustryIds([])
             setFormData((prev) => ({
                 ...prev,
@@ -700,18 +742,16 @@ export default function ClientModal({
                 proyectos_prospeccion_mismo_cierre_ids: [],
                 proyectos_futuro_lead_ids: [],
                 proyectos_implementados_reales_ids: [],
+                proyectos_pronosticados_valores: {},
                 proyectos_implementados_reales_valores: {}
             }))
             return
         }
-        if (lastLoadedProjectsCompanyRef.current === companyId) return
+        if (scopeKey && lastLoadedProjectsScopeRef.current === scopeKey) return
         let cancelled = false
 
         const loadCompanyProjectAssignments = async () => {
-            const [assignmentsRes, companyRes, linkedIndustriesRes] = await Promise.all([
-                (supabase.from('empresa_proyecto_asignaciones') as any)
-                    .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
-                    .eq('empresa_id', companyId),
+            const [companyRes, linkedIndustriesRes] = await Promise.all([
                 (supabase.from('empresas') as any)
                     .select('industria_id')
                     .eq('id', companyId)
@@ -734,47 +774,56 @@ export default function ClientModal({
             }
 
             if (cancelled) return
-            const rows = Array.isArray((assignmentsRes as any)?.data) ? (assignmentsRes as any).data : []
-            const inNegotiation = rows
-                .filter((r: any) => ['forecasted', 'in_negotiation'].includes(String(r.assignment_stage)))
-                .map((r: any) => String(r.proyecto_id))
-            const prospectionSameClose = rows
-                .filter((r: any) => String(r.assignment_stage) === 'prospection_same_close')
-                .map((r: any) => String(r.proyecto_id))
-            const futureLead = rows
-                .filter((r: any) => String(r.assignment_stage) === 'future_lead_opportunity')
-                .map((r: any) => String(r.proyecto_id))
-            const implemented = rows
-                .filter((r: any) => String(r.assignment_stage) === 'implemented_real')
-                .map((r: any) => String(r.proyecto_id))
-            const implementedValues = rows
-                .filter((r: any) => String(r.assignment_stage) === 'implemented_real')
-                .reduce((acc: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>, r: any) => {
-                    const projectId = String(r.proyecto_id || '')
-                    if (!projectId) return acc
-                    acc[projectId] = {
-                        mensualidad_usd: r.mensualidad_pactada_usd == null ? null : Number(r.mensualidad_pactada_usd),
-                        implementacion_usd: r.implementacion_pactada_usd == null ? null : Number(r.implementacion_pactada_usd)
-                    }
-                    return acc
-                }, {})
 
-            lastLoadedProjectsCompanyRef.current = companyId
-            setFormData((prev) => ({
-                ...prev,
-                proyectos_pronosticados_ids: Array.from(new Set(inNegotiation)),
-                proyectos_prospeccion_mismo_cierre_ids: Array.from(new Set(prospectionSameClose)),
-                proyectos_futuro_lead_ids: Array.from(new Set(futureLead)),
-                proyectos_implementados_reales_ids: Array.from(new Set(implemented)),
-                proyectos_implementados_reales_valores: implementedValues
-            }))
+            if (!leadId) {
+                if (scopeKey) lastLoadedProjectsScopeRef.current = scopeKey
+                setFormData((prev) => ({
+                    ...prev,
+                    proyectos_pronosticados_ids: [],
+                    proyectos_prospeccion_mismo_cierre_ids: [],
+                    proyectos_futuro_lead_ids: [],
+                    proyectos_implementados_reales_ids: [],
+                    proyectos_pronosticados_valores: {},
+                    proyectos_implementados_reales_valores: {}
+                }))
+                return
+            }
+
+            try {
+                const rows = await fetchLeadProjectAssignments(supabase as any, { leadId, empresaId: companyId })
+                const mapped = mapAssignmentsToLeadProjectSelection(rows as any)
+                if (cancelled) return
+                if (scopeKey) lastLoadedProjectsScopeRef.current = scopeKey
+                setFormData((prev) => ({
+                    ...prev,
+                    proyectos_pronosticados_ids: mapped.inNegotiationProjectIds,
+                    proyectos_prospeccion_mismo_cierre_ids: mapped.prospectionSameCloseProjectIds,
+                    proyectos_futuro_lead_ids: mapped.futureLeadOpportunityProjectIds,
+                    proyectos_implementados_reales_ids: mapped.implementedRealProjectIds,
+                    proyectos_pronosticados_valores: mapped.forecastProjectValues,
+                    proyectos_implementados_reales_valores: mapped.implementedRealProjectValues
+                }))
+            } catch (error) {
+                console.warn('No se pudieron cargar asignaciones de proyectos del lead:', error)
+                if (cancelled) return
+                if (scopeKey) lastLoadedProjectsScopeRef.current = scopeKey
+                setFormData((prev) => ({
+                    ...prev,
+                    proyectos_pronosticados_ids: [],
+                    proyectos_prospeccion_mismo_cierre_ids: [],
+                    proyectos_futuro_lead_ids: [],
+                    proyectos_implementados_reales_ids: [],
+                    proyectos_pronosticados_valores: {},
+                    proyectos_implementados_reales_valores: {}
+                }))
+            }
         }
 
         void loadCompanyProjectAssignments()
         return () => {
             cancelled = true
         }
-    }, [formData.empresa_id, isOpen, supabase])
+    }, [formData.empresa_id, isOpen, supabase, initialData?.id])
 
     const selectedCompany = useMemo(
         () => companies.find((company) => company.id === formData.empresa_id),
@@ -811,85 +860,28 @@ export default function ClientModal({
         <>
             <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
             <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                M real: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
+                Rango mensualidad (MXN): {project.rango_mensualidad_min_usd != null || project.rango_mensualidad_max_usd != null
+                    ? `$${Math.round(Number(project.rango_mensualidad_min_usd ?? project.rango_mensualidad_max_usd ?? 0)).toLocaleString('es-MX')} - $${Math.round(Number(project.rango_mensualidad_max_usd ?? project.rango_mensualidad_min_usd ?? 0)).toLocaleString('es-MX')}`
+                    : 'N/D'}
             </span>
             <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                I real: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
+                Rango implementación (MXN): {project.rango_implementacion_min_usd != null || project.rango_implementacion_max_usd != null
+                    ? `$${Math.round(Number(project.rango_implementacion_min_usd ?? project.rango_implementacion_max_usd ?? 0)).toLocaleString('es-MX')} - $${Math.round(Number(project.rango_implementacion_max_usd ?? project.rango_implementacion_min_usd ?? 0)).toLocaleString('es-MX')}`
+                    : 'N/D'}
+            </span>
+            <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                M real (MXN): {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
+            </span>
+            <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                I real (MXN): {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
+            </span>
+            <span className='block text-[10px] font-bold text-blue-300'>
+                Sugerido (prom REAL MXN): M {project.avg_real_mensualidad_usd != null ? `$${Math.round(project.avg_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'} · I {project.avg_real_implementacion_usd != null ? `$${Math.round(project.avg_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
             </span>
             <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
                 Impl.: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(project.tiempo_implementacion_dias))} días` : 'N/D'}
             </span>
         </>
-    )
-    const renderProjectCheckboxOption = (
-        project: ProjectCatalogItem,
-        keyPrefix: string,
-        isChecked: boolean,
-        onToggle: () => void
-    ) => (
-        <label key={`${keyPrefix}-${project.id}`} className='flex items-start gap-2 cursor-pointer'>
-            <input
-                type='checkbox'
-                checked={isChecked}
-                onChange={onToggle}
-                className='mt-0.5'
-            />
-            <span className='min-w-0'>
-                {renderProjectBaseMeta(project)}
-            </span>
-        </label>
-    )
-    const renderImplementedRealProjectCard = (project: ProjectCatalogItem, keyPrefix: string) => (
-        <div key={`${keyPrefix}-${project.id}`} className='rounded-xl border p-2.5' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-            <label className='flex items-start gap-2 cursor-pointer'>
-                <input
-                    type='checkbox'
-                    checked={(formData.proyectos_implementados_reales_ids || []).includes(project.id)}
-                    onChange={() => toggleProjectSelection(project.id, 'implemented_real')}
-                    className='mt-0.5'
-                />
-                <span className='min-w-0'>
-                    <span className='block text-xs font-black' style={{ color: 'var(--text-primary)' }}>{project.nombre}</span>
-                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                        Real catálogo M: {project.valor_real_mensualidad_usd != null ? `$${Math.round(project.valor_real_mensualidad_usd).toLocaleString('es-MX')}` : 'N/D'}
-                    </span>
-                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                        Real catálogo I: {project.valor_real_implementacion_usd != null ? `$${Math.round(project.valor_real_implementacion_usd).toLocaleString('es-MX')}` : 'N/D'}
-                    </span>
-                    <span className='block text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                        Impl.: {project.tiempo_implementacion_dias != null ? `${Math.max(0, Math.round(project.tiempo_implementacion_dias))} días` : 'N/D'}
-                    </span>
-                </span>
-            </label>
-            {(formData.proyectos_implementados_reales_ids || []).includes(project.id) && (
-                <div className='mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                    <div>
-                        <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Mensualidad pactada</label>
-                        <input
-                            type='text'
-                            inputMode='numeric'
-                            value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.mensualidad_usd ?? null)}
-                            onChange={(e) => setImplementedProjectValue(project.id, 'mensualidad_usd', e.target.value)}
-                            className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
-                            style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                            placeholder='0'
-                        />
-                    </div>
-                    <div>
-                        <label className='text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300'>Implementación pactada</label>
-                        <input
-                            type='text'
-                            inputMode='numeric'
-                            value={formatCurrencyInputNumber(((formData as any).proyectos_implementados_reales_valores || {})[project.id]?.implementacion_usd ?? null)}
-                            onChange={(e) => setImplementedProjectValue(project.id, 'implementacion_usd', e.target.value)}
-                            className='mt-1 w-full px-2.5 py-2 rounded-lg border text-xs font-bold'
-                            style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
-                            placeholder='0'
-                        />
-                    </div>
-                </div>
-            )}
-        </div>
     )
     const sortedProspectRolesCatalog = useMemo(
         () => [...prospectRolesCatalog].sort((a, b) => {
@@ -984,12 +976,13 @@ export default function ClientModal({
             sameArray((formData as any).proyectos_prospeccion_mismo_cierre_ids, (initialData as any).proyectos_prospeccion_mismo_cierre_ids) &&
             sameArray((formData as any).proyectos_futuro_lead_ids, (initialData as any).proyectos_futuro_lead_ids) &&
             sameArray((formData as any).proyectos_implementados_reales_ids, (initialData as any).proyectos_implementados_reales_ids) &&
+            sameProjectValuesMap((formData as any).proyectos_pronosticados_valores, (initialData as any).proyectos_pronosticados_valores) &&
             sameProjectValuesMap((formData as any).proyectos_implementados_reales_valores, (initialData as any).proyectos_implementados_reales_valores)
         )
     }, [mode, initialData, formData])
 
     const handleCompanySelect = (companyId: string) => {
-        lastLoadedProjectsCompanyRef.current = null
+        lastLoadedProjectsScopeRef.current = null
         const company = companies.find((c) => c.id === companyId)
         if (!company) {
             setFormData((prev) => ({
@@ -1000,6 +993,7 @@ export default function ClientModal({
                 proyectos_prospeccion_mismo_cierre_ids: [],
                 proyectos_futuro_lead_ids: [],
                 proyectos_implementados_reales_ids: [],
+                proyectos_pronosticados_valores: {},
                 proyectos_implementados_reales_valores: {}
             }))
             return
@@ -1052,6 +1046,7 @@ export default function ClientModal({
             const prospectionSameClose = new Set<string>((((prev as any).proyectos_prospeccion_mismo_cierre_ids) || []).map(String))
             const futureLead = new Set<string>((((prev as any).proyectos_futuro_lead_ids) || []).map(String))
             const implemented = new Set<string>((prev.proyectos_implementados_reales_ids || []).map(String))
+            const forecastValues = { ...((prev as any).proyectos_pronosticados_valores || {}) } as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
             const implementedValues = { ...((prev as any).proyectos_implementados_reales_valores || {}) } as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
 
             if (stage !== 'implemented_real') {
@@ -1064,9 +1059,24 @@ export default function ClientModal({
                 prospectionSameClose.delete(projectId)
                 futureLead.delete(projectId)
                 if (!wasSelected) {
+                    const projectCatalogItem = projectsCatalog.find((p) => p.id === projectId)
+                    const suggestedMonthly = projectCatalogItem?.avg_real_mensualidad_usd
+                        ?? projectCatalogItem?.valor_real_mensualidad_usd
+                        ?? null
+                    const suggestedImplementation = projectCatalogItem?.avg_real_implementacion_usd
+                        ?? projectCatalogItem?.valor_real_implementacion_usd
+                        ?? null
+                    forecastValues[projectId] = forecastValues[projectId] || {
+                        mensualidad_usd: suggestedMonthly,
+                        implementacion_usd: suggestedImplementation
+                    }
                     if (stage === 'in_negotiation') inNegotiation.add(projectId)
                     if (stage === 'prospection_same_close') prospectionSameClose.add(projectId)
                     if (stage === 'future_lead_opportunity') futureLead.add(projectId)
+                }
+                const stillInForecast = inNegotiation.has(projectId) || prospectionSameClose.has(projectId) || futureLead.has(projectId)
+                if (!stillInForecast) {
+                    delete forecastValues[projectId]
                 }
             } else {
                 if (implemented.has(projectId)) {
@@ -1088,9 +1098,81 @@ export default function ClientModal({
                 proyectos_prospeccion_mismo_cierre_ids: Array.from(prospectionSameClose),
                 proyectos_futuro_lead_ids: Array.from(futureLead),
                 proyectos_implementados_reales_ids: Array.from(implemented),
+                proyectos_pronosticados_valores: forecastValues,
                 proyectos_implementados_reales_valores: implementedValues
             }
         })
+    }
+
+    const setSingleLeadProject = (projectIdRaw: string) => {
+        const projectId = String(projectIdRaw || '').trim()
+        setFormData((prev) => {
+            const forecastValues = { ...((prev as any).proyectos_pronosticados_valores || {}) } as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+            const implementedValues = { ...((prev as any).proyectos_implementados_reales_valores || {}) } as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+
+            if (!projectId) {
+                return {
+                    ...prev,
+                    proyectos_pronosticados_ids: [],
+                    proyectos_prospeccion_mismo_cierre_ids: [],
+                    proyectos_futuro_lead_ids: [],
+                    proyectos_implementados_reales_ids: [],
+                    proyectos_pronosticados_valores: {},
+                    proyectos_implementados_reales_valores: {}
+                }
+            }
+
+            const projectCatalogItem = projectsCatalog.find((p) => p.id === projectId)
+            const suggestedMonthly = projectCatalogItem?.avg_real_mensualidad_usd
+                ?? projectCatalogItem?.valor_real_mensualidad_usd
+                ?? null
+            const suggestedImplementation = projectCatalogItem?.avg_real_implementacion_usd
+                ?? projectCatalogItem?.valor_real_implementacion_usd
+                ?? null
+            const baseImplementationMonthly = projectCatalogItem?.valor_real_mensualidad_usd ?? suggestedMonthly
+            const baseImplementationValue = projectCatalogItem?.valor_real_implementacion_usd ?? suggestedImplementation
+
+            const nextForecastValues = {
+                [projectId]: forecastValues[projectId] || {
+                    mensualidad_usd: suggestedMonthly,
+                    implementacion_usd: suggestedImplementation
+                }
+            }
+
+            const shouldSyncAsImplemented = isWonStageLocal(prev.etapa)
+            const nextImplementedValues = shouldSyncAsImplemented
+                ? {
+                    [projectId]: implementedValues[projectId] || {
+                        mensualidad_usd: baseImplementationMonthly,
+                        implementacion_usd: baseImplementationValue
+                    }
+                }
+                : {}
+
+            return {
+                ...prev,
+                proyectos_pronosticados_ids: [projectId],
+                proyectos_prospeccion_mismo_cierre_ids: [],
+                proyectos_futuro_lead_ids: [],
+                proyectos_implementados_reales_ids: shouldSyncAsImplemented ? [projectId] : [],
+                proyectos_pronosticados_valores: nextForecastValues,
+                proyectos_implementados_reales_valores: nextImplementedValues
+            }
+        })
+    }
+
+    const setForecastProjectValue = (projectId: string, field: 'mensualidad_usd' | 'implementacion_usd', rawValue: string) => {
+        const parsed = parseCurrencyInputValue(rawValue)
+        setFormData((prev) => ({
+            ...prev,
+            proyectos_pronosticados_valores: {
+                ...((prev as any).proyectos_pronosticados_valores || {}),
+                [projectId]: {
+                    ...(((prev as any).proyectos_pronosticados_valores || {})[projectId] || { mensualidad_usd: null, implementacion_usd: null }),
+                    [field]: parsed
+                }
+            }
+        }))
     }
 
     const setImplementedProjectValue = (projectId: string, field: 'mensualidad_usd' | 'implementacion_usd', rawValue: string) => {
@@ -1162,7 +1244,7 @@ export default function ClientModal({
         const normalizedExactRoleTitle = String((formData as any).prospect_role_exact_title || '').trim() || null
         const normalizedLegacyProspectRoleCustom = normalizedProspectRoleCatalogId ? null : normalizedExactRoleTitle
 
-        const normalizedFormData: ClientData = {
+        let normalizedFormData: ClientData = {
             ...formData,
             prospect_role_catalog_id: normalizedProspectRoleCatalogId,
             prospect_role_custom: normalizedLegacyProspectRoleCustom,
@@ -1173,6 +1255,25 @@ export default function ClientModal({
             prospect_preferred_contact_channel: normalizedPreferredContactChannel,
             prospect_linkedin_url: normalizedLinkedin,
             prospect_is_family_member: Boolean((formData as any).prospect_is_family_member)
+        }
+
+        if (isWonStageLocal(normalizedFormData.etapa) && (((normalizedFormData as any).proyectos_implementados_reales_ids || []).length === 0)) {
+            const fallbackProjectId = getPrimaryLeadProjectId(normalizedFormData)
+            if (fallbackProjectId) {
+                const fallbackProject = projectsCatalog.find((project) => project.id === fallbackProjectId)
+                const existingImplementedValues = { ...(((normalizedFormData as any).proyectos_implementados_reales_valores || {}) as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>) }
+                const fallbackValue = existingImplementedValues[fallbackProjectId] || {
+                    mensualidad_usd: fallbackProject?.valor_real_mensualidad_usd ?? fallbackProject?.avg_real_mensualidad_usd ?? null,
+                    implementacion_usd: fallbackProject?.valor_real_implementacion_usd ?? fallbackProject?.avg_real_implementacion_usd ?? null
+                }
+                normalizedFormData = {
+                    ...normalizedFormData,
+                    proyectos_implementados_reales_ids: [fallbackProjectId],
+                    proyectos_implementados_reales_valores: {
+                        [fallbackProjectId]: fallbackValue
+                    }
+                }
+            }
         }
 
         if (isWonStageLocal(formData.etapa)) {
@@ -1226,14 +1327,23 @@ export default function ClientModal({
         : isLostStageLocal(formData.etapa)
             ? 'Cerrado Perdido'
             : 'Negociación'
+    const selectedLeadProjectId = getPrimaryLeadProjectId(formData)
+    const selectedLeadProject = selectedLeadProjectId
+        ? sortedProjectCatalog.find((project) => project.id === selectedLeadProjectId) || null
+        : null
 
     const applyCloseLead = () => {
         if (!pendingCloseDate) {
             alert('Selecciona la fecha real del cierre.')
             return
         }
-        if (pendingCloseOutcome === 'won' && ((formData as any).proyectos_implementados_reales_ids || []).length === 0) {
-            alert('Antes de cerrar como ganado, asigna al menos 1 proyecto implementado real.')
+        const fallbackWonProjectId = selectedLeadProjectId
+        if (
+            pendingCloseOutcome === 'won'
+            && ((formData as any).proyectos_implementados_reales_ids || []).length === 0
+            && !fallbackWonProjectId
+        ) {
+            alert('Antes de cerrar como ganado, asigna un proyecto al lead.')
             return
         }
         if (pendingCloseOutcome === 'won' && (pendingCloseRealValue ?? 0) <= 0) {
@@ -1245,15 +1355,37 @@ export default function ClientModal({
             return
         }
 
-        setFormData(prev => ({
-            ...prev,
-            etapa: pendingCloseOutcome === 'won' ? 'Cerrado Ganado' : 'Cerrado Perdido',
-            closed_at_real: pendingCloseDate,
-            valor_real_cierre: pendingCloseOutcome === 'won' ? (pendingCloseRealValue ?? null) : null,
-            valor_implementacion_real_cierre: pendingCloseOutcome === 'won'
-                ? (pendingCloseImplementationRealValue ?? null)
-                : null
-        }))
+        setFormData(prev => {
+            const nextBase = {
+                ...prev,
+                etapa: pendingCloseOutcome === 'won' ? 'Cerrado Ganado' : 'Cerrado Perdido',
+                closed_at_real: pendingCloseDate,
+                valor_real_cierre: pendingCloseOutcome === 'won' ? (pendingCloseRealValue ?? null) : null,
+                valor_implementacion_real_cierre: pendingCloseOutcome === 'won'
+                    ? (pendingCloseImplementationRealValue ?? null)
+                    : null
+            }
+            if (pendingCloseOutcome !== 'won') return nextBase
+
+            const implementedIds = Array.isArray((prev as any).proyectos_implementados_reales_ids)
+                ? ((prev as any).proyectos_implementados_reales_ids as string[])
+                : []
+            if (implementedIds.length > 0 || !fallbackWonProjectId) return nextBase
+
+            const existingImplementedValues = { ...((prev as any).proyectos_implementados_reales_valores || {}) } as Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+            const fallbackProject = sortedProjectCatalog.find((project) => project.id === fallbackWonProjectId)
+            const fallbackValue = existingImplementedValues[fallbackWonProjectId] || {
+                mensualidad_usd: fallbackProject?.valor_real_mensualidad_usd ?? fallbackProject?.avg_real_mensualidad_usd ?? null,
+                implementacion_usd: fallbackProject?.valor_real_implementacion_usd ?? fallbackProject?.avg_real_implementacion_usd ?? null
+            }
+            return {
+                ...nextBase,
+                proyectos_implementados_reales_ids: [fallbackWonProjectId],
+                proyectos_implementados_reales_valores: {
+                    [fallbackWonProjectId]: fallbackValue
+                }
+            }
+        })
         setShowCloseLeadPanel(false)
     }
 
@@ -1500,29 +1632,6 @@ export default function ClientModal({
 
                                     <div className='space-y-2 sm:col-span-2'>
                                         <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                            Canal de Contacto Preferido (Opcional)
-                                        </label>
-                                        <select
-                                            value={(formData as any).prospect_preferred_contact_channel || ''}
-                                            onChange={(e) => setFormData({ ...formData, prospect_preferred_contact_channel: (e.target.value || null) as any })}
-                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all cursor-pointer appearance-none'
-                                            style={{
-                                                background: 'var(--background)',
-                                                borderColor: 'var(--card-border)',
-                                                color: 'var(--text-primary)'
-                                            }}
-                                        >
-                                            <option value=''>Seleccionar canal...</option>
-                                            {PREFERRED_CONTACT_CHANNEL_OPTIONS.map((option) => (
-                                                <option key={option.value} value={option.value}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className='space-y-2 sm:col-span-2'>
-                                        <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
                                             LinkedIn del Prospecto (Opcional)
                                         </label>
                                         <input
@@ -1539,211 +1648,122 @@ export default function ClientModal({
                         </div>
                     </div>
 
-                    {selectedCompany && (
-                        <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
-                            <div className='flex items-center gap-2'>
-                                <div className='w-1 h-4 bg-violet-500 rounded-full'></div>
-                                <h3 className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>
-                                    Proyectos de la Empresa (Opcional)
-                                </h3>
-                            </div>
-                            <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
-                                Organiza proyectos por etapa comercial: negociación actual, prospección dentro del mismo cierre, oportunidades para un futuro lead y proyectos implementados reales.
-                            </p>
-
-                            <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
-                                <div className='rounded-2xl border p-4 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                                    <div className='flex items-center justify-between gap-2'>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.16em] text-blue-400'>En negociación (este lead)</p>
-                                        <span className='text-[10px] font-black text-blue-300'>{(formData.proyectos_pronosticados_ids || []).length}</span>
-                                    </div>
-                                    <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                        Proyectos ya discutidos en el cierre actual.
-                                    </p>
-                                    <div className='max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1'>
-                                        {projectsLoading ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
-                                        ) : sortedProjectCatalog.length === 0 ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : (
-                                            <div className='space-y-3'>
-                                                {hasCompatibilityContext && (
-                                                    <div className='space-y-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
-                                                            Compatibles con la industria de la empresa
-                                                        </p>
-                                                        {compatibleProjectCatalog.length === 0 ? (
-                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                                No hay proyectos compatibles registrados para esta industria.
-                                                            </p>
-                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                            project,
-                                                            'forecast-compatible',
-                                                            (formData.proyectos_pronosticados_ids || []).includes(project.id),
-                                                            () => toggleProjectSelection(project.id, 'in_negotiation')
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <div className='space-y-2'>
-                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-blue-300'>
-                                                        Catálogo completo
-                                                    </p>
-                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                        project,
-                                                        'forecast-all',
-                                                        (formData.proyectos_pronosticados_ids || []).includes(project.id),
-                                                        () => toggleProjectSelection(project.id, 'in_negotiation')
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className='rounded-2xl border p-4 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                                    <div className='flex items-center justify-between gap-2'>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300'>Prospección mismo cierre</p>
-                                        <span className='text-[10px] font-black text-cyan-200'>{((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).length}</span>
-                                    </div>
-                                    <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                        El vendedor cree que podrían entrar en el mismo cierre, pero aún están en exploración.
-                                    </p>
-                                    <div className='max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1'>
-                                        {projectsLoading ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
-                                        ) : sortedProjectCatalog.length === 0 ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : (
-                                            <div className='space-y-3'>
-                                                {hasCompatibilityContext && (
-                                                    <div className='space-y-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
-                                                            Compatibles con la industria de la empresa
-                                                        </p>
-                                                        {compatibleProjectCatalog.length === 0 ? (
-                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                                No hay proyectos compatibles registrados para esta industria.
-                                                            </p>
-                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                            project,
-                                                            'prospect-compatible',
-                                                            ((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).includes(project.id),
-                                                            () => toggleProjectSelection(project.id, 'prospection_same_close')
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <div className='space-y-2'>
-                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200'>
-                                                        Catálogo completo
-                                                    </p>
-                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                        project,
-                                                        'prospect-all',
-                                                        ((formData as any).proyectos_prospeccion_mismo_cierre_ids || []).includes(project.id),
-                                                        () => toggleProjectSelection(project.id, 'prospection_same_close')
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className='rounded-2xl border p-4 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                                    <div className='flex items-center justify-between gap-2'>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.16em] text-violet-300'>Futuro lead (misma empresa)</p>
-                                        <span className='text-[10px] font-black text-violet-200'>{((formData as any).proyectos_futuro_lead_ids || []).length}</span>
-                                    </div>
-                                    <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                        Proyectos viables para después del primer cierre, en una oportunidad futura con la misma empresa.
-                                    </p>
-                                    <div className='max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1'>
-                                        {projectsLoading ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
-                                        ) : sortedProjectCatalog.length === 0 ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : (
-                                            <div className='space-y-3'>
-                                                {hasCompatibilityContext && (
-                                                    <div className='space-y-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
-                                                            Compatibles con la industria de la empresa
-                                                        </p>
-                                                        {compatibleProjectCatalog.length === 0 ? (
-                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                                No hay proyectos compatibles registrados para esta industria.
-                                                            </p>
-                                                        ) : compatibleProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                            project,
-                                                            'future-compatible',
-                                                            ((formData as any).proyectos_futuro_lead_ids || []).includes(project.id),
-                                                            () => toggleProjectSelection(project.id, 'future_lead_opportunity')
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <div className='space-y-2'>
-                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-violet-200'>
-                                                        Catálogo completo
-                                                    </p>
-                                                    {sortedProjectCatalog.map((project) => renderProjectCheckboxOption(
-                                                        project,
-                                                        'future-all',
-                                                        ((formData as any).proyectos_futuro_lead_ids || []).includes(project.id),
-                                                        () => toggleProjectSelection(project.id, 'future_lead_opportunity')
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className='rounded-2xl border p-4 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                                    <div className='flex items-center justify-between gap-2'>
-                                        <p className='text-[10px] font-black uppercase tracking-[0.16em] text-emerald-400'>Proyecto implementado real</p>
-                                        <span className='text-[10px] font-black text-emerald-300'>{(formData.proyectos_implementados_reales_ids || []).length}</span>
-                                    </div>
-                                    {isWonStageLocal(formData.etapa) && (formData.proyectos_implementados_reales_ids || []).length === 0 && (
-                                        <p className='text-[10px] font-black rounded-lg border px-2 py-1 text-rose-400 border-rose-400/30 bg-rose-500/10'>
-                                            Requerido para cierre ganado: asigna al menos 1 proyecto implementado real.
-                                        </p>
-                                    )}
-                                    {!isWonStageLocal(formData.etapa) && (
-                                        <p className='text-[10px] font-bold rounded-lg border px-2 py-1'
-                                            style={{ color: 'var(--text-secondary)', borderColor: 'var(--card-border)', background: 'var(--background)' }}>
-                                            Recomendado usar esta lista cuando el lead esté en “Cerrado Ganado”.
-                                        </p>
-                                    )}
-                                    <div className='max-h-44 overflow-y-auto custom-scrollbar space-y-2 pr-1'>
-                                        {projectsLoading ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
-                                        ) : sortedProjectCatalog.length === 0 ? (
-                                            <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos activos registrados.</p>
-                                        ) : (
-                                            <div className='space-y-3'>
-                                                {hasCompatibilityContext && (
-                                                    <div className='space-y-2'>
-                                                        <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
-                                                            Compatibles con la industria de la empresa
-                                                        </p>
-                                                        {compatibleProjectCatalog.length === 0 ? (
-                                                            <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
-                                                                No hay proyectos compatibles registrados para esta industria.
-                                                            </p>
-                                                        ) : compatibleProjectCatalog.map((project) => renderImplementedRealProjectCard(project, 'implemented-compatible'))}
-                                                    </div>
-                                                )}
-                                                <div className='space-y-2'>
-                                                    <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200'>
-                                                        Catálogo completo
-                                                    </p>
-                                                    {sortedProjectCatalog.map((project) => renderImplementedRealProjectCard(project, 'implemented-all'))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                    <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
+                        <div className='flex items-center gap-2'>
+                            <div className='w-1 h-4 bg-violet-500 rounded-full'></div>
+                            <h3 className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>
+                                Proyecto del Lead (Opcional)
+                            </h3>
                         </div>
-                    )}
+                        <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                            Selecciona un proyecto principal para este lead. La lista prioriza compatibilidad por industria, pero puedes elegir cualquier proyecto del catálogo.
+                        </p>
+
+                        <div className='rounded-2xl border p-4 space-y-4' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                            {projectsLoading ? (
+                                <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>Cargando proyectos...</p>
+                            ) : sortedProjectCatalog.length === 0 ? (
+                                <p className='text-xs font-bold' style={{ color: 'var(--text-secondary)' }}>No hay proyectos registrados.</p>
+                            ) : (
+                                <>
+                                    {hasCompatibilityContext && (
+                                        <div className='space-y-2'>
+                                            <p className='text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300'>
+                                                Compatibles con la industria de la empresa
+                                            </p>
+                                            {compatibleProjectCatalog.length === 0 ? (
+                                                <p className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                                    No hay compatibles registrados para esta industria. Puedes elegir cualquiera del catálogo completo.
+                                                </p>
+                                            ) : (
+                                                <div className='flex flex-wrap gap-2'>
+                                                    {compatibleProjectCatalog.map((project) => {
+                                                        const isSelected = selectedLeadProjectId === project.id
+                                                        return (
+                                                            <button
+                                                                key={`quick-compatible-${project.id}`}
+                                                                type='button'
+                                                                onClick={() => setSingleLeadProject(project.id)}
+                                                                className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.1em] transition-all cursor-pointer ${isSelected ? 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10' : ''}`}
+                                                                style={isSelected ? undefined : { borderColor: 'var(--card-border)', color: 'var(--text-secondary)', background: 'var(--background)' }}
+                                                            >
+                                                                {project.nombre}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                            Seleccionar proyecto (catálogo completo)
+                                        </label>
+                                        <select
+                                            value={selectedLeadProjectId || ''}
+                                            onChange={(e) => setSingleLeadProject(e.target.value)}
+                                            className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all cursor-pointer appearance-none'
+                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        >
+                                            <option value=''>Sin proyecto asignado</option>
+                                            {sortedProjectCatalog.map((project) => (
+                                                <option key={`lead-project-${project.id}`} value={project.id}>
+                                                    {project.nombre}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {selectedLeadProject && (
+                                        <div className='rounded-xl border p-3 space-y-3' style={{ borderColor: 'var(--card-border)', background: 'var(--background)' }}>
+                                            <div className='space-y-1'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.12em] text-blue-300'>
+                                                    Proyecto seleccionado
+                                                </p>
+                                                {renderProjectBaseMeta(selectedLeadProject)}
+                                            </div>
+                                            <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Forecast mensual (MXN)
+                                                    </label>
+                                                    <input
+                                                        type='text'
+                                                        value={formatCurrencyInputNumber(((formData as any).proyectos_pronosticados_valores || {})[selectedLeadProject.id]?.mensualidad_usd ?? null)}
+                                                        onChange={(e) => setForecastProjectValue(selectedLeadProject.id, 'mensualidad_usd', e.target.value)}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-lg border px-2 py-2 text-xs font-black'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='0'
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className='text-[10px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                        Forecast implementación (MXN)
+                                                    </label>
+                                                    <input
+                                                        type='text'
+                                                        value={formatCurrencyInputNumber(((formData as any).proyectos_pronosticados_valores || {})[selectedLeadProject.id]?.implementacion_usd ?? null)}
+                                                        onChange={(e) => setForecastProjectValue(selectedLeadProject.id, 'implementacion_usd', e.target.value)}
+                                                        inputMode='numeric'
+                                                        className='mt-1 w-full rounded-lg border px-2 py-2 text-xs font-black'
+                                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                                        placeholder='0'
+                                                    />
+                                                </div>
+                                            </div>
+                                            {isWonStageLocal(formData.etapa) && (
+                                                <p className='text-[10px] font-black rounded-lg border px-2 py-1 text-emerald-300 border-emerald-400/25 bg-emerald-500/10'>
+                                                    Este proyecto se usará también como implementado real para el cierre ganado.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
 
                     {/* SECCIÓN CONTACTO SEPARADA */}
                     <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
