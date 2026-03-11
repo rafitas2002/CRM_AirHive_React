@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { getIndustryApprovalQueue } from '@/app/actions/catalogs'
 import { Bell, Building2, UsersRound, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, Activity, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
@@ -327,11 +326,22 @@ export default function TopBar() {
         let cancelled = false
 
         const loadIndustryApprovals = async () => {
-            const result = await getIndustryApprovalQueue({ limit: 250, includeCatalog: false })
-            if (cancelled || !result?.success || !result.data) return
+            const { data, error } = await (supabase
+                .from('industry_change_requests') as any)
+                .select('id, proposed_name, requested_by_name, context_entity_name, context_entity_type, created_at')
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .limit(250)
+
+            if (cancelled) return
+            if (error) {
+                setIndustryApprovalNotificationItems([])
+                setIndustryApprovalUnreadCount(0)
+                return
+            }
 
             const seen = readNotificationSeenSet(industryApprovalSeenStorageKey)
-            const pendingItems = (Array.isArray(result.data.pendingRequests) ? result.data.pendingRequests : [])
+            const pendingItems = (Array.isArray(data) ? data : [])
                 .map((row: any) => ({
                     id: String(row?.id || ''),
                     proposed_name: String(row?.proposed_name || 'Industria'),
@@ -357,7 +367,7 @@ export default function TopBar() {
             cancelled = true
             clearInterval(interval)
         }
-    }, [userId, isIndustryApprover, industryApprovalSeenStorageKey])
+    }, [userId, isIndustryApprover, industryApprovalSeenStorageKey, supabase])
 
     useEffect(() => {
         if (!userId) return
