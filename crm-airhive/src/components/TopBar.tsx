@@ -7,7 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { Bell, Building2, UsersRound, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, type LucideIcon } from 'lucide-react'
+import { getIndustryApprovalQueue } from '@/app/actions/catalogs'
+import { Bell, Building2, UsersRound, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, Activity, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
@@ -18,6 +19,41 @@ const normalizeBadgeCelebrationEventType = (value: unknown): 'unlocked' | 'upgra
     const normalized = String(value || '').trim().toLowerCase()
     if (normalized === 'unlocked' || normalized === 'upgraded') return normalized
     return null
+}
+
+const normalizeSignature = (value: unknown) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+
+const readNotificationSeenSet = (storageKey: string) => {
+    if (typeof window === 'undefined' || !storageKey) return new Set<string>()
+    try {
+        const raw = localStorage.getItem(storageKey)
+        const parsed = raw ? JSON.parse(raw) : []
+        if (!Array.isArray(parsed)) return new Set<string>()
+        return new Set(parsed.map((item) => String(item)))
+    } catch {
+        return new Set<string>()
+    }
+}
+
+const persistNotificationSeenSet = (storageKey: string, ids: Set<string>) => {
+    if (typeof window === 'undefined' || !storageKey) return
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(Array.from(ids).slice(-500)))
+    } catch {
+        // noop
+    }
+}
+
+const markNotificationSeen = (storageKey: string, id: string) => {
+    if (!id) return
+    const current = readNotificationSeenSet(storageKey)
+    if (current.has(id)) return
+    current.add(id)
+    persistNotificationSeenSet(storageKey, current)
 }
 
 export default function TopBar() {
@@ -47,6 +83,15 @@ export default function TopBar() {
         quote_author: string
         quote_text: string
     }>>([])
+    const [industryApprovalNotificationItems, setIndustryApprovalNotificationItems] = useState<Array<{
+        id: string
+        proposed_name: string
+        requested_by_name: string
+        context_entity_name?: string
+        context_entity_type?: string
+        created_at: string
+    }>>([])
+    const [industryApprovalUnreadCount, setIndustryApprovalUnreadCount] = useState(0)
     const [badgeNotificationItems, setBadgeNotificationItems] = useState<Array<{
         id: string
         label: string
@@ -70,12 +115,25 @@ export default function TopBar() {
     const dropdownIconClass = 'w-[18px] h-[18px] text-white/80 group-hover/item:text-white transition-colors'
     const badgeSeenStorageKey = userId ? `airhive_seen_badge_notifications_${userId}` : ''
     const quoteLikeSeenStorageKey = userId ? `airhive_seen_quote_like_notifications_${userId}` : ''
+    const quoteRequestSeenStorageKey = userId ? `airhive_seen_quote_request_notifications_${userId}` : ''
+    const industryApprovalSeenStorageKey = userId ? `airhive_seen_industry_approval_notifications_${userId}` : ''
     const badgeIndustryVisualMap = useMemo(() => buildIndustryBadgeVisualMap(industryCatalog), [industryCatalog])
     const industryNameById = useMemo(
         () => new Map(industryCatalog.map((row) => [String(row.id), String(row.name)])),
         [industryCatalog]
     )
     const themeButtonMeta = getTopBarThemeButtonMeta(theme)
+    const isIndustryApprover = useMemo(() => {
+        const normalizedRole = String(auth.profile?.role || '').trim().toLowerCase()
+        const normalizedUsername = normalizeSignature(auth.profile?.username)
+        const normalizedFullName = normalizeSignature(auth.profile?.full_name)
+        const normalizedEmailUser = normalizeSignature(String(auth.user?.email || '').split('@')[0])
+        return normalizedRole === 'admin'
+            || normalizedRole === 'rh'
+            || normalizedUsername === 'jesus.gracia'
+            || normalizedFullName === 'jesus gracia'
+            || normalizedEmailUser === 'jesus.gracia'
+    }, [auth.profile?.role, auth.profile?.username, auth.profile?.full_name, auth.user?.email])
 
     useEffect(() => {
         if (!userId) return
@@ -103,21 +161,29 @@ export default function TopBar() {
     }, [userId, supabase])
 
     useEffect(() => {
-        if (!isAdmin || !userId) return
+        if (!isAdmin || !userId) {
+            setQuotePendingCount(0)
+            setQuoteNotificationItems([])
+            return
+        }
         let cancelled = false
 
         const loadQuoteNotifications = async () => {
-            const { count } = await (supabase
+            const seen = readNotificationSeenSet(quoteRequestSeenStorageKey)
+
+            const { data: pendingIdRows } = await (supabase
                 .from('crm_quote_requests') as any)
-                .select('id', { head: true, count: 'exact' })
+                .select('id')
                 .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .limit(500)
 
             const { data: requests, error: requestsError } = await (supabase
                 .from('crm_quote_requests') as any)
                 .select('id, quote_author, contributed_by_name, requested_by, created_at')
                 .eq('status', 'pending')
                 .order('created_at', { ascending: false })
-                .limit(8)
+                .limit(80)
 
             if (cancelled || requestsError) return
 
@@ -131,7 +197,7 @@ export default function TopBar() {
                     requester_name: 'Usuario',
                     created_at: String(item.created_at || '')
                 }
-            })
+            }).filter((item) => item.id > 0 && !seen.has(`qreq:${item.id}`))
 
             const requesterIds = Array.from(
                 new Set(normalizedItems.map((item) => item.requested_by).filter(Boolean))
@@ -158,9 +224,12 @@ export default function TopBar() {
                 contributed_by_name: item.contributed_by_name,
                 requester_name: requesterById.get(item.requested_by) || 'Usuario',
                 created_at: item.created_at
-            }))
+            })).slice(0, 8)
 
-            const nextPendingCount = Number(count || 0)
+            const pendingIds = (Array.isArray(pendingIdRows) ? pendingIdRows : [])
+                .map((row: any) => Number(row?.id || 0))
+                .filter((id: number) => id > 0)
+            const nextPendingCount = pendingIds.filter((id) => !seen.has(`qreq:${id}`)).length
             setQuotePendingCount((prev) => (prev === nextPendingCount ? prev : nextPendingCount))
 
             const signature = itemsWithRequester
@@ -196,37 +265,17 @@ export default function TopBar() {
             cancelled = true
             supabase.removeChannel(channel)
         }
-    }, [isAdmin, userId, supabase])
+    }, [isAdmin, userId, supabase, quoteRequestSeenStorageKey])
 
     useEffect(() => {
         if (!userId) return
         let cancelled = false
 
-        const readSeen = () => {
-            if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return new Set<string>()
-            try {
-                const raw = localStorage.getItem(quoteLikeSeenStorageKey)
-                const parsed = raw ? JSON.parse(raw) : []
-                if (!Array.isArray(parsed)) return new Set<string>()
-                return new Set(parsed.map((x) => String(x)))
-            } catch {
-                return new Set<string>()
-            }
-        }
-
-        const persistSeen = (ids: Set<string>) => {
-            if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return
-            try {
-                localStorage.setItem(quoteLikeSeenStorageKey, JSON.stringify(Array.from(ids).slice(-200)))
-            } catch {
-                // noop
-            }
-        }
-
         const loadQuoteLikeNotifications = async () => {
-            const result = await getQuoteLikeNotificationsForCurrentUser(12)
+            const result = await getQuoteLikeNotificationsForCurrentUser(80)
             if (cancelled || !result?.success) return
 
+            const seen = readNotificationSeenSet(quoteLikeSeenStorageKey)
             const items = (Array.isArray(result.data) ? result.data : [])
                 .map((row: any) => ({
                     id: Number(row?.id || 0),
@@ -237,7 +286,8 @@ export default function TopBar() {
                     quote_author: String(row?.quote_author || ''),
                     quote_text: String(row?.quote_text || '')
                 }))
-                .filter((item) => item.id > 0 && item.created_at)
+                .filter((item) => item.id > 0 && item.created_at && !seen.has(`qlike:${item.id}`))
+                .slice(0, 12)
 
             const signature = items.map((item) => `${item.id}:${item.created_at}`).join('|')
             if (signature !== lastQuoteLikeListSignatureRef.current) {
@@ -245,12 +295,7 @@ export default function TopBar() {
                 setQuoteLikeNotificationItems(items)
             }
 
-            const seen = readSeen()
-            const validIds = new Set(items.map((item) => `qlike:${item.id}`))
-            const prunedSeen = new Set(Array.from(seen).filter((id) => validIds.has(id)))
-            if (prunedSeen.size !== seen.size) persistSeen(prunedSeen)
-
-            const unread = items.filter((item) => !prunedSeen.has(`qlike:${item.id}`)).length
+            const unread = items.length
             setQuoteLikeUnreadCount((prev) => (prev === unread ? prev : unread))
         }
 
@@ -273,31 +318,65 @@ export default function TopBar() {
     }, [userId, quoteLikeSeenStorageKey, supabase])
 
     useEffect(() => {
+        if (!userId || !isIndustryApprover) {
+            setIndustryApprovalUnreadCount(0)
+            setIndustryApprovalNotificationItems([])
+            return
+        }
+
+        let cancelled = false
+
+        const loadIndustryApprovals = async () => {
+            const result = await getIndustryApprovalQueue({ limit: 250, includeCatalog: false })
+            if (cancelled || !result?.success || !result.data) return
+
+            const seen = readNotificationSeenSet(industryApprovalSeenStorageKey)
+            const pendingItems = (Array.isArray(result.data.pendingRequests) ? result.data.pendingRequests : [])
+                .map((row: any) => ({
+                    id: String(row?.id || ''),
+                    proposed_name: String(row?.proposed_name || 'Industria'),
+                    requested_by_name: String(row?.requested_by_name || 'Usuario'),
+                    context_entity_name: String(row?.context_entity_name || ''),
+                    context_entity_type: String(row?.context_entity_type || ''),
+                    created_at: String(row?.created_at || '')
+                }))
+                .filter((item) => item.id && !seen.has(`indapp:${item.id}`))
+
+            setIndustryApprovalNotificationItems((prev) => {
+                const prevSignature = prev.map((item) => `${item.id}:${item.created_at}`).join('|')
+                const nextVisible = pendingItems.slice(0, 8)
+                const nextSignature = nextVisible.map((item) => `${item.id}:${item.created_at}`).join('|')
+                return prevSignature === nextSignature ? prev : nextVisible
+            })
+            setIndustryApprovalUnreadCount(pendingItems.length)
+        }
+
+        void loadIndustryApprovals()
+        const interval = setInterval(loadIndustryApprovals, 30000)
+        return () => {
+            cancelled = true
+            clearInterval(interval)
+        }
+    }, [userId, isIndustryApprover, industryApprovalSeenStorageKey])
+
+    useEffect(() => {
         if (!userId) return
         let cancelled = false
 
-        const readSeen = () => {
-            if (typeof window === 'undefined' || !badgeSeenStorageKey) return new Set<string>()
-            try {
-                const raw = localStorage.getItem(badgeSeenStorageKey)
-                const parsed = raw ? JSON.parse(raw) : []
-                if (!Array.isArray(parsed)) return new Set<string>()
-                return new Set(parsed.map((x) => String(x)))
-            } catch {
-                return new Set<string>()
-            }
-        }
-        const persistSeen = (ids: Set<string>) => {
-            if (typeof window === 'undefined' || !badgeSeenStorageKey) return
-            try {
-                localStorage.setItem(badgeSeenStorageKey, JSON.stringify(Array.from(ids).slice(-200)))
-            } catch {
-                // noop
-            }
-        }
-
         const loadBadgeNotifications = async () => {
             if (!userId) return
+            type BadgeNotificationCandidate = {
+                id: string
+                badgeRef: string
+                label: string
+                level: number
+                event_type: 'unlocked' | 'upgraded'
+                created_at: string
+                sourceType: 'industry' | 'special'
+                industriaId?: string
+                badgeType?: string
+                badgeKey?: string
+            }
 
             const [industryRes, specialRes, activeIndustryBadgesRes, activeSpecialBadgesRes] = await Promise.all([
                 (supabase
@@ -306,41 +385,43 @@ export default function TopBar() {
                     .eq('seller_id', userId)
                     .in('event_type', ['unlocked', 'upgraded'])
                     .order('created_at', { ascending: false })
-                    .limit(10) as any),
+                    .limit(1000) as any),
                 (supabase
                     .from('seller_special_badge_events')
                     .select('id, badge_type, badge_key, badge_label, level, event_type, created_at')
                     .eq('seller_id', userId)
                     .in('event_type', ['unlocked', 'upgraded'])
                     .order('created_at', { ascending: false })
-                    .limit(10) as any),
+                    .limit(1000) as any),
                 (supabase
                     .from('seller_industry_badges')
-                    .select('industria_id')
+                    .select('industria_id, level, unlocked_at, updated_at, closures_count, industrias(name)')
                     .eq('seller_id', userId)
                     .gt('level', 0)),
                 (supabase
                     .from('seller_special_badges')
-                    .select('badge_type, badge_key')
+                    .select('badge_type, badge_key, badge_label, level, unlocked_at, updated_at, progress_count')
                     .eq('seller_id', userId)
                     .gt('level', 0))
             ])
 
             const industryRows = Array.isArray(industryRes?.data) ? industryRes.data : []
             const specialRows = Array.isArray(specialRes?.data) ? specialRes.data : []
+            const activeIndustryRows = Array.isArray(activeIndustryBadgesRes?.data) ? activeIndustryBadgesRes.data : []
+            const activeSpecialRows = Array.isArray(activeSpecialBadgesRes?.data) ? activeSpecialBadgesRes.data : []
 
             const activeIndustryKeys = new Set(
-                (Array.isArray(activeIndustryBadgesRes?.data) ? activeIndustryBadgesRes.data : [])
+                activeIndustryRows
                     .map((row: { industria_id?: string | null }) => String(row?.industria_id || ''))
                     .filter(Boolean)
             )
             const activeSpecialKeys = new Set(
-                (Array.isArray(activeSpecialBadgesRes?.data) ? activeSpecialBadgesRes.data : [])
+                activeSpecialRows
                     .map((row: { badge_type?: string | null, badge_key?: string | null }) => `${String(row?.badge_type || '')}:${String(row?.badge_key || '')}`)
                     .filter((x: string) => x !== ':')
             )
 
-            const normalizedIndustry = industryRows
+            const normalizedIndustry: BadgeNotificationCandidate[] = industryRows
                 .map((row: any) => {
                     const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
                     if (!eventType) return null
@@ -357,7 +438,7 @@ export default function TopBar() {
                 })
                 .filter((item: any): item is NonNullable<typeof item> => !!item)
 
-            const normalizedSpecial = specialRows
+            const normalizedSpecial: BadgeNotificationCandidate[] = specialRows
                 .map((row: any) => {
                     const eventType = normalizeBadgeCelebrationEventType(row?.event_type)
                     if (!eventType) return null
@@ -379,32 +460,77 @@ export default function TopBar() {
                 })
                 .filter((item: any): item is NonNullable<typeof item> => !!item)
 
+            const eventIndustryRefs = new Set(normalizedIndustry.map((item) => item.badgeRef))
+            const eventSpecialRefs = new Set(normalizedSpecial.map((item) => item.badgeRef))
+
+            const fallbackIndustryItems: BadgeNotificationCandidate[] = activeIndustryRows
+                .map((row: any) => {
+                    const industriaId = String(row?.industria_id || '')
+                    if (!industriaId || eventIndustryRefs.has(industriaId)) return null
+                    const level = Math.max(0, Number(row?.level || 0))
+                    if (level <= 0) return null
+                    return {
+                        id: `industry-fallback:${industriaId}:L${level}`,
+                        badgeRef: industriaId,
+                        label: String(row?.industrias?.name || industryNameById.get(industriaId) || 'Industria'),
+                        level,
+                        event_type: 'unlocked' as const,
+                        created_at: String(row?.unlocked_at || row?.updated_at || new Date().toISOString()),
+                        sourceType: 'industry' as const,
+                        industriaId
+                    }
+                })
+                .filter((item: any): item is NonNullable<typeof item> => !!item)
+
+            const fallbackSpecialItems: BadgeNotificationCandidate[] = activeSpecialRows
+                .map((row: any) => {
+                    const badgeType = String(row?.badge_type || '')
+                    const badgeKey = String(row?.badge_key || '')
+                    if (!badgeType || !badgeKey) return null
+                    const badgeRef = `${badgeType}:${badgeKey}`
+                    if (eventSpecialRefs.has(badgeRef)) return null
+                    const level = Math.max(0, Number(row?.level || 0))
+                    if (level <= 0) return null
+                    return {
+                        id: `special-fallback:${badgeType}:${badgeKey}:L${level}`,
+                        badgeRef,
+                        label: getNormalizedSpecialBadgeDisplayLabel({
+                            badgeType,
+                            badgeKey,
+                            badgeLabel: String(row?.badge_label || 'Badge especial')
+                        }),
+                        level,
+                        event_type: 'unlocked' as const,
+                        created_at: String(row?.unlocked_at || row?.updated_at || new Date().toISOString()),
+                        sourceType: 'special' as const,
+                        badgeType,
+                        badgeKey
+                    }
+                })
+                .filter((item: any): item is NonNullable<typeof item> => !!item)
+
             const merged = [...normalizedIndustry, ...normalizedSpecial]
                 .filter((item) => item.id.endsWith(':') === false && item.created_at)
                 .filter((item) => {
                     if (item.sourceType === 'industry') return activeIndustryKeys.has(item.badgeRef)
                     return activeSpecialKeys.has(item.badgeRef)
                 })
+                .concat(fallbackIndustryItems, fallbackSpecialItems)
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 .slice(0, 20)
+            const seen = readNotificationSeenSet(badgeSeenStorageKey)
+            const visibleItems = merged.filter((item) => !seen.has(item.id))
 
             if (cancelled) return
-            const signature = merged
+            const signature = visibleItems
                 .map((item) => `${item.id}:${item.level}:${item.event_type}:${item.created_at}`)
                 .join('|')
             if (signature !== lastBadgeListSignatureRef.current) {
                 lastBadgeListSignatureRef.current = signature
-                setBadgeNotificationItems(merged)
+                setBadgeNotificationItems(visibleItems)
             }
 
-            const seen = readSeen()
-            const mergedIds = new Set(merged.map((item) => item.id))
-            const prunedSeen = new Set(Array.from(seen).filter((id) => mergedIds.has(id)))
-            if (prunedSeen.size !== seen.size) {
-                persistSeen(prunedSeen)
-            }
-
-            const unread = merged.filter((item) => !prunedSeen.has(item.id)).length
+            const unread = visibleItems.length
             setBadgeUnreadCount((prev) => (prev === unread ? prev : unread))
         }
 
@@ -419,16 +545,15 @@ export default function TopBar() {
             badgeType?: string
             badgeKey?: string
         }) => {
+            const seen = readNotificationSeenSet(badgeSeenStorageKey)
+            if (seen.has(item.id)) return
             setBadgeNotificationItems((prev) => {
                 const deduped = [item, ...prev.filter((x) => x.id !== item.id)]
                 return deduped
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                     .slice(0, 20)
             })
-            const seen = readSeen()
-            if (!seen.has(item.id)) {
-                setBadgeUnreadCount((prev) => prev + 1)
-            }
+            setBadgeUnreadCount((prev) => prev + 1)
         }
 
         loadBadgeNotifications()
@@ -559,28 +684,33 @@ export default function TopBar() {
         return () => document.removeEventListener('mousedown', onClickOutside)
     }, [])
 
-    const totalNotificationCount = quotePendingCount + badgeUnreadCount + quoteLikeUnreadCount
+    const totalNotificationCount = quotePendingCount + badgeUnreadCount + quoteLikeUnreadCount + industryApprovalUnreadCount
 
-    const markBadgeNotificationsAsRead = () => {
-        if (typeof window === 'undefined' || !badgeSeenStorageKey) return
-        try {
-            const ids = badgeNotificationItems.map((item) => item.id).slice(0, 200)
-            localStorage.setItem(badgeSeenStorageKey, JSON.stringify(ids))
-            setBadgeUnreadCount(0)
-        } catch {
-            // noop
-        }
+    const markBadgeNotificationAsHandled = (notificationId: string) => {
+        markNotificationSeen(badgeSeenStorageKey, notificationId)
+        setBadgeNotificationItems((prev) => prev.filter((item) => item.id !== notificationId))
+        setBadgeUnreadCount((prev) => Math.max(0, prev - 1))
     }
 
-    const markQuoteLikeNotificationsAsRead = () => {
-        if (typeof window === 'undefined' || !quoteLikeSeenStorageKey) return
-        try {
-            const ids = quoteLikeNotificationItems.map((item) => `qlike:${item.id}`).slice(0, 200)
-            localStorage.setItem(quoteLikeSeenStorageKey, JSON.stringify(ids))
-            setQuoteLikeUnreadCount(0)
-        } catch {
-            // noop
-        }
+    const markQuoteLikeNotificationAsHandled = (notificationId: number) => {
+        const key = `qlike:${notificationId}`
+        markNotificationSeen(quoteLikeSeenStorageKey, key)
+        setQuoteLikeNotificationItems((prev) => prev.filter((item) => item.id !== notificationId))
+        setQuoteLikeUnreadCount((prev) => Math.max(0, prev - 1))
+    }
+
+    const markIndustryApprovalNotificationAsHandled = (notificationId: string) => {
+        const key = `indapp:${notificationId}`
+        markNotificationSeen(industryApprovalSeenStorageKey, key)
+        setIndustryApprovalNotificationItems((prev) => prev.filter((item) => item.id !== notificationId))
+        setIndustryApprovalUnreadCount((prev) => Math.max(0, prev - 1))
+    }
+
+    const markQuoteRequestNotificationAsHandled = (notificationId: number) => {
+        const key = `qreq:${notificationId}`
+        markNotificationSeen(quoteRequestSeenStorageKey, key)
+        setQuoteNotificationItems((prev) => prev.filter((item) => item.id !== notificationId))
+        setQuotePendingCount((prev) => Math.max(0, prev - 1))
     }
 
     return (
@@ -750,7 +880,8 @@ export default function TopBar() {
                                     {[
                                         { href: '/admin/forecast', label: 'Pronóstico', icon: BarChart3 },
                                         { href: '/admin/correlaciones', label: 'Correlaciones', icon: LineChart },
-                                        { href: '/admin/insights/correlaciones', label: 'Gráfica Corr.', icon: LineChart }
+                                        { href: '/admin/insights/correlaciones', label: 'Gráfica Corr.', icon: LineChart },
+                                        { href: '/admin/insights/bitacora', label: 'Bitácora CRM', icon: Activity }
                                     ].map((item) => {
                                         const Icon = item.icon as LucideIcon
                                         const isActive = pathname === item.href
@@ -809,14 +940,7 @@ export default function TopBar() {
                             type='button'
                             onClick={() => {
                                 setThemeMenuOpen(false)
-                                setQuoteNotificationOpen((prev) => {
-                                    const next = !prev
-                                    if (next) {
-                                        markBadgeNotificationsAsRead()
-                                        markQuoteLikeNotificationsAsRead()
-                                    }
-                                    return next
-                                })
+                                setQuoteNotificationOpen((prev) => !prev)
                             }}
                             className='relative text-white px-2 py-2 group transition-all hover:scale-110 cursor-pointer'
                             title='Notificaciones'
@@ -844,7 +968,10 @@ export default function TopBar() {
                                     </span>
                                 </div>
                                 <div className='max-h-[340px] overflow-y-auto'>
-                                    {badgeNotificationItems.length === 0 && quoteLikeNotificationItems.length === 0 && !isAdmin && (
+                                    {badgeNotificationItems.length === 0
+                                        && quoteLikeNotificationItems.length === 0
+                                        && industryApprovalNotificationItems.length === 0
+                                        && !isAdmin && (
                                         <p className='px-4 py-4 text-sm text-white/70'>Sin notificaciones por ahora.</p>
                                     )}
 
@@ -890,11 +1017,67 @@ export default function TopBar() {
                                                             <p className='text-[11px] mt-1.5 text-blue-300/90'>
                                                                 {new Date(item.created_at).toLocaleString('es-MX')}
                                                             </p>
+                                                            <div className='mt-2 flex justify-end'>
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => markBadgeNotificationAsHandled(item.id)}
+                                                                    className='inline-flex items-center rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white/80 hover:bg-white/10 hover:border-white/30 transition-colors'
+                                                                >
+                                                                    Marcar atendida
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 )
                                             })}
+                                        </>
+                                    )}
+
+                                    {isIndustryApprover && industryApprovalNotificationItems.length > 0 && (
+                                        <>
+                                            <div className='px-4 py-2 border-b border-white/10'>
+                                                <p className='text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300'>
+                                                    Industrias por aprobar
+                                                </p>
+                                            </div>
+                                            {industryApprovalNotificationItems.map((item) => (
+                                                <div
+                                                    key={`industry-approval-${item.id}`}
+                                                    className='px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
+                                                >
+                                                    <p className='text-sm font-semibold text-white'>
+                                                        Nueva industria: {item.proposed_name}
+                                                    </p>
+                                                    <p className='text-xs mt-1 text-white/75'>
+                                                        Capturó: {item.requested_by_name}
+                                                        {item.context_entity_name
+                                                            ? ` • ${item.context_entity_type === 'pre_lead' ? 'Suspect' : 'Empresa'}: ${item.context_entity_name}`
+                                                            : ''}
+                                                    </p>
+                                                    <div className='mt-1 flex items-center justify-between gap-2'>
+                                                        <p className='text-[11px] text-cyan-300/90'>
+                                                            {new Date(item.created_at).toLocaleString('es-MX')}
+                                                        </p>
+                                                    </div>
+                                                    <div className='mt-2 flex items-center justify-end gap-2'>
+                                                        <Link
+                                                            href={`/settings/aprobaciones?request=${encodeURIComponent(item.id)}#industrias`}
+                                                            onClick={() => setQuoteNotificationOpen(false)}
+                                                            className='inline-flex items-center rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-cyan-200 hover:bg-cyan-500/20 transition-colors'
+                                                        >
+                                                            Revisar
+                                                        </Link>
+                                                        <button
+                                                            type='button'
+                                                            onClick={() => markIndustryApprovalNotificationAsHandled(item.id)}
+                                                            className='inline-flex items-center rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white/80 hover:bg-white/10 hover:border-white/30 transition-colors'
+                                                        >
+                                                            Marcar atendida
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </>
                                     )}
 
@@ -919,6 +1102,15 @@ export default function TopBar() {
                                                     <p className='text-[11px] mt-1 text-emerald-300/90'>
                                                         {new Date(item.created_at).toLocaleString('es-MX')}
                                                     </p>
+                                                    <div className='mt-2 flex justify-end'>
+                                                        <button
+                                                            type='button'
+                                                            onClick={() => markQuoteLikeNotificationAsHandled(item.id)}
+                                                            className='inline-flex items-center rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white/80 hover:bg-white/10 hover:border-white/30 transition-colors'
+                                                        >
+                                                            Marcar atendida
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </>
@@ -935,11 +1127,9 @@ export default function TopBar() {
                                                 <p className='px-4 py-4 text-sm text-white/70'>Sin solicitudes pendientes.</p>
                                             )}
                                             {quoteNotificationItems.length > 0 && quoteNotificationItems.map((item) => (
-                                                <Link
+                                                <div
                                                     key={`quote-notif-${item.id}`}
-                                                    href='/settings/personalizacion#solicitudes-frases'
-                                                    onClick={() => setQuoteNotificationOpen(false)}
-                                                    className='block px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
+                                                    className='px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors'
                                                 >
                                                     <p className='text-sm font-semibold text-white'>
                                                         Autor: {item.quote_author}
@@ -950,20 +1140,47 @@ export default function TopBar() {
                                                     <p className='text-[11px] mt-1 text-blue-300/90'>
                                                         {new Date(item.created_at).toLocaleString('es-MX')}
                                                     </p>
-                                                </Link>
+                                                    <div className='mt-2 flex items-center justify-end gap-2'>
+                                                        <Link
+                                                            href='/settings/aprobaciones#solicitudes-frases'
+                                                            onClick={() => setQuoteNotificationOpen(false)}
+                                                            className='inline-flex items-center rounded-md border border-blue-400/30 bg-blue-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-200 hover:bg-blue-500/20 transition-colors'
+                                                        >
+                                                            Revisar
+                                                        </Link>
+                                                        <button
+                                                            type='button'
+                                                            onClick={() => markQuoteRequestNotificationAsHandled(item.id)}
+                                                            className='inline-flex items-center rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-white/80 hover:bg-white/10 hover:border-white/30 transition-colors'
+                                                        >
+                                                            Marcar atendida
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             ))}
                                         </>
                                     )}
                                 </div>
-                                {isAdmin && (
-                                    <div className='px-4 py-3'>
-                                        <Link
-                                            href='/settings/personalizacion#solicitudes-frases'
-                                            onClick={() => setQuoteNotificationOpen(false)}
-                                            className='inline-flex items-center text-xs font-bold text-blue-300 hover:text-blue-200 transition-colors'
-                                        >
-                                            Ir a revisar solicitudes
-                                        </Link>
+                                {(isAdmin || isIndustryApprover) && (
+                                    <div className='px-4 py-3 flex flex-wrap items-center gap-4'>
+                                        {isAdmin && (
+                                            <Link
+                                                href='/settings/aprobaciones#solicitudes-frases'
+                                                onClick={() => setQuoteNotificationOpen(false)}
+                                                className='inline-flex items-center text-xs font-bold text-blue-300 hover:text-blue-200 transition-colors'
+                                            >
+                                                Revisar frases
+                                            </Link>
+                                        )}
+                                        {isIndustryApprover && (
+                                            <Link
+                                                href='/settings/aprobaciones#industrias'
+                                                onClick={() => setQuoteNotificationOpen(false)}
+                                                className='inline-flex items-center text-xs font-bold text-cyan-300 hover:text-cyan-200 transition-colors'
+                                            >
+                                                Revisar industrias
+                                            </Link>
+                                        )}
                                     </div>
                                 )}
                             </div>
