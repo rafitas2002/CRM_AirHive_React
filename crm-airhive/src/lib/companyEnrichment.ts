@@ -6,6 +6,7 @@ export type CompanyEnrichmentInput = {
     nombre?: string | null
     website?: string | null
     ubicacion?: string | null
+    telefono?: string | null
     industria?: string | null
     descripcion?: string | null
     tamano?: number | null
@@ -23,6 +24,7 @@ export type CompanyEnrichmentSuggestion = {
     sede_objetivo_sugerida: string | null
     sedes_sugeridas: string[]
     ubicacion: string | null
+    telefono: string | null
     industria: string | null
     confidence: number
     sources: string[]
@@ -236,6 +238,31 @@ const COMPANY_NAME_DESCRIPTOR_KEYWORDS = [
     'shop'
 ]
 
+const PHONE_CONTEXT_KEYWORDS = [
+    'telefono',
+    'tel',
+    'phone',
+    'contacto',
+    'llamanos',
+    'call us',
+    'whatsapp',
+    'atencion',
+    'customer service',
+    'servicio al cliente'
+]
+
+const PHONE_NOISE_KEYWORDS = [
+    'sku',
+    'modelo',
+    'model',
+    'folio',
+    'empleados',
+    'employees',
+    'codigo postal',
+    'postal code',
+    'zip code'
+]
+
 function normalizeText(value: unknown): string {
     return String(value || '')
         .normalize('NFD')
@@ -250,6 +277,7 @@ function buildSearchBlob(input: CompanyEnrichmentInput, snapshot: WebsiteSnapsho
         input.descripcion,
         input.industria,
         input.ubicacion,
+        input.telefono,
         snapshot?.title,
         snapshot?.description,
         snapshot?.bodyText
@@ -653,6 +681,95 @@ function inferLocationFromText(searchBlob: string, existingLocation: string, web
     }
 
     return { value: null, confidence: 0, signal: null }
+}
+
+function normalizePhoneCandidate(raw: unknown): string {
+    const trimmed = String(raw || '').trim()
+    if (!trimmed) return ''
+
+    const withoutExt = trimmed.replace(/(?:ext(?:ension)?|x)\s*[:.]?\s*\d{1,5}$/i, '').trim()
+    const compact = withoutExt
+        .replace(/[\u00a0]/g, ' ')
+        .replace(/[^\d+]/g, '')
+        .replace(/\++/g, '+')
+
+    if (!compact) return ''
+
+    const plusless = compact.replace(/[^\d]/g, '')
+    if (plusless.length < 10 || plusless.length > 15) return ''
+
+    if (compact.startsWith('+')) {
+        return `+${plusless}`.slice(0, 18)
+    }
+
+    if (plusless.length === 12 && plusless.startsWith('52')) {
+        return `+${plusless}`.slice(0, 18)
+    }
+
+    return plusless.slice(0, 16)
+}
+
+function inferPhoneFromText(
+    searchBlob: string,
+    existingPhone: string,
+    website: string
+): { value: string | null; confidence: number; signal: string | null } {
+    const normalizedExisting = normalizePhoneCandidate(existingPhone)
+    if (normalizedExisting) {
+        return { value: normalizedExisting, confidence: 0.96, signal: 'telefono_actual' }
+    }
+
+    const normalizedBlob = String(searchBlob || '')
+    if (!normalizedBlob) {
+        return { value: null, confidence: 0, signal: null }
+    }
+
+    const websiteProfile = getWebsiteDomainProfile(website)
+    const candidates = normalizedBlob.matchAll(/\+?\d[\d\s().-]{8,}\d/g)
+    const seen = new Set<string>()
+
+    let bestValue: string | null = null
+    let bestScore = 0
+    let bestSignal: string | null = null
+
+    for (const candidate of candidates) {
+        const rawValue = String(candidate?.[0] || '').trim()
+        const normalizedPhone = normalizePhoneCandidate(rawValue)
+        if (!normalizedPhone) continue
+        if (seen.has(normalizedPhone)) continue
+        seen.add(normalizedPhone)
+
+        const index = Number(candidate?.index || 0)
+        const context = normalizedBlob.slice(Math.max(0, index - 64), Math.min(normalizedBlob.length, index + rawValue.length + 64))
+        const digits = normalizedPhone.replace(/\D/g, '')
+
+        let score = 0.42
+        if (PHONE_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) score += 0.28
+        if (context.includes('whatsapp')) score += 0.1
+        if (PHONE_NOISE_KEYWORDS.some((keyword) => context.includes(keyword))) score -= 0.12
+        if (normalizedPhone.startsWith('+52') || digits.startsWith('52')) score += 0.08
+        if (websiteProfile?.tld === 'mx' && (digits.length === 10 || digits.startsWith('52'))) score += 0.08
+        if (digits.length > 12) score -= 0.04
+
+        const clampedScore = clampNumber(score, 0, 0.95)
+        if (clampedScore > bestScore) {
+            bestScore = clampedScore
+            bestValue = normalizedPhone
+            if (context.includes('whatsapp')) bestSignal = 'telefono_keyword_whatsapp'
+            else if (PHONE_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) bestSignal = 'telefono_keyword_contacto'
+            else bestSignal = 'telefono_patron_numerico'
+        }
+    }
+
+    if (!bestValue || bestScore < 0.46) {
+        return { value: null, confidence: 0, signal: null }
+    }
+
+    return {
+        value: bestValue,
+        confidence: bestScore,
+        signal: bestSignal
+    }
 }
 
 function extractSiteCandidates(searchBlob: string, locationValue: string | null): string[] {
@@ -1327,6 +1444,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
     const companyNameInference = inferCompanyNameFromInput(input, websiteSnapshot)
     const sizeInference = inferSizeFromText(searchBlob, input.tamano, normalizedWebsite)
     const locationInference = inferLocationFromText(searchBlob, String(input.ubicacion || ''), normalizedWebsite)
+    const phoneInference = inferPhoneFromText(searchBlob, String(input.telefono || ''), normalizedWebsite)
     const industryInference = inferIndustryFromText(searchBlob, String(input.industria || ''))
     const rawSiteCandidates = extractSiteCandidates(searchBlob, locationInference.value)
     const scopeInference = inferCompanyScope(searchBlob, locationInference.value, rawSiteCandidates, normalizedWebsite)
@@ -1341,6 +1459,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         companyNameInference.confidence,
         sizeInference.confidenceScore,
         locationInference.confidence,
+        phoneInference.confidence,
         industryInference.confidence,
         scopeInference.confidence
     ].filter((value) => Number.isFinite(value) && value > 0)
@@ -1353,6 +1472,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         companyNameInference.signal,
         sizeInference.signal,
         locationInference.signal,
+        phoneInference.signal,
         industryInference.signal,
         scopeInference.signal
     ].filter((value): value is string => !!value)
@@ -1381,6 +1501,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         sede_objetivo_sugerida: suggestedSite,
         sedes_sugeridas: siteCandidates,
         ubicacion: locationInference.value,
+        telefono: phoneInference.value,
         industria: industryInference.value,
         confidence: Number(confidence.toFixed(4)),
         sources,

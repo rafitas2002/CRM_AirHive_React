@@ -18,6 +18,7 @@ type EnrichmentCompanyRow = {
     tamano_senal_principal: string | null
     website: string | null
     ubicacion: string | null
+    telefono: string | null
     alcance_empresa: string | null
     sede_objetivo: string | null
     sedes_sugeridas: string[] | null
@@ -45,6 +46,7 @@ const OPTIONAL_EMPRESA_ENRICHMENT_COLUMNS = new Set([
     'enrichment_last_run_at',
     'enrichment_last_error',
     'enriched_at',
+    'telefono',
     'alcance_empresa',
     'sede_objetivo',
     'sedes_sugeridas'
@@ -66,6 +68,7 @@ const ENRICHMENT_COMPANY_REQUIRED_COLUMNS = [
 ] as const
 
 const ENRICHMENT_COMPANY_OPTIONAL_COLUMNS = [
+    'telefono',
     'alcance_empresa',
     'sede_objetivo',
     'sedes_sugeridas'
@@ -118,6 +121,25 @@ function normalizeWebsite(rawWebsite: unknown): string {
     if (!trimmed) return ''
     if (/^https?:\/\//i.test(trimmed)) return trimmed
     return `https://${trimmed}`
+}
+
+function normalizeCompanyPhone(rawPhone: unknown): string | null {
+    const trimmed = String(rawPhone || '').trim()
+    if (!trimmed) return null
+
+    const compact = trimmed
+        .replace(/(?:ext(?:ension)?|x)\s*[:.]?\s*\d{1,5}$/i, '')
+        .replace(/[^\d+]/g, '')
+        .replace(/\++/g, '+')
+        .trim()
+    if (!compact) return null
+
+    const digits = compact.replace(/[^\d]/g, '')
+    if (digits.length < 10 || digits.length > 15) return null
+
+    if (compact.startsWith('+')) return `+${digits}`.slice(0, 18)
+    if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`.slice(0, 18)
+    return digits.slice(0, 16)
 }
 
 function isLikelyWebsite(rawWebsite: string): boolean {
@@ -378,6 +400,7 @@ async function runEnrichmentForCompany(
             nombre: company.nombre,
             website: company.website,
             ubicacion: company.ubicacion,
+            telefono: company.telefono,
             industria: company.industria,
             descripcion: company.descripcion,
             tamano: company.tamano
@@ -409,6 +432,13 @@ async function runEnrichmentForCompany(
         if (canApplyLocation) {
             updatePayload.ubicacion = normalizeLocationLabel(suggestion.ubicacion)
             appliedFields.push('ubicacion')
+        }
+
+        const normalizedSuggestedPhone = normalizeCompanyPhone(suggestion.telefono)
+        const canApplyPhone = normalizedSuggestedPhone && (options.applyMode === 'overwrite' || isBlank(company.telefono))
+        if (canApplyPhone) {
+            updatePayload.telefono = normalizedSuggestedPhone
+            appliedFields.push('telefono')
         }
 
         const normalizedScope = normalizeCompanyScopeValue(suggestion.alcance_empresa)
@@ -560,6 +590,7 @@ export async function previewCompanyAutofillByWebsite(input: {
     website: string
     nombre?: string | null
     ubicacion?: string | null
+    telefono?: string | null
     industria?: string | null
     descripcion?: string | null
     tamano?: number | null
@@ -577,6 +608,7 @@ export async function previewCompanyAutofillByWebsite(input: {
             nombre: input?.nombre || null,
             website: normalizedWebsite,
             ubicacion: input?.ubicacion || null,
+            telefono: input?.telefono || null,
             industria: input?.industria || null,
             descripcion: input?.descripcion || null,
             tamano: Number.isFinite(Number(input?.tamano)) ? Number(input?.tamano) : null
@@ -586,6 +618,7 @@ export async function previewCompanyAutofillByWebsite(input: {
             suggestion.nombre ? 'nombre' : null,
             suggestion.industria ? 'industria' : null,
             suggestion.ubicacion ? 'ubicacion' : null,
+            suggestion.telefono ? 'telefono' : null,
             suggestion.alcance_empresa ? 'alcance_empresa' : null,
             suggestion.sede_objetivo_sugerida ? 'sede_objetivo' : null,
             (suggestion.sedes_sugeridas || []).length > 0 ? 'sedes_sugeridas' : null,

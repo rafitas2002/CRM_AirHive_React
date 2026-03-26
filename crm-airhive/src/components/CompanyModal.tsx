@@ -37,6 +37,7 @@ export type CompanyData = {
     industrias?: string[]
     tags?: string[]
     website: string
+    telefono?: string
     descripcion: string
     alcance_empresa?: CompanyScopeValue | null
     sede_objetivo?: string | null
@@ -167,6 +168,7 @@ export default function CompanyModal({
         industrias: [],
         tags: [],
         website: '',
+        telefono: '',
         descripcion: '',
         alcance_empresa: 'por_definir',
         sede_objetivo: '',
@@ -189,6 +191,8 @@ export default function CompanyModal({
     const [isAutofillConfirmOpen, setIsAutofillConfirmOpen] = useState(false)
     const [autofillSuggestion, setAutofillSuggestion] = useState<CompanyEnrichmentSuggestion | null>(null)
     const [lastWebsiteCheckedForAutofill, setLastWebsiteCheckedForAutofill] = useState('')
+    const overlayScrollRef = useRef<HTMLDivElement>(null)
+    const modalBodyScrollRef = useRef<HTMLDivElement>(null)
     const wrapperRef = useRef<HTMLDivElement>(null)
     const toInputString = (value: unknown) => (value == null ? '' : String(value))
     const isEditMode = mode === 'edit' || Boolean(initialData?.id)
@@ -216,6 +220,7 @@ export default function CompanyModal({
             industrias,
             tags: normalizeCompanyTags(raw?.tags),
             website: toInputString(raw?.website ?? raw?.sitio_web),
+            telefono: toInputString(raw?.telefono ?? raw?.phone),
             descripcion: toInputString(raw?.descripcion),
             alcance_empresa: normalizeCompanyScopeValue(raw?.alcance_empresa) || 'por_definir',
             sede_objetivo: toInputString(raw?.sede_objetivo),
@@ -241,6 +246,7 @@ export default function CompanyModal({
                 industrias: [],
                 tags: [],
                 website: '',
+                telefono: '',
                 descripcion: '',
                 alcance_empresa: 'por_definir',
                 sede_objetivo: '',
@@ -255,6 +261,11 @@ export default function CompanyModal({
             setIsAutofillPreviewLoading(false)
             setLastWebsiteCheckedForAutofill(normalizeWebsiteCandidate(initialData?.website || ''))
             fetchCatalogs()
+
+            window.requestAnimationFrame(() => {
+                overlayScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+                modalBodyScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+            })
         }
     }, [isOpen, initialData, mode])
 
@@ -264,6 +275,7 @@ export default function CompanyModal({
             autofillSuggestion.nombre ? 'nombre' : null,
             autofillSuggestion.industria ? 'industria' : null,
             autofillSuggestion.ubicacion ? 'ubicacion' : null,
+            autofillSuggestion.telefono ? 'telefono de empresa' : null,
             autofillSuggestion.alcance_empresa ? 'alcance' : null,
             autofillSuggestion.sede_objetivo_sugerida ? 'sede objetivo' : null,
             (autofillSuggestion.sedes_sugeridas || []).length > 0 ? 'sedes sugeridas' : null,
@@ -507,6 +519,7 @@ export default function CompanyModal({
                     ? (suggestion.tamano_senal_principal || prev.tamano_senal_principal)
                     : prev.tamano_senal_principal,
                 ubicacion: suggestion.ubicacion || prev.ubicacion,
+                telefono: suggestion.telefono || prev.telefono,
                 industria: suggestion.industria || prev.industria,
                 industria_id: nextPrimaryIndustryId,
                 industria_ids: nextIndustryIds,
@@ -550,6 +563,7 @@ export default function CompanyModal({
                 website: normalizedWebsite,
                 nombre: formData.nombre,
                 ubicacion: formData.ubicacion,
+                telefono: formData.telefono,
                 industria: formData.industria,
                 descripcion: formData.descripcion,
                 tamano: sizeForAutofill
@@ -567,6 +581,7 @@ export default function CompanyModal({
                 suggestion.nombre
                 || suggestion.industria
                 || suggestion.ubicacion
+                || suggestion.telefono
                 || suggestion.alcance_empresa
                 || suggestion.sede_objetivo_sugerida
                 || (suggestion.sedes_sugeridas || []).length > 0
@@ -671,6 +686,7 @@ export default function CompanyModal({
                 ...formData,
                 nombre: normalizedName,
                 website: normalizedWebsite,
+                telefono: toInputString(formData.telefono).trim(),
                 ubicacion: locationResolution.valueToPersist,
                 alcance_empresa: normalizeCompanyScopeValue(formData.alcance_empresa) || 'por_definir',
                 sede_objetivo: toInputString(formData.sede_objetivo).trim() || null,
@@ -711,7 +727,7 @@ export default function CompanyModal({
 
     return (
         <>
-            <div className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
+            <div ref={overlayScrollRef} className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
                 <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
                 {/* Header */}
                 <div className='ah-modal-header'>
@@ -727,7 +743,7 @@ export default function CompanyModal({
                 </div>
 
                 {/* Body */}
-                <div className='p-8 overflow-y-auto custom-scrollbar space-y-6'>
+                <div ref={modalBodyScrollRef} className='p-8 overflow-y-auto custom-scrollbar space-y-6'>
                     <form id='company-form' onSubmit={handleSubmit} className='space-y-6'>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
@@ -814,6 +830,7 @@ export default function CompanyModal({
                                     <p className='text-[11px] text-[var(--text-secondary)] leading-relaxed'>
                                         Sugerencia actual:
                                         {autofillSuggestion.ubicacion ? ` Ubicacion ${autofillSuggestion.ubicacion}.` : ''}
+                                        {autofillSuggestion.telefono ? ` Telefono ${autofillSuggestion.telefono}.` : ''}
                                         {autofillSuggestion.alcance_empresa ? ` Alcance ${autofillSuggestion.alcance_empresa}.` : ''}
                                         {autofillSuggestion.sede_objetivo_sugerida ? ` Sede sugerida ${autofillSuggestion.sede_objetivo_sugerida}.` : ''}
                                         {autofillSuggestion.industria ? ` Industria ${autofillSuggestion.industria}.` : ''}
@@ -826,6 +843,23 @@ export default function CompanyModal({
                                         Analizando sitio web para sugerir datos...
                                     </p>
                                 )}
+                            </div>
+
+                            {/* Telefono */}
+                            <div className='space-y-1.5'>
+                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
+                                    Teléfono de la Empresa
+                                </label>
+                                <input
+                                    type='tel'
+                                    placeholder='ej. +52 81 1234 5678'
+                                    value={toInputString(formData.telefono)}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, telefono: e.target.value }))}
+                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                />
+                                <p className='text-[11px] text-[var(--text-secondary)]'>
+                                    Opcional. El autollenado intentará detectar un teléfono corporativo desde el sitio web.
+                                </p>
                             </div>
 
                             {/* Logo Upload Section */}

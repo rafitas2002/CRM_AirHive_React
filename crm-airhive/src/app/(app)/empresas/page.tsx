@@ -910,6 +910,35 @@ export default function EmpresasPage() {
         setIsDeleteModalOpen(true)
     }
 
+    const handleQuickUpdateCompanyTags = async (companyId: string, tags: string[]) => {
+        const normalizedCompanyId = String(companyId || '').trim()
+        if (!normalizedCompanyId) return
+
+        const normalizedTags = normalizeCompanyTags(tags)
+        const { error } = await (supabase.from('empresas') as any)
+            .update({ tags: normalizedTags })
+            .eq('id', normalizedCompanyId)
+
+        if (error) {
+            const parsed = parseSupabaseError(error, 'No se pudieron actualizar los tags.')
+            console.error('Error updating company tags:', parsed, error)
+            alert(`Error al actualizar tags: ${parsed}`)
+            throw error
+        }
+
+        setCompanies((prev) => prev.map((company) => (
+            String(company.id || '').trim() === normalizedCompanyId
+                ? { ...company, tags: normalizedTags }
+                : company
+        )))
+
+        setSelectedCompany((prev) => (
+            prev && String(prev.id || '').trim() === normalizedCompanyId
+                ? { ...prev, tags: normalizedTags }
+                : prev
+        ))
+    }
+
     const confirmDelete = async () => {
         if (!companyToDelete) return
         const companyId = companyToDelete
@@ -1034,6 +1063,7 @@ export default function EmpresasPage() {
             sedes_sugeridas: normalizeSiteSuggestions((companyData as any).sedes_sugeridas)
         }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
+        const companyPhoneValue = normalizeOptionalText((companyData as any)?.telefono)
 
         const getPayloadCandidates = () => {
             const candidates: any[] = []
@@ -1056,11 +1086,18 @@ export default function EmpresasPage() {
                 basePayload
             ]
             for (const corePayload of corePayloadVariants) {
-                if (websiteValue !== null) {
-                    candidates.push({ ...corePayload, website: websiteValue })
-                    candidates.push({ ...corePayload, sitio_web: websiteValue })
+                const corePayloadVariantsWithPhone = [
+                    { ...corePayload, telefono: companyPhoneValue },
+                    corePayload
+                ]
+
+                for (const payloadVariant of corePayloadVariantsWithPhone) {
+                    if (websiteValue !== null) {
+                        candidates.push({ ...payloadVariant, website: websiteValue })
+                        candidates.push({ ...payloadVariant, sitio_web: websiteValue })
+                    }
+                    candidates.push(payloadVariant)
                 }
-                candidates.push(corePayload)
             }
             return candidates
         }
@@ -1117,6 +1154,7 @@ export default function EmpresasPage() {
                         industrias: companyData.industrias || prev.industrias,
                         tags: normalizeCompanyTags(companyData.tags || prev.tags),
                         website: companyData.website,
+                        telefono: companyData.telefono,
                         alcance_empresa: normalizeCompanyScopeValue((companyData as any).alcance_empresa) || prev.alcance_empresa || 'por_definir',
                         sede_objetivo: ((companyData as any).sede_objetivo ?? prev.sede_objetivo ?? null),
                         sedes_sugeridas: normalizeSiteSuggestions((companyData as any).sedes_sugeridas || prev.sedes_sugeridas || [])
@@ -1541,6 +1579,7 @@ export default function EmpresasPage() {
                             onRowClick={handleRowClick}
                             onEdit={handleEditClick}
                             onDelete={handleDeleteClick}
+                            onQuickUpdateTags={handleQuickUpdateCompanyTags}
                         />
                     </div>
                 </div>

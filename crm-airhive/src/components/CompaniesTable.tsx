@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { createPortal } from 'react-dom'
 import { Info, X } from 'lucide-react'
 import type { CompanyWithProjects } from '@/app/(app)/empresas/page'
+import { normalizeCompanyTags } from '@/lib/companyTags'
 import { getLocationFilterFacetFromStructured } from '@/lib/locationUtils'
 
 type LifecycleStage = 'pre_lead' | 'lead' | 'client'
@@ -22,6 +23,7 @@ interface CompaniesTableProps {
     onRowClick?: (company: CompanyWithProjects) => void
     onEdit?: (company: CompanyWithProjects) => void
     onDelete?: (id: string) => void
+    onQuickUpdateTags?: (companyId: string, tags: string[]) => Promise<void>
 }
 
 type LegendMarker = 'dot' | 'token'
@@ -319,10 +321,13 @@ export default function CompaniesTable({
     currentUserProfile,
     onRowClick,
     onEdit,
-    onDelete
+    onDelete,
+    onQuickUpdateTags
 }: CompaniesTableProps) {
     const [isLegendOpen, setIsLegendOpen] = useState(false)
     const [mounted, setMounted] = useState(false)
+    const [tagDraftByCompany, setTagDraftByCompany] = useState<Record<string, string>>({})
+    const [savingTagsByCompany, setSavingTagsByCompany] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
         setMounted(true)
@@ -340,6 +345,54 @@ export default function CompaniesTable({
             lifecycle: resolveLifecycle(company)
         }))
     ), [companies])
+
+    const globalTagSuggestions = useMemo(() => {
+        const seen = new Set<string>()
+        const tags: string[] = []
+
+        for (const company of companies) {
+            for (const tag of normalizeCompanyTags(company.tags)) {
+                const key = tag.toLocaleLowerCase('es-MX')
+                if (seen.has(key)) continue
+                seen.add(key)
+                tags.push(tag)
+                if (tags.length >= 80) return tags
+            }
+        }
+
+        return tags
+    }, [companies])
+
+    const persistTags = async (companyId: string, tags: string[]) => {
+        if (!onQuickUpdateTags) return
+        setSavingTagsByCompany((prev) => ({ ...prev, [companyId]: true }))
+        try {
+            await onQuickUpdateTags(companyId, tags)
+            setTagDraftByCompany((prev) => ({ ...prev, [companyId]: '' }))
+        } finally {
+            setSavingTagsByCompany((prev) => ({ ...prev, [companyId]: false }))
+        }
+    }
+
+    const commitTagDraft = async (company: CompanyWithProjects, companyId: string) => {
+        const draft = String(tagDraftByCompany[companyId] || '').trim()
+        if (!draft) return
+        const currentTags = normalizeCompanyTags(company.tags)
+        const nextTags = normalizeCompanyTags([...currentTags, ...draft.split(/[,\n;]+/g)])
+        if (nextTags.join('|') === currentTags.join('|')) {
+            setTagDraftByCompany((prev) => ({ ...prev, [companyId]: '' }))
+            return
+        }
+        await persistTags(companyId, nextTags)
+    }
+
+    const removeTag = async (company: CompanyWithProjects, companyId: string, tagToRemove: string) => {
+        const target = tagToRemove.toLocaleLowerCase('es-MX')
+        const currentTags = normalizeCompanyTags(company.tags)
+        const nextTags = currentTags.filter((tag) => tag.toLocaleLowerCase('es-MX') !== target)
+        if (nextTags.length === currentTags.length) return
+        await persistTags(companyId, nextTags)
+    }
 
     if (rows.length === 0) {
         return (
@@ -359,6 +412,7 @@ export default function CompaniesTable({
                             <th className='px-4 py-5 w-[240px] max-w-[240px]'>Empresa</th>
                             <th className='px-4 py-5 w-[170px] max-w-[170px]'>Industria</th>
                             <th className='px-6 py-5'>Responsable</th>
+                            <th className='px-4 py-5 w-[260px] max-w-[260px]'>Tags</th>
                             {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Delete</th>}
                             <th className='px-4 py-5 whitespace-nowrap text-center'>
                                 <button
@@ -384,6 +438,22 @@ export default function CompaniesTable({
                             const industryName = Array.isArray(company.industrias) && company.industrias.length > 0
                                 ? company.industrias.filter(Boolean).join(', ')
                                 : String(company.industria || '').trim() || 'Sin industria'
+                            const companyTags = normalizeCompanyTags(company.tags)
+                            const canQuickEditTags =
+                                Boolean(onQuickUpdateTags)
+                                && Boolean(companyId)
+                                && checkPermission(company, currentUserProfile)
+                            const isTagSaving = Boolean(savingTagsByCompany[companyId])
+                            const tagDraft = tagDraftByCompany[companyId] || ''
+                            const selectedTagKeys = new Set(companyTags.map((tag) => tag.toLocaleLowerCase('es-MX')))
+                            const normalizedDraft = tagDraft.trim().toLocaleLowerCase('es-MX')
+                            const quickTagSuggestions = globalTagSuggestions
+                                .filter((tag) => {
+                                    const key = tag.toLocaleLowerCase('es-MX')
+                                    return !selectedTagKeys.has(key)
+                                })
+                                .filter((tag) => !normalizedDraft || tag.toLocaleLowerCase('es-MX').includes(normalizedDraft))
+                                .slice(0, 6)
 
                             return (
                                 <tr
@@ -463,6 +533,101 @@ export default function CompaniesTable({
                                         <span className='font-bold text-sm' style={{ color: 'var(--text-primary)', ...clampTwoLinesStyle }}>
                                             {responsibleName}
                                         </span>
+                                    </td>
+
+                                    <td className='px-4 py-5 w-[260px] max-w-[260px]'>
+                                        <div className='flex flex-col gap-2 min-w-0'>
+                                            <div className='flex flex-wrap gap-1.5'>
+                                                {companyTags.length === 0 && (
+                                                    <span className='inline-flex items-center rounded-full border border-[var(--card-border)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]'>
+                                                        Sin tags
+                                                    </span>
+                                                )}
+                                                {companyTags.map((tag) => (
+                                                    <span
+                                                        key={`${companyId}-tag-${tag}`}
+                                                        className='inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--card-border)] bg-[var(--hover-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-primary)]'
+                                                        title={tag}
+                                                    >
+                                                        <span className='truncate'>{tag}</span>
+                                                        {canQuickEditTags && (
+                                                            <button
+                                                                type='button'
+                                                                className='inline-flex h-4 w-4 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-black/10 hover:text-[var(--text-primary)] cursor-pointer'
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation()
+                                                                    void removeTag(company, companyId, tag)
+                                                                }}
+                                                                title={`Quitar tag ${tag}`}
+                                                                disabled={isTagSaving}
+                                                            >
+                                                                <X size={10} />
+                                                            </button>
+                                                        )}
+                                                    </span>
+                                                ))}
+                                            </div>
+
+                                            {canQuickEditTags && (
+                                                <div className='flex items-center gap-1.5'>
+                                                    <input
+                                                        type='text'
+                                                        value={tagDraft}
+                                                        placeholder='Agregar tag...'
+                                                        list='companies-table-tag-suggestions'
+                                                        disabled={isTagSaving}
+                                                        onChange={(event) => {
+                                                            setTagDraftByCompany((prev) => ({ ...prev, [companyId]: event.target.value }))
+                                                        }}
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === 'Enter' || event.key === ',' || event.key === ';') {
+                                                                event.preventDefault()
+                                                                void commitTagDraft(company, companyId)
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            if (!String(tagDraftByCompany[companyId] || '').trim()) return
+                                                            void commitTagDraft(company, companyId)
+                                                        }}
+                                                        className='w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--input-focus)]'
+                                                    />
+                                                    <button
+                                                        type='button'
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation()
+                                                            void commitTagDraft(company, companyId)
+                                                        }}
+                                                        disabled={isTagSaving || !tagDraft.trim()}
+                                                        className='rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-secondary)] transition-all enabled:cursor-pointer enabled:hover:border-[var(--input-focus)] enabled:hover:text-[var(--text-primary)] disabled:opacity-50'
+                                                    >
+                                                        {isTagSaving ? '...' : '+Tag'}
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {canQuickEditTags && quickTagSuggestions.length > 0 && (
+                                                <div className='flex flex-wrap gap-1.5'>
+                                                    {quickTagSuggestions.map((tag) => (
+                                                        <button
+                                                            key={`${companyId}-quick-tag-${tag}`}
+                                                            type='button'
+                                                            disabled={isTagSaving}
+                                                            onClick={(event) => {
+                                                                event.stopPropagation()
+                                                                const nextTags = normalizeCompanyTags([...companyTags, tag])
+                                                                void persistTags(companyId, nextTags)
+                                                            }}
+                                                            className='rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[var(--text-secondary)] transition-all enabled:cursor-pointer enabled:hover:border-[var(--input-focus)] enabled:hover:text-[var(--text-primary)] disabled:opacity-50'
+                                                            title={`Usar tag ${tag}`}
+                                                        >
+                                                            + {tag}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
 
                                     {isEditingMode && (
@@ -566,6 +731,12 @@ export default function CompaniesTable({
                 </div>,
                 document.body
             )}
+
+            <datalist id='companies-table-tag-suggestions'>
+                {globalTagSuggestions.map((tag) => (
+                    <option key={`tag-suggestion-${tag}`} value={tag} />
+                ))}
+            </datalist>
         </>
     )
 }
