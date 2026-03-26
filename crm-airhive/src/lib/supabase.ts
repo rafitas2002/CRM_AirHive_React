@@ -888,6 +888,7 @@ export type Database = {
                     tamano: number | null
                     owner_id: string | null
                     industria_id: string | null
+                    tags: string[]
                     created_at: string
                     updated_at: string
                 }
@@ -900,6 +901,7 @@ export type Database = {
                     tamano?: number | null
                     owner_id?: string | null
                     industria_id?: string | null
+                    tags?: string[]
                     created_at?: string
                     updated_at?: string
                 }
@@ -912,6 +914,7 @@ export type Database = {
                     tamano?: number | null
                     owner_id?: string | null
                     industria_id?: string | null
+                    tags?: string[]
                     created_at?: string
                     updated_at?: string
                 }

@@ -291,16 +291,129 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.14);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: rgb(255 255 255 / 0.85);
   background: rgb(255 255 255 / 0.12);
-  transition: background-color 0.2s ease;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .ah-modal-close:hover {
   background: rgb(255 255 255 / 0.22);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px -14px rgb(15 23 42 / 0.6);
+}
+
+.ah-modal-close:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.ah-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.ah-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  border-top: 1px solid var(--card-border);
+  background: color-mix(in srgb, var(--hover-bg) 84%, var(--card-bg));
+  flex-shrink: 0;
+}
+
+.ah-modal-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    filter 0.16s ease;
+}
+
+.ah-modal-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px -14px rgb(15 23 42 / 0.58);
+}
+
+.ah-modal-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.ah-modal-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.ah-modal-btn-secondary {
+  background: var(--card-bg);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+
+.ah-modal-btn-secondary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--input-focus) 46%, var(--card-border));
+  color: var(--input-focus);
+  background: color-mix(in srgb, var(--hover-bg) 78%, var(--card-bg));
+}
+
+.ah-modal-btn-primary {
+  background: #2048ff;
+  border-color: #2048ff;
+  color: #fff;
+  box-shadow: 0 12px 24px -16px rgb(32 72 255 / 0.58);
+}
+
+.ah-modal-btn-primary:hover:not(:disabled) {
+  background: #1636c7;
+  border-color: #1636c7;
+}
+
+.ah-modal-btn-success {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+  box-shadow: 0 12px 24px -16px rgb(22 163 74 / 0.52);
+}
+
+.ah-modal-btn-success:hover:not(:disabled) {
+  background: #15803d;
+  border-color: #15803d;
+}
+
+.ah-modal-btn-danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow: 0 12px 24px -16px rgb(220 38 38 / 0.55);
+}
+
+.ah-modal-btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
 
 .ah-modal-field::placeholder,

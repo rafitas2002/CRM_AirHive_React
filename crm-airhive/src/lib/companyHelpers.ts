@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeEvidenceText, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
 
 /**
  * Search for an existing company by name (case-insensitive)
@@ -55,9 +56,9 @@ export async function createCompanyFromPreLead(
         industria: preLead.industria || 'Sin clasificar',
         industria_id: preLead.industria_id || null,
         tamano: preLead.tamano || 1,
-        tamano_fuente: preLead.tamano_fuente || null,
-        tamano_confianza: preLead.tamano_confianza || null,
-        tamano_senal_principal: preLead.tamano_senal_principal || null,
+        tamano_fuente: normalizeCompanySizeSourceValue(preLead.tamano_fuente),
+        tamano_confianza: normalizeCompanySizeConfidenceValue(preLead.tamano_confianza),
+        tamano_senal_principal: normalizeCompanySizeEvidenceText(preLead.tamano_senal_principal),
         website: preLead.website || null,
         logo_url: preLead.logo_url || null,
         source_channel: 'pre_lead',

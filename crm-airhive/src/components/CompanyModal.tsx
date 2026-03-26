@@ -1,10 +1,12 @@
 'use client'
 
-import { CSSProperties, useState, useEffect, useRef } from 'react'
+import { CSSProperties, useState, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import ImageCropper from './ImageCropper'
 import CatalogSelect from './CatalogSelect'
+import ConfirmModal from './ConfirmModal'
 import { ensureCompanyLocationCatalogItem, getCatalogs } from '@/app/actions/catalogs'
+import { previewCompanyAutofillByWebsite } from '@/app/actions/company-enrichment'
 import { useAuth } from '@/lib/auth'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { MONTERREY_MUNICIPALITY_OPTIONS, getLocationBaseForSelector, getSavedLocationCatalogLabels, normalizeLocationLabel, resolveLocationAgainstExistingLabels } from '@/lib/locationUtils'
@@ -13,8 +15,12 @@ import {
     COMPANY_SIZE_SOURCE_OPTIONS,
     getCompanySizeGuide,
     getCompanySizeTierVisuals,
-    normalizeCompanySizeEvidenceText
+    normalizeCompanySizeConfidenceValue,
+    normalizeCompanySizeEvidenceText,
+    normalizeCompanySizeSourceValue
 } from '@/lib/companySizeUtils'
+import { normalizeCompanyTags } from '@/lib/companyTags'
+import type { CompanyEnrichmentSuggestion, CompanyScopeValue } from '@/lib/companyEnrichment'
 
 export type CompanyData = {
     id?: string
@@ -29,13 +35,99 @@ export type CompanyData = {
     industria_id?: string
     industria_ids?: string[]
     industrias?: string[]
+    tags?: string[]
     website: string
     descripcion: string
+    alcance_empresa?: CompanyScopeValue | null
+    sede_objetivo?: string | null
+    sedes_sugeridas?: string[]
 }
 
 const isPendingIndustryOptionId = (value?: string | null) => String(value || '').startsWith('pending_industry:')
 const sanitizeIndustryOptionIds = (ids: string[] | undefined) =>
     (ids || []).filter((id) => !!id && !isPendingIndustryOptionId(id))
+const normalizeWebsiteCandidate = (value: unknown) => {
+    const trimmed = String(value || '').trim()
+    if (!trimmed) return ''
+    if (/^https?:\/\//i.test(trimmed)) return trimmed
+    return `https://${trimmed}`
+}
+const isLikelyWebsiteCandidate = (value: string) => value.includes('.') && value.length >= 6
+const normalizeComparisonText = (value: unknown) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+const COMPANY_SCOPE_OPTIONS: Array<{ value: CompanyScopeValue; label: string; description: string }> = [
+    { value: 'local', label: 'Local', description: 'Operación principal en Monterrey / área metropolitana.' },
+    { value: 'nacional', label: 'Nacional', description: 'Opera en México en múltiples sedes o ciudades.' },
+    { value: 'internacional', label: 'Internacional', description: 'Opera en varios países o estructura global.' },
+    { value: 'por_definir', label: 'Por definir', description: 'Aún no hay claridad del alcance real.' }
+]
+
+const normalizeCompanyScopeValue = (value: unknown): CompanyScopeValue | null => {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (
+        normalized === 'local'
+        || normalized === 'nacional'
+        || normalized === 'internacional'
+        || normalized === 'por_definir'
+    ) {
+        return normalized as CompanyScopeValue
+    }
+    return null
+}
+
+const normalizeSiteSuggestions = (value: unknown): string[] => {
+    const list = Array.isArray(value) ? value : []
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const item of list) {
+        const normalized = String(item || '').trim()
+        if (!normalized) continue
+        const key = normalized.toLocaleLowerCase('es-MX')
+        if (seen.has(key)) continue
+        seen.add(key)
+        result.push(normalized)
+        if (result.length >= 12) break
+    }
+    return result
+}
+
+const MEXICO_LOCAL_SITE_MARKERS = [
+    'monterrey',
+    'nuevo leon',
+    'santa catarina',
+    'guadalupe',
+    'apodaca',
+    'san nicolas',
+    'escobedo',
+    'garcia',
+    'pesqueria',
+    'santiago',
+    'allende',
+    'cadereyta',
+    'mexico',
+    'ciudad de mexico',
+    'cdmx',
+    'guadalajara',
+    'queretaro',
+    'puebla',
+    'saltillo',
+    'ramos arizpe',
+    'san luis potosi',
+    'mexicali',
+    'tijuana',
+    'leon',
+    'celaya'
+].map((value) => normalizeComparisonText(value))
+
+const isLikelyMexicoLocalSite = (value: unknown) => {
+    const normalized = normalizeComparisonText(value)
+    if (!normalized) return false
+    return MEXICO_LOCAL_SITE_MARKERS.some((marker) => marker && normalized.includes(marker))
+}
 
 interface CompanyModalProps {
     isOpen: boolean
@@ -73,8 +165,12 @@ export default function CompanyModal({
         industria_id: '',
         industria_ids: [],
         industrias: [],
+        tags: [],
         website: '',
-        descripcion: ''
+        descripcion: '',
+        alcance_empresa: 'por_definir',
+        sede_objetivo: '',
+        sedes_sugeridas: []
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -88,7 +184,14 @@ export default function CompanyModal({
     // Autocomplete state
     const [filteredCompanies, setFilteredCompanies] = useState<CompanyData[]>([])
     const [showSuggestions, setShowSuggestions] = useState(false)
+    const [tagDraft, setTagDraft] = useState('')
+    const [isAutofillPreviewLoading, setIsAutofillPreviewLoading] = useState(false)
+    const [isAutofillConfirmOpen, setIsAutofillConfirmOpen] = useState(false)
+    const [autofillSuggestion, setAutofillSuggestion] = useState<CompanyEnrichmentSuggestion | null>(null)
+    const [lastWebsiteCheckedForAutofill, setLastWebsiteCheckedForAutofill] = useState('')
     const wrapperRef = useRef<HTMLDivElement>(null)
+    const toInputString = (value: unknown) => (value == null ? '' : String(value))
+    const isEditMode = mode === 'edit' || Boolean(initialData?.id)
 
     const normalizeCompanyForForm = (raw: any): CompanyData => {
         const industriaIds = Array.isArray(raw?.industria_ids)
@@ -100,19 +203,23 @@ export default function CompanyModal({
 
         return {
             id: raw?.id,
-            nombre: String(raw?.nombre || ''),
+            nombre: toInputString(raw?.nombre),
             tamano: Number(raw?.tamano || 1),
-            tamano_confianza: raw?.tamano_confianza || 'media',
-            tamano_fuente: raw?.tamano_fuente || 'inferencia_comercial',
-            tamano_senal_principal: String(raw?.tamano_senal_principal || ''),
-            ubicacion: String(raw?.ubicacion || ''),
-            logo_url: String(raw?.logo_url || ''),
-            industria: String(raw?.industria || ''),
+            tamano_confianza: toInputString(raw?.tamano_confianza) || 'media',
+            tamano_fuente: toInputString(raw?.tamano_fuente) || 'inferencia_comercial',
+            tamano_senal_principal: toInputString(raw?.tamano_senal_principal),
+            ubicacion: toInputString(raw?.ubicacion),
+            logo_url: toInputString(raw?.logo_url),
+            industria: toInputString(raw?.industria),
             industria_id: raw?.industria_id || '',
             industria_ids: industriaIds,
             industrias,
-            website: String(raw?.website || raw?.sitio_web || ''),
-            descripcion: String(raw?.descripcion || '')
+            tags: normalizeCompanyTags(raw?.tags),
+            website: toInputString(raw?.website ?? raw?.sitio_web),
+            descripcion: toInputString(raw?.descripcion),
+            alcance_empresa: normalizeCompanyScopeValue(raw?.alcance_empresa) || 'por_definir',
+            sede_objetivo: toInputString(raw?.sede_objetivo),
+            sedes_sugeridas: normalizeSiteSuggestions(raw?.sedes_sugeridas)
         }
     }
 
@@ -132,15 +239,88 @@ export default function CompanyModal({
                 industria_id: '',
                 industria_ids: [],
                 industrias: [],
+                tags: [],
                 website: '',
-                descripcion: ''
+                descripcion: '',
+                alcance_empresa: 'por_definir',
+                sede_objetivo: '',
+                sedes_sugeridas: []
             })
         }
 
         if (isOpen) {
+            setTagDraft('')
+            setAutofillSuggestion(null)
+            setIsAutofillConfirmOpen(false)
+            setIsAutofillPreviewLoading(false)
+            setLastWebsiteCheckedForAutofill(normalizeWebsiteCandidate(initialData?.website || ''))
             fetchCatalogs()
         }
-    }, [isOpen, initialData])
+    }, [isOpen, initialData, mode])
+
+    const autofillFieldLabels = useMemo(() => {
+        if (!autofillSuggestion) return []
+        return [
+            autofillSuggestion.nombre ? 'nombre' : null,
+            autofillSuggestion.industria ? 'industria' : null,
+            autofillSuggestion.ubicacion ? 'ubicacion' : null,
+            autofillSuggestion.alcance_empresa ? 'alcance' : null,
+            autofillSuggestion.sede_objetivo_sugerida ? 'sede objetivo' : null,
+            (autofillSuggestion.sedes_sugeridas || []).length > 0 ? 'sedes sugeridas' : null,
+            autofillSuggestion.tamano ? 'tamano' : null,
+            (autofillSuggestion.empleados_estimados_min || autofillSuggestion.empleados_estimados_max) ? 'estimacion de empleados' : null
+        ].filter((field): field is string => Boolean(field))
+    }, [autofillSuggestion])
+
+    const autofillEmployeeEstimateLabel = useMemo(() => {
+        if (!autofillSuggestion) return ''
+        const min = Number(autofillSuggestion.empleados_estimados_min || 0)
+        const max = Number(autofillSuggestion.empleados_estimados_max || 0)
+        const hasMin = Number.isFinite(min) && min > 0
+        const hasMax = Number.isFinite(max) && max > 0
+        if (!hasMin && !hasMax) return ''
+
+        const formatter = new Intl.NumberFormat('es-MX')
+        if (hasMin && hasMax) {
+            if (min === max) return formatter.format(min)
+            return `${formatter.format(min)} - ${formatter.format(max)}`
+        }
+        if (hasMin) return `>= ${formatter.format(min)}`
+        return `<= ${formatter.format(max)}`
+    }, [autofillSuggestion])
+
+    const availableTagSuggestions = useMemo(() => {
+        return normalizeCompanyTags(
+            companies.flatMap((company) => normalizeCompanyTags(company.tags))
+        )
+    }, [companies])
+
+    const filteredTagSuggestions = useMemo(() => {
+        const selected = new Set((formData.tags || []).map((tag) => tag.toLocaleLowerCase('es-MX')))
+        const normalizedDraft = tagDraft.trim().toLocaleLowerCase('es-MX')
+        return availableTagSuggestions
+            .filter((tag) => {
+                const key = tag.toLocaleLowerCase('es-MX')
+                if (selected.has(key)) return false
+                if (!normalizedDraft) return true
+                return key.includes(normalizedDraft)
+            })
+            .slice(0, 10)
+    }, [availableTagSuggestions, formData.tags, tagDraft])
+
+    const visibleSiteSuggestions = useMemo(() => {
+        const suggestions = normalizeSiteSuggestions(formData.sedes_sugeridas || [])
+        if (suggestions.length === 0) return suggestions
+        const normalizedScope = normalizeCompanyScopeValue(formData.alcance_empresa)
+        const hasMexicoContext = suggestions.some((site) => isLikelyMexicoLocalSite(site))
+            || isLikelyMexicoLocalSite(formData.ubicacion)
+            || isLikelyMexicoLocalSite(formData.sede_objetivo)
+        if (normalizedScope === 'internacional' && hasMexicoContext) {
+            const localSuggestions = suggestions.filter((site) => isLikelyMexicoLocalSite(site))
+            if (localSuggestions.length > 0) return localSuggestions
+        }
+        return suggestions
+    }, [formData.sedes_sugeridas, formData.alcance_empresa, formData.ubicacion, formData.sede_objetivo])
 
     const fetchCatalogs = async () => {
         const res = await getCatalogs()
@@ -183,6 +363,24 @@ export default function CompanyModal({
     const selectCompany = (company: CompanyData) => {
         setFormData(normalizeCompanyForForm(company))
         setShowSuggestions(false)
+    }
+
+    const addCompanyTag = (value: string) => {
+        const draftParts = String(value ?? '').split(/[,\n;]+/g)
+        setFormData((prev) => ({
+            ...prev,
+            tags: normalizeCompanyTags([...(prev.tags || []), ...draftParts])
+        }))
+        setTagDraft('')
+    }
+
+    const removeCompanyTag = (tagToRemove: string) => {
+        const target = String(tagToRemove || '').trim().toLocaleLowerCase('es-MX')
+        if (!target) return
+        setFormData((prev) => ({
+            ...prev,
+            tags: (prev.tags || []).filter((tag) => tag.toLocaleLowerCase('es-MX') !== target)
+        }))
     }
 
     const toggleIndustrySelection = (industryId: string) => {
@@ -269,8 +467,142 @@ export default function CompanyModal({
         }
     }
 
+    const applyAutofillSuggestion = () => {
+        if (!autofillSuggestion) return
+
+        setFormData((prev) => {
+            const suggestion = autofillSuggestion
+            const normalizedSuggestedIndustry = normalizeComparisonText(suggestion.industria)
+            const matchedIndustry = normalizedSuggestedIndustry
+                ? (catalogs.industrias || []).find((industry) => normalizeComparisonText(industry?.name) === normalizedSuggestedIndustry)
+                : null
+            const inferredIndustryId = matchedIndustry?.id ? String(matchedIndustry.id) : ''
+            const nextPrimaryIndustryId = inferredIndustryId || prev.industria_id || ''
+            const nextIndustryIds = Array.from(new Set([
+                ...(nextPrimaryIndustryId ? [nextPrimaryIndustryId] : []),
+                ...sanitizeIndustryOptionIds(prev.industria_ids)
+            ])).filter(Boolean)
+            const nextIndustryNames = Array.from(new Set([
+                ...(suggestion.industria ? [suggestion.industria] : []),
+                ...(matchedIndustry?.name ? [String(matchedIndustry.name)] : []),
+                ...(prev.industrias || [])
+            ].map((name) => String(name || '').trim()).filter(Boolean)))
+
+            const inferredSize = Number(suggestion.tamano || 0)
+            const hasInferredSize = Number.isFinite(inferredSize) && inferredSize >= 1 && inferredSize <= 5
+            const normalizedScope = normalizeCompanyScopeValue(suggestion.alcance_empresa)
+            const mergedSiteSuggestions = normalizeSiteSuggestions([
+                ...(suggestion.sedes_sugeridas || []),
+                ...(prev.sedes_sugeridas || [])
+            ])
+            const suggestedProjectSite = String(suggestion.sede_objetivo_sugerida || '').trim()
+
+            return {
+                ...prev,
+                nombre: suggestion.nombre || prev.nombre,
+                tamano: hasInferredSize ? inferredSize : prev.tamano,
+                tamano_confianza: hasInferredSize ? suggestion.tamano_confianza : prev.tamano_confianza,
+                tamano_fuente: hasInferredSize ? suggestion.tamano_fuente : prev.tamano_fuente,
+                tamano_senal_principal: hasInferredSize
+                    ? (suggestion.tamano_senal_principal || prev.tamano_senal_principal)
+                    : prev.tamano_senal_principal,
+                ubicacion: suggestion.ubicacion || prev.ubicacion,
+                industria: suggestion.industria || prev.industria,
+                industria_id: nextPrimaryIndustryId,
+                industria_ids: nextIndustryIds,
+                industrias: nextIndustryNames,
+                alcance_empresa: normalizedScope || prev.alcance_empresa || 'por_definir',
+                sede_objetivo: suggestedProjectSite || prev.sede_objetivo || '',
+                sedes_sugeridas: mergedSiteSuggestions
+            }
+        })
+        setAutofillSuggestion(null)
+        setIsAutofillConfirmOpen(false)
+    }
+
+    const handleWebsiteBlurForAutofill = async (force = false) => {
+        const normalizedWebsite = normalizeWebsiteCandidate(formData.website)
+        if (!normalizedWebsite) return
+        if (!isLikelyWebsiteCandidate(normalizedWebsite)) return
+        if (!force && normalizedWebsite === lastWebsiteCheckedForAutofill) return
+        if (isAutofillPreviewLoading || isSubmitting) return
+
+        const currentSize = Number(formData.tamano || 0)
+        const normalizedSizeSource = String(formData.tamano_fuente || 'inferencia_comercial').trim().toLowerCase()
+        const normalizedSizeConfidence = String(formData.tamano_confianza || 'media').trim().toLowerCase()
+        const hasSizeSignal = String(formData.tamano_senal_principal || '').trim().length > 0
+        const hasReliableManualSize =
+            hasSizeSignal
+            || normalizedSizeSource !== 'inferencia_comercial'
+            || normalizedSizeConfidence === 'alta'
+        const sizeForAutofill = force
+            ? null
+            : (!hasReliableManualSize && currentSize === 1)
+                ? null
+                : currentSize
+
+        setLastWebsiteCheckedForAutofill(normalizedWebsite)
+        setFormData((prev) => ({ ...prev, website: normalizedWebsite }))
+        setIsAutofillPreviewLoading(true)
+
+        try {
+            const result = await previewCompanyAutofillByWebsite({
+                website: normalizedWebsite,
+                nombre: formData.nombre,
+                ubicacion: formData.ubicacion,
+                industria: formData.industria,
+                descripcion: formData.descripcion,
+                tamano: sizeForAutofill
+            })
+
+            if (!result.success) {
+                console.warn('No se pudo preparar autollenado desde website:', result.error)
+                return
+            }
+
+            const suggestion = result.data?.suggestion
+            if (!suggestion) return
+
+            const hasSuggestedData = Boolean(
+                suggestion.nombre
+                || suggestion.industria
+                || suggestion.ubicacion
+                || suggestion.alcance_empresa
+                || suggestion.sede_objetivo_sugerida
+                || (suggestion.sedes_sugeridas || []).length > 0
+                || suggestion.tamano
+                || suggestion.empleados_estimados_min
+                || suggestion.empleados_estimados_max
+            )
+            if (!hasSuggestedData) return
+
+            if (result.data?.normalizedWebsite) {
+                setFormData((prev) => ({ ...prev, website: result.data.normalizedWebsite }))
+            }
+
+            setAutofillSuggestion(suggestion)
+            setIsAutofillConfirmOpen(true)
+        } catch (error) {
+            console.warn('Error preparing website autofill:', error)
+        } finally {
+            setIsAutofillPreviewLoading(false)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        const normalizedName = toInputString(formData.nombre).trim()
+        const normalizedWebsite = toInputString(formData.website).trim()
+
+        if (!normalizedName) {
+            alert('El nombre de la empresa es obligatorio.')
+            return
+        }
+        if (!isEditMode && !normalizedWebsite) {
+            alert('Para crear una empresa, primero captura su página web para que el agente complete más datos.')
+            return
+        }
+
         setIsSubmitting(true)
         try {
             const selfCompanyId = String(formData.id || initialData?.id || '')
@@ -337,14 +669,20 @@ export default function CompanyModal({
 
             await onSave({
                 ...formData,
+                nombre: normalizedName,
+                website: normalizedWebsite,
                 ubicacion: locationResolution.valueToPersist,
-                tamano_confianza: normalizeCompanySizeEvidenceText(formData.tamano_confianza),
-                tamano_fuente: normalizeCompanySizeEvidenceText(formData.tamano_fuente),
+                alcance_empresa: normalizeCompanyScopeValue(formData.alcance_empresa) || 'por_definir',
+                sede_objetivo: toInputString(formData.sede_objetivo).trim() || null,
+                sedes_sugeridas: normalizeSiteSuggestions(formData.sedes_sugeridas),
+                tamano_confianza: normalizeCompanySizeConfidenceValue(formData.tamano_confianza),
+                tamano_fuente: normalizeCompanySizeSourceValue(formData.tamano_fuente),
                 tamano_senal_principal: normalizeCompanySizeEvidenceText(formData.tamano_senal_principal),
                 industria_id: primaryIndustryId,
                 industria: primaryIndustryName,
                 industria_ids: mergedIndustryIds,
-                industrias: mergedIndustryNames
+                industrias: mergedIndustryNames,
+                tags: normalizeCompanyTags(formData.tags)
             })
 
             if (locationResolution.valueToPersist) {
@@ -372,8 +710,9 @@ export default function CompanyModal({
         : getLocationBase(formData.ubicacion)
 
     return (
-        <div className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
-            <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
+        <>
+            <div className={`ah-modal-overlay transition-opacity ${overlayClassName}`.trim()} style={overlayStyle}>
+                <div className='ah-modal-panel w-full max-w-2xl transform transition-all'>
                 {/* Header */}
                 <div className='ah-modal-header'>
                     <h2 className='ah-modal-title'>
@@ -392,10 +731,103 @@ export default function CompanyModal({
                     <form id='company-form' onSubmit={handleSubmit} className='space-y-6'>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
-                            Campos obligatorios: se marcan en rojo solo si faltan al confirmar
+                            Para el nuevo flujo con agente, empieza por Nombre y Sitio Web.
                         </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                            {/* Nombre with Autocomplete */}
+                            <div className='space-y-1.5 relative' ref={wrapperRef}>
+                                <label className='block text-sm font-medium text-[var(--text-primary)] ah-required-label'>
+                                    Nombre de la Empresa <span className='ah-required-asterisk'>*</span>
+                                </label>
+                                <input
+                                    type='text'
+                                    required
+                                    placeholder='ej. Tesla Inc.'
+                                    value={toInputString(formData.nombre)}
+                                    onChange={handleNombreChange}
+                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
+                                    autoComplete="off"
+                                />
+                                {showSuggestions && filteredCompanies.length > 0 && (
+                                    <div className='absolute z-[70] w-full mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg shadow-lg max-h-48 overflow-y-auto custom-scrollbar'>
+                                        {filteredCompanies.map((company) => (
+                                            <div
+                                                key={company.id}
+                                                onClick={() => selectCompany(company)}
+                                                className='px-4 py-2 hover:bg-[var(--hover-bg)] cursor-pointer text-sm text-[var(--text-primary)] transition-colors border-b border-[var(--card-border)] last:border-b-0 text-left'
+                                            >
+                                                <div className='font-medium'>{company.nombre}</div>
+                                                <div className='text-xs text-[var(--text-secondary)]'>{company.industria} • {company.ubicacion}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Website */}
+                            <div className='space-y-1.5'>
+                                <label className={`block text-sm font-medium text-[var(--text-primary)] ${!isEditMode ? 'ah-required-label' : ''}`}>
+                                    Sitio Web {!isEditMode && <span className='ah-required-asterisk'>*</span>}
+                                </label>
+                                <input
+                                    type='text'
+                                    required={!isEditMode}
+                                    placeholder='ej. https://empresa.com'
+                                    value={toInputString(formData.website)}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, website: e.target.value })
+                                        if (isAutofillConfirmOpen) {
+                                            setIsAutofillConfirmOpen(false)
+                                            setAutofillSuggestion(null)
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        void handleWebsiteBlurForAutofill()
+                                    }}
+                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                />
+                                <p className='text-[11px] text-[var(--text-secondary)]'>
+                                    Este dato ayuda al agente a completar automáticamente tamaño, ubicación e industria.
+                                </p>
+                                <div className='flex flex-wrap items-center gap-2'>
+                                    <button
+                                        type='button'
+                                        onClick={() => handleWebsiteBlurForAutofill(true)}
+                                        disabled={isAutofillPreviewLoading || isSubmitting || !isLikelyWebsiteCandidate(normalizeWebsiteCandidate(formData.website))}
+                                        className='px-3 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-700 text-[11px] font-black uppercase tracking-wider hover:bg-blue-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                    >
+                                        Autollenar con Asistente
+                                    </button>
+                                    {autofillSuggestion && (
+                                        <button
+                                            type='button'
+                                            onClick={applyAutofillSuggestion}
+                                            disabled={isAutofillPreviewLoading || isSubmitting}
+                                            className='px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 text-[11px] font-black uppercase tracking-wider hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                        >
+                                            Aplicar Ultima Sugerencia
+                                        </button>
+                                    )}
+                                </div>
+                                {autofillSuggestion && (
+                                    <p className='text-[11px] text-[var(--text-secondary)] leading-relaxed'>
+                                        Sugerencia actual:
+                                        {autofillSuggestion.ubicacion ? ` Ubicacion ${autofillSuggestion.ubicacion}.` : ''}
+                                        {autofillSuggestion.alcance_empresa ? ` Alcance ${autofillSuggestion.alcance_empresa}.` : ''}
+                                        {autofillSuggestion.sede_objetivo_sugerida ? ` Sede sugerida ${autofillSuggestion.sede_objetivo_sugerida}.` : ''}
+                                        {autofillSuggestion.industria ? ` Industria ${autofillSuggestion.industria}.` : ''}
+                                        {autofillSuggestion.tamano ? ` Tamano ${autofillSuggestion.tamano}.` : ''}
+                                        {autofillEmployeeEstimateLabel ? ` Empleados estimados ${autofillEmployeeEstimateLabel}.` : ''}
+                                    </p>
+                                )}
+                                {isAutofillPreviewLoading && (
+                                    <p className='text-[11px] font-semibold text-blue-600'>
+                                        Analizando sitio web para sugerir datos...
+                                    </p>
+                                )}
+                            </div>
+
                             {/* Logo Upload Section */}
                             <div className='col-span-1 md:col-span-2 flex flex-col items-center justify-center space-y-4 p-6 border-2 border-dashed border-[var(--card-border)] rounded-xl bg-[var(--hover-bg)]'>
                                 <div className='relative w-32 h-32 rounded-full overflow-hidden border-4 border-[var(--card-bg)] shadow-lg bg-[var(--input-bg)] flex items-center justify-center group'>
@@ -427,36 +859,6 @@ export default function CompanyModal({
                                         {uploadingLogo ? 'Subiendo...' : 'Click en la imagen para subir (PNG, JPG)'}
                                     </p>
                                 </div>
-                            </div>
-
-                            {/* Nombre with Autocomplete */}
-                            <div className='space-y-1.5 relative' ref={wrapperRef}>
-                                <label className='block text-sm font-medium text-[var(--text-primary)] ah-required-label'>
-                                    Nombre de la Empresa <span className='ah-required-asterisk'>*</span>
-                                </label>
-                                <input
-                                    type='text'
-                                    required
-                                    placeholder='ej. Tesla Inc.'
-                                    value={formData.nombre}
-                                    onChange={handleNombreChange}
-                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
-                                    autoComplete="off"
-                                />
-                                {showSuggestions && filteredCompanies.length > 0 && (
-                                    <div className='absolute z-[70] w-full mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg shadow-lg max-h-48 overflow-y-auto custom-scrollbar'>
-                                        {filteredCompanies.map((company) => (
-                                            <div
-                                                key={company.id}
-                                                onClick={() => selectCompany(company)}
-                                                className='px-4 py-2 hover:bg-[var(--hover-bg)] cursor-pointer text-sm text-[var(--text-primary)] transition-colors border-b border-[var(--card-border)] last:border-b-0 text-left'
-                                            >
-                                                <div className='font-medium'>{company.nombre}</div>
-                                                <div className='text-xs text-[var(--text-secondary)]'>{company.industria} • {company.ubicacion}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
                             </div>
 
                             {/* Industria */}
@@ -562,6 +964,74 @@ export default function CompanyModal({
                                 </div>
                             </div>
 
+                            <div className='col-span-1 md:col-span-2 space-y-2'>
+                                <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] opacity-60'>
+                                    Etiquetas de seguimiento
+                                </label>
+                                <p className='text-xs text-[var(--text-secondary)]'>
+                                    Crea tags personalizados como: Llamar, Evolucionar Q2, Prioridad.
+                                </p>
+                                <div className='flex flex-wrap gap-2 p-3 border border-[var(--input-border)] rounded-xl bg-[var(--input-bg)] min-h-[52px]'>
+                                    {(formData.tags || []).map((tag) => (
+                                        <span
+                                            key={tag}
+                                            className='inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black border border-blue-500/30 text-blue-600 bg-blue-500/10'
+                                        >
+                                            #{tag}
+                                            <button
+                                                type='button'
+                                                onClick={() => removeCompanyTag(tag)}
+                                                className='text-blue-700/80 hover:text-blue-900 text-xs leading-none cursor-pointer'
+                                                aria-label={`Quitar etiqueta ${tag}`}
+                                            >
+                                                ✕
+                                            </button>
+                                        </span>
+                                    ))}
+                                    {(formData.tags || []).length === 0 && (
+                                        <span className='text-xs text-[var(--text-secondary)]'>
+                                            Sin tags todavía.
+                                        </span>
+                                    )}
+                                </div>
+                                <div className='flex flex-col md:flex-row gap-2'>
+                                    <input
+                                        type='text'
+                                        value={tagDraft}
+                                        onChange={(e) => setTagDraft(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+                                                e.preventDefault()
+                                                addCompanyTag(tagDraft)
+                                            }
+                                        }}
+                                        placeholder='Escribe un tag y presiona Enter'
+                                        className='flex-1 px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                    />
+                                    <button
+                                        type='button'
+                                        onClick={() => addCompanyTag(tagDraft)}
+                                        className='px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-700 text-xs font-black uppercase tracking-widest hover:bg-blue-500/20 transition-colors'
+                                    >
+                                        Agregar Tag
+                                    </button>
+                                </div>
+                                {filteredTagSuggestions.length > 0 && (
+                                    <div className='flex flex-wrap gap-2'>
+                                        {filteredTagSuggestions.map((tag) => (
+                                            <button
+                                                key={tag}
+                                                type='button'
+                                                onClick={() => addCompanyTag(tag)}
+                                                className='px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] hover:border-blue-400 hover:text-blue-600 transition-colors'
+                                            >
+                                                + {tag}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Ubicación */}
                             <div className='space-y-4 col-span-1 md:col-span-2 p-6 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
                                 <label className='block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-primary)] opacity-60'>
@@ -597,7 +1067,7 @@ export default function CompanyModal({
                                         <div className='space-y-1.5 animate-in fade-in slide-in-from-left-2 duration-300'>
                                             <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase'>Municipio</label>
                                             <select
-                                                value={formData.ubicacion.split(', ')[1] || ''}
+                                                value={toInputString(formData.ubicacion).split(', ')[1] || ''}
                                                 onChange={(e) => setFormData({ ...formData, ubicacion: `Monterrey, ${e.target.value}` })}
                                                 className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                             >
@@ -618,13 +1088,82 @@ export default function CompanyModal({
                                                 type='text'
                                                 autoFocus
                                                 placeholder='ej. Laredo, TX'
-                                                value={formData.ubicacion === 'Otra' ? '' : formData.ubicacion}
+                                                value={formData.ubicacion === 'Otra' ? '' : toInputString(formData.ubicacion)}
                                                 onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
                                                 className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                             />
                                         </div>
                                     )}
                                 </div>
+                            </div>
+
+                            <div className='space-y-4 col-span-1 md:col-span-2 p-6 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                <label className='block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-primary)] opacity-60'>
+                                    Contexto Operativo del Proyecto
+                                </label>
+                                <p className='text-xs text-[var(--text-secondary)]'>
+                                    Define el alcance de la empresa por separado de la sede puntual donde se ejecutará el proyecto.
+                                </p>
+                                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Alcance de la Empresa
+                                        </label>
+                                        <select
+                                            value={normalizeCompanyScopeValue(formData.alcance_empresa) || 'por_definir'}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, alcance_empresa: normalizeCompanyScopeValue(e.target.value) || 'por_definir' }))}
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                        >
+                                            {COMPANY_SCOPE_OPTIONS.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            {COMPANY_SCOPE_OPTIONS.find((option) => option.value === (normalizeCompanyScopeValue(formData.alcance_empresa) || 'por_definir'))?.description}
+                                        </p>
+                                    </div>
+                                    <div className='space-y-1.5'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Sede Objetivo del Proyecto
+                                        </label>
+                                        <input
+                                            type='text'
+                                            value={toInputString(formData.sede_objetivo)}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, sede_objetivo: e.target.value }))}
+                                            placeholder='Ej. Planta Guadalupe (Monterrey)'
+                                            className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                        />
+                                        <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                            Si aún no está definido, puedes dejarlo vacío y seleccionar una sede sugerida.
+                                        </p>
+                                    </div>
+                                </div>
+                                {visibleSiteSuggestions.length > 0 && (
+                                    <div className='space-y-2'>
+                                        <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-wider'>
+                                            Sedes Sugeridas por Autollenado
+                                        </label>
+                                        <div className='flex flex-wrap gap-2'>
+                                            {visibleSiteSuggestions.map((site) => (
+                                                <button
+                                                    key={site}
+                                                    type='button'
+                                                    onClick={() => setFormData((prev) => ({ ...prev, sede_objetivo: site }))}
+                                                    className='px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-500/30 text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors'
+                                                >
+                                                    Usar: {site}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {(normalizeCompanyScopeValue(formData.alcance_empresa) === 'internacional') && (
+                                            <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                                Para empresas internacionales se priorizan sedes locales en México para acelerar tu selección.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Tamaño (Tiered Selection) */}
@@ -702,7 +1241,7 @@ export default function CompanyModal({
                                             Fuente del Tamaño
                                         </label>
                                         <select
-                                            value={formData.tamano_fuente || 'inferencia_comercial'}
+                                            value={toInputString(formData.tamano_fuente) || 'inferencia_comercial'}
                                             onChange={(e) => setFormData({ ...formData, tamano_fuente: e.target.value })}
                                             className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
                                         >
@@ -752,7 +1291,7 @@ export default function CompanyModal({
                                         <input
                                             type='text'
                                             maxLength={280}
-                                            value={formData.tamano_senal_principal || ''}
+                                            value={toInputString(formData.tamano_senal_principal)}
                                             onChange={(e) => setFormData({ ...formData, tamano_senal_principal: e.target.value })}
                                             placeholder='Ej. 4 sucursales + operación en 3 ciudades + organigrama visible en web'
                                             className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-secondary)] transition-all'
@@ -765,20 +1304,6 @@ export default function CompanyModal({
                                 </div>
                             </div>
 
-                            {/* Website */}
-                            <div className='space-y-1.5'>
-                                <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] opacity-60'>
-                                    Sitio Web
-                                </label>
-                                <input
-                                    type='text'
-                                    placeholder='ej. www.ejemplo.com'
-                                    value={formData.website}
-                                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                                    className='w-full px-4 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
-                                />
-                            </div>
-
                             {/* Descripción */}
                             <div className='col-span-1 md:col-span-2 space-y-1.5'>
                                 <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-primary)] opacity-60'>
@@ -786,7 +1311,7 @@ export default function CompanyModal({
                                 </label>
                                 <textarea
                                     rows={3}
-                                    value={formData.descripcion}
+                                    value={toInputString(formData.descripcion)}
                                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                                     className='w-full px-4 py-3 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all resize-none'
                                 />
@@ -796,11 +1321,11 @@ export default function CompanyModal({
                 </div>
 
                 {/* Footer */}
-                <div className='bg-[var(--hover-bg)] px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t border-[var(--card-border)]'>
+                <div className='ah-modal-footer'>
                     <button
                         type='button'
                         onClick={onClose}
-                        className='px-4 py-2 text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] transition-colors bg-[var(--card-bg)] border border-[var(--input-border)] rounded-lg shadow-sm hover:shadow hover:border-[var(--text-secondary)]'
+                        className='ah-modal-btn ah-modal-btn-secondary'
                     >
                         Cancelar
                     </button>
@@ -808,22 +1333,37 @@ export default function CompanyModal({
                         type='submit'
                         form='company-form'
                         disabled={isSubmitting || uploadingLogo}
-                        className='px-6 py-2 bg-[#0A1635] text-white font-medium rounded-lg shadow-md hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95'
+                        className='ah-modal-btn ah-modal-btn-primary'
                     >
                         {isSubmitting ? 'Guardando...' : 'Guardar Empresa'}
                     </button>
                 </div>
+                </div>
+                {isCropping && tempImage && (
+                    <ImageCropper
+                        imageSrc={tempImage}
+                        onCropComplete={handleConfirmCrop}
+                        onCancel={() => {
+                            setIsCropping(false)
+                            setTempImage(null)
+                        }}
+                    />
+                )}
             </div>
-            {isCropping && tempImage && (
-                <ImageCropper
-                    imageSrc={tempImage}
-                    onCropComplete={handleConfirmCrop}
-                    onCancel={() => {
-                        setIsCropping(false)
-                        setTempImage(null)
-                    }}
-                />
-            )}
-        </div>
+
+            <ConfirmModal
+                isOpen={isAutofillConfirmOpen}
+                onClose={() => {
+                    setIsAutofillConfirmOpen(false)
+                }}
+                onConfirm={applyAutofillSuggestion}
+                title='Autocompletar datos de empresa'
+                message={
+                    autofillFieldLabels.length > 0
+                        ? `Detectamos informacion publica disponible para esta empresa. ¿Deseas autocompletar ${autofillFieldLabels.join(', ')} con el asistente y continuar manualmente con el resto?${autofillEmployeeEstimateLabel ? ` Estimacion de empleados: ${autofillEmployeeEstimateLabel}.` : ''} Podras revisar y editar cualquier campo antes de guardar.`
+                        : `Detectamos informacion publica disponible para esta empresa. ¿Deseas autocompletar los datos disponibles con el asistente y continuar manualmente con el resto?${autofillEmployeeEstimateLabel ? ` Estimacion de empleados: ${autofillEmployeeEstimateLabel}.` : ''}`
+                }
+            />
+        </>
     )
 }

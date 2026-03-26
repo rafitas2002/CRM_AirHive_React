@@ -13,7 +13,9 @@ import {
     COMPANY_SIZE_SOURCE_OPTIONS,
     getCompanySizeGuide,
     getCompanySizeTierVisuals,
-    normalizeCompanySizeEvidenceText
+    normalizeCompanySizeConfidenceValue,
+    normalizeCompanySizeEvidenceText,
+    normalizeCompanySizeSourceValue
 } from '@/lib/companySizeUtils'
 
 interface PreLeadModalProps {
@@ -233,8 +235,8 @@ export default function PreLeadModal({
                 industria: formData.industria || formData.giro_empresa || 'Sin clasificar',
                 giro_empresa: formData.industria || formData.giro_empresa || 'Sin clasificar',
                 ubicacion: locationResolution.valueToPersist,
-                tamano_confianza: normalizeCompanySizeEvidenceText(formData.tamano_confianza),
-                tamano_fuente: normalizeCompanySizeEvidenceText(formData.tamano_fuente),
+                tamano_confianza: normalizeCompanySizeConfidenceValue(formData.tamano_confianza),
+                tamano_fuente: normalizeCompanySizeSourceValue(formData.tamano_fuente),
                 tamano_senal_principal: normalizeCompanySizeEvidenceText(formData.tamano_senal_principal),
                 correos: formData.correos.filter(c => c.trim() !== ''),
                 telefonos: formData.telefonos.filter(t => t.trim() !== '')
@@ -619,7 +621,13 @@ export default function PreLeadModal({
                             <div className='space-y-4'>
                                 <div className='flex items-center justify-between'>
                                     <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Email</label>
-                                    <button type="button" onClick={() => handleAddField('correos')} className='text-[8px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg'>+ Añadir</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddField('correos')}
+                                        className='text-[8px] font-black text-blue-500 bg-blue-500/10 border border-blue-500/25 px-2 py-1 rounded-lg transition-all cursor-pointer hover:bg-blue-500 hover:text-white hover:border-blue-500 hover:scale-105 active:scale-95'
+                                    >
+                                        + Añadir
+                                    </button>
                                 </div>
                                 <div className='space-y-3'>
                                     {formData.correos.map((correo, index) => (
@@ -633,7 +641,13 @@ export default function PreLeadModal({
                                                 placeholder="correo@ejemplo.com"
                                             />
                                             {formData.correos.length > 1 && (
-                                                <button type="button" onClick={() => handleRemoveField('correos', index)} className='text-rose-500 text-xs px-2'>🗑️</button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveField('correos', index)}
+                                                    className='h-9 w-9 inline-flex items-center justify-center rounded-lg border border-rose-500/25 text-rose-500 text-sm transition-all cursor-pointer hover:bg-rose-500 hover:text-white hover:border-rose-500 hover:scale-105 active:scale-95'
+                                                >
+                                                    🗑️
+                                                </button>
                                             )}
                                         </div>
                                     ))}
@@ -643,7 +657,13 @@ export default function PreLeadModal({
                             <div className='space-y-4'>
                                 <div className='flex items-center justify-between'>
                                     <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono</label>
-                                    <button type="button" onClick={() => handleAddField('telefonos')} className='text-[8px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg'>+ Añadir</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddField('telefonos')}
+                                        className='text-[8px] font-black text-blue-500 bg-blue-500/10 border border-blue-500/25 px-2 py-1 rounded-lg transition-all cursor-pointer hover:bg-blue-500 hover:text-white hover:border-blue-500 hover:scale-105 active:scale-95'
+                                    >
+                                        + Añadir
+                                    </button>
                                 </div>
                                 <div className='space-y-3'>
                                     {formData.telefonos.map((tel, index) => (
@@ -657,7 +677,13 @@ export default function PreLeadModal({
                                                 placeholder="+52 000 000 0000"
                                             />
                                             {formData.telefonos.length > 1 && (
-                                                <button type="button" onClick={() => handleRemoveField('telefonos', index)} className='text-rose-500 text-xs px-2'>🗑️</button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveField('telefonos', index)}
+                                                    className='h-9 w-9 inline-flex items-center justify-center rounded-lg border border-rose-500/25 text-rose-500 text-sm transition-all cursor-pointer hover:bg-rose-500 hover:text-white hover:border-rose-500 hover:scale-105 active:scale-95'
+                                                >
+                                                    🗑️
+                                                </button>
                                             )}
                                         </div>
                                     ))}
@@ -680,11 +706,11 @@ export default function PreLeadModal({
                 </form>
 
                 {/* Footer */}
-                <div className='p-8 border-t flex items-center justify-end gap-3 shrink-0' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='ah-modal-footer'>
                     <button
                         type='button'
                         onClick={onClose}
-                        className='px-6 py-2 bg-transparent text-[var(--text-secondary)] rounded-xl font-bold hover:bg-[var(--hover-bg)] transition-all text-sm'
+                        className='ah-modal-btn ah-modal-btn-secondary'
                         disabled={isSubmitting}
                     >
                         Cancelar
@@ -692,7 +718,7 @@ export default function PreLeadModal({
                     <button
                         form="suspect-form"
                         type="submit"
-                        className='px-8 py-2 bg-[#0A1635] text-white rounded-xl font-bold hover:bg-[#152955] transition-all transform active:scale-95 shadow-lg flex items-center gap-2'
+                        className='ah-modal-btn ah-modal-btn-primary'
                         disabled={isSubmitting || uploadingLogo}
                     >
                         {isSubmitting ? (

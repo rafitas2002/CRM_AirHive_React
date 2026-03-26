@@ -849,10 +849,10 @@ export default function DetailedUserModal({ isOpen, onClose, user, catalogs }: D
                         </div>
 
                         {/* Footer / Actions */}
-                        <div className="p-5 md:p-6 border-t flex justify-end" style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                        <div className="ah-modal-footer">
                             <button
                                 onClick={onClose}
-                                className="px-6 py-3 bg-[var(--input-focus)] hover:brightness-95 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20 cursor-pointer"
+                                className="ah-modal-btn ah-modal-btn-primary"
                             >
                                 Cerrar Perfil
                             </button>

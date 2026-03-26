@@ -436,19 +436,14 @@ export default function MeetingConfirmationModal({
                             type='button'
                             onClick={onClose}
                             disabled={isSubmitting}
-                            className='flex-1 h-11 rounded-xl border font-bold transition-colors cursor-pointer disabled:opacity-50'
-                            style={{
-                                borderColor: 'var(--card-border)',
-                                color: 'var(--text-secondary)',
-                                background: 'var(--card-bg)'
-                            }}
+                            className='ah-modal-btn ah-modal-btn-secondary flex-1'
                         >
                             Cerrar
                         </button>
                         <button
                             type='submit'
                             disabled={isSubmitting}
-                            className='flex-1 h-11 rounded-xl bg-[#2048FF] text-white font-bold hover:bg-[#1636c7] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+                            className='ah-modal-btn ah-modal-btn-primary flex-1'
                         >
                             Confirmar
                         </button>

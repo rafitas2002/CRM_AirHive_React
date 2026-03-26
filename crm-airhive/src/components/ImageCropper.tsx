@@ -65,7 +65,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ imageSrc, onCropComplete, o
                 </div>
 
                 {/* Footer / Controls */}
-                <div className="p-6 bg-white space-y-6 shrink-0">
+                <div className="p-6 space-y-6 shrink-0 border-t border-[var(--card-border)] bg-[var(--hover-bg)]">
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Zoom</label>
                         <input
@@ -80,16 +80,16 @@ const ImageCropper: React.FC<ImageCropperProps> = ({ imageSrc, onCropComplete, o
                         />
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex gap-2">
                         <button
                             onClick={onCancel}
-                            className="flex-1 px-6 py-3 border border-gray-200 text-gray-600 font-bold rounded-2xl hover:bg-gray-50 transition-all active:scale-95"
+                            className="ah-modal-btn ah-modal-btn-secondary flex-1"
                         >
                             Cancelar
                         </button>
                         <button
                             onClick={handleConfirm}
-                            className="flex-1 px-6 py-3 bg-[#1700AC] text-white font-bold rounded-2xl hover:bg-[#0F2A44] shadow-lg shadow-blue-200 transition-all active:scale-95"
+                            className="ah-modal-btn ah-modal-btn-primary flex-1"
                         >
                             Aplicar Recorte
                         </button>

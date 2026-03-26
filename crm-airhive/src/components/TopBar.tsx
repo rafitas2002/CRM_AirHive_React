@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
-import { Bell, Building2, UsersRound, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, Activity, type LucideIcon } from 'lucide-react'
+import { Bell, Building2, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, Activity, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import { getSpecialBadgeVisualSpec } from '@/lib/specialBadgeVisuals'
@@ -763,7 +763,7 @@ export default function TopBar() {
                         <button
                             className={[
                                 'relative text-white font-semibold text-base px-2 py-2 group flex items-center gap-1.5 cursor-pointer',
-                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'active-customer' : ''
+                                (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/suspects') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'active-customer' : ''
                             ].join(' ')}
                         >
                             Customer
@@ -771,7 +771,7 @@ export default function TopBar() {
                                 className={[
                                     'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
                                     'transition-all duration-300 ease-out',
-                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    (pathname.includes('/clientes') || pathname.includes('/empresas') || pathname.includes('/suspects') || pathname.includes('/pre-leads') || pathname.includes('/proyectos') || pathname.includes('/cierres')) ? 'w-full opacity-100' : 'w-0 opacity-0',
                                     'group-hover:w-full group-hover:opacity-100'
                                 ].join(' ')}
                             />
@@ -781,8 +781,7 @@ export default function TopBar() {
                         <div className='absolute top-[100%] left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 min-w-[240px] translate-y-2 group-hover:translate-y-0'>
                             <div className='bg-black border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1.5'>
                                 {[
-                                    { href: '/clientes', label: 'Leads', icon: UsersRound },
-                                    { href: '/empresas', label: 'Empresas', icon: Building2 },
+                                    { href: '/empresas', label: 'Empresas (Hub)', icon: Building2 },
                                     { href: '/proyectos', label: 'Proyectos', icon: FolderClosed },
                                     { href: '/cierres', label: 'Proyectos Activos', icon: Handshake }
                                 ].map((item) => {

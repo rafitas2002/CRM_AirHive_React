@@ -14,6 +14,7 @@ import { useTheme } from '@/lib/ThemeContext'
 import { buildSemanticToneCssVars, getSemanticTonePalette, type UiToneLane } from '@/lib/semanticUiTones'
 import { getLeadLossAnalyticsSupportData, type LeadLossAnalyticsRow } from '@/app/actions/lossAnalytics'
 import { getCommercialMetricDefinition } from '@/lib/metricsDefinitions'
+import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
 
 type LeadRow = Database['public']['Tables']['clientes']['Row']
 
@@ -759,8 +760,8 @@ export default function ClosedCompaniesPage() {
             industria_id: companyData.industria_id || null
         }
         const sizeAssessmentPayload: any = {
-            tamano_fuente: normalizeOptionalText((companyData as any).tamano_fuente),
-            tamano_confianza: normalizeOptionalText((companyData as any).tamano_confianza),
+            tamano_fuente: normalizeCompanySizeSourceValue((companyData as any).tamano_fuente),
+            tamano_confianza: normalizeCompanySizeConfidenceValue((companyData as any).tamano_confianza),
             tamano_senal_principal: normalizeOptionalText((companyData as any).tamano_senal_principal)
         }
         const basePayloadWithSizeAssessment = {

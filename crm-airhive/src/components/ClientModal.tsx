@@ -31,6 +31,7 @@ export type ClientData = {
     probabilidad?: number
     forecast_close_date?: string | null
     closed_at_real?: string | null
+    sede_objetivo?: string | null
     proyectos_pronosticados_ids?: string[]
     proyectos_prospeccion_mismo_cierre_ids?: string[]
     proyectos_futuro_lead_ids?: string[]
@@ -115,6 +116,72 @@ function uniqueStringIds(values: unknown): string[] {
     return Array.from(new Set(values.map((entry) => String(entry || '').trim()).filter(Boolean)))
 }
 
+function normalizeComparisonText(value: unknown) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+}
+
+function normalizeSiteSuggestions(value: unknown): string[] {
+    const list = Array.isArray(value) ? value : []
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const item of list) {
+        const normalized = String(item || '').trim()
+        if (!normalized) continue
+        const key = normalizeComparisonText(normalized)
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        result.push(normalized)
+        if (result.length >= 12) break
+    }
+    return result
+}
+
+function normalizeCompanyScopeValue(value: unknown): 'local' | 'nacional' | 'internacional' | 'por_definir' | null {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (normalized === 'local' || normalized === 'nacional' || normalized === 'internacional' || normalized === 'por_definir') {
+        return normalized
+    }
+    return null
+}
+
+const MEXICO_LOCAL_SITE_MARKERS = [
+    'monterrey',
+    'nuevo leon',
+    'santa catarina',
+    'guadalupe',
+    'apodaca',
+    'san nicolas',
+    'escobedo',
+    'garcia',
+    'pesqueria',
+    'santiago',
+    'allende',
+    'cadereyta',
+    'mexico',
+    'ciudad de mexico',
+    'cdmx',
+    'guadalajara',
+    'queretaro',
+    'puebla',
+    'saltillo',
+    'ramos arizpe',
+    'san luis potosi',
+    'mexicali',
+    'tijuana',
+    'leon',
+    'celaya'
+].map((value) => normalizeComparisonText(value))
+
+function isLikelyMexicoLocalSite(value: unknown): boolean {
+    const normalized = normalizeComparisonText(value)
+    if (!normalized) return false
+    return MEXICO_LOCAL_SITE_MARKERS.some((marker) => marker && normalized.includes(marker))
+}
+
 interface ClientModalProps {
     isOpen: boolean
     onClose: () => void
@@ -122,7 +189,15 @@ interface ClientModalProps {
     initialData?: ClientData | null
     mode: 'create' | 'edit' | 'convert'
     onNavigateToCompanies?: () => void
-    companies?: { id: string, nombre: string, industria?: string | null, ubicacion?: string | null }[]
+    companies?: {
+        id: string
+        nombre: string
+        industria?: string | null
+        ubicacion?: string | null
+        alcance_empresa?: string | null
+        sede_objetivo?: string | null
+        sedes_sugeridas?: string[]
+    }[]
     enableLeadAssignees?: boolean
     assignableUsers?: LeadAssigneeOption[]
     defaultAssignedUserIds?: string[]
@@ -238,6 +313,7 @@ export default function ClientModal({
         probabilidad: 50,
         forecast_close_date: null,
         closed_at_real: null,
+        sede_objetivo: '',
         proyectos_pronosticados_ids: [],
         proyectos_prospeccion_mismo_cierre_ids: [],
         proyectos_futuro_lead_ids: [],
@@ -313,6 +389,7 @@ export default function ClientModal({
                     valor_implementacion_real_cierre: (initialData as any).valor_implementacion_real_cierre ?? null,
                     forecast_close_date: initialData.forecast_close_date ?? null,
                     closed_at_real: initialData.closed_at_real ?? null,
+                    sede_objetivo: String((initialData as any).sede_objetivo || '').trim(),
                     proyectos_pronosticados_ids: Array.isArray((initialData as any).proyectos_pronosticados_ids) ? (initialData as any).proyectos_pronosticados_ids : [],
                     proyectos_prospeccion_mismo_cierre_ids: Array.isArray((initialData as any).proyectos_prospeccion_mismo_cierre_ids) ? (initialData as any).proyectos_prospeccion_mismo_cierre_ids : [],
                     proyectos_futuro_lead_ids: Array.isArray((initialData as any).proyectos_futuro_lead_ids) ? (initialData as any).proyectos_futuro_lead_ids : [],
@@ -368,6 +445,7 @@ export default function ClientModal({
                     probabilidad: 50,
                     forecast_close_date: null,
                     closed_at_real: null,
+                    sede_objetivo: '',
                     proyectos_pronosticados_ids: [],
                     proyectos_prospeccion_mismo_cierre_ids: [],
                     proyectos_futuro_lead_ids: [],
@@ -900,6 +978,52 @@ export default function ClientModal({
         () => companies.find((company) => company.id === formData.empresa_id),
         [companies, formData.empresa_id]
     )
+
+    const buildPreferredProjectSitesForCompany = (
+        company: {
+            ubicacion?: string | null
+            alcance_empresa?: string | null
+            sede_objetivo?: string | null
+            sedes_sugeridas?: string[]
+        } | null | undefined
+    ) => {
+        if (!company) return [] as string[]
+
+        const normalizedCompanyScope = normalizeCompanyScopeValue(company.alcance_empresa)
+        const baseSites = normalizeSiteSuggestions([
+            company.sede_objetivo,
+            company.ubicacion,
+            ...normalizeSiteSuggestions(company.sedes_sugeridas)
+        ])
+        if (baseSites.length === 0) return [] as string[]
+
+        const hasMexicoContext = baseSites.some((site) => isLikelyMexicoLocalSite(site))
+            || isLikelyMexicoLocalSite(company.ubicacion)
+            || isLikelyMexicoLocalSite(company.sede_objetivo)
+
+        if (normalizedCompanyScope === 'internacional' && hasMexicoContext) {
+            const localSites = baseSites.filter((site) => isLikelyMexicoLocalSite(site))
+            if (localSites.length > 0) {
+                return localSites.slice(0, 8)
+            }
+        }
+
+        return baseSites.slice(0, 8)
+    }
+
+    const suggestedProjectSitesForSelectedCompany = useMemo(() => {
+        return buildPreferredProjectSitesForCompany(selectedCompany as any)
+    }, [selectedCompany])
+
+    const resolveCompanyDefaultProjectSite = (company: any) => {
+        if (!company) return ''
+        const preferred = normalizeSiteSuggestions([
+            company.sede_objetivo,
+            ...buildPreferredProjectSitesForCompany(company),
+            company.ubicacion
+        ])
+        return preferred[0] || ''
+    }
     const sortedProjectCatalog = useMemo(
         () => [...projectsCatalog].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
         [projectsCatalog]
@@ -1034,6 +1158,7 @@ export default function ClientModal({
             asNum(formData.valor_real_cierre) === asNum(initialData.valor_real_cierre) &&
             asNum((formData as any).valor_implementacion_estimado) === asNum((initialData as any).valor_implementacion_estimado) &&
             asNum((formData as any).valor_implementacion_real_cierre) === asNum((initialData as any).valor_implementacion_real_cierre) &&
+            String((formData as any).sede_objetivo || '') === String((initialData as any).sede_objetivo || '') &&
             String(formData.oportunidad || '') === String(initialData.oportunidad || '') &&
             asNum(formData.calificacion) === asNum(initialData.calificacion) &&
             String(formData.notas || '') === String(initialData.notas || '') &&
@@ -1061,6 +1186,7 @@ export default function ClientModal({
                 ...prev,
                 empresa_id: undefined,
                 empresa: '',
+                sede_objetivo: '',
                 proyectos_pronosticados_ids: [],
                 proyectos_prospeccion_mismo_cierre_ids: [],
                 proyectos_futuro_lead_ids: [],
@@ -1073,7 +1199,8 @@ export default function ClientModal({
         setFormData((prev) => ({
             ...prev,
             empresa: company.nombre,
-            empresa_id: company.id
+            empresa_id: company.id,
+            sede_objetivo: String((prev as any).sede_objetivo || '').trim() || resolveCompanyDefaultProjectSite(company)
         }))
     }
 
@@ -1318,6 +1445,7 @@ export default function ClientModal({
 
         let normalizedFormData: ClientData = {
             ...formData,
+            sede_objetivo: String((formData as any).sede_objetivo || '').trim() || null,
             prospect_role_catalog_id: normalizedProspectRoleCatalogId,
             prospect_role_custom: normalizedLegacyProspectRoleCustom,
             prospect_role_exact_title: normalizedExactRoleTitle,
@@ -1549,6 +1677,39 @@ export default function ClientModal({
                                     </p>
                                 </div>
                             )}
+
+                            <div className='space-y-2'>
+                                <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                    Sede Objetivo del Proyecto
+                                </label>
+                                <input
+                                    type='text'
+                                    value={String((formData as any).sede_objetivo || '')}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, sede_objetivo: e.target.value }))}
+                                    placeholder='Ej. Planta Guadalajara'
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold transition-all'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                />
+                                {suggestedProjectSitesForSelectedCompany.length > 0 && (
+                                    <div className='flex flex-wrap gap-2 pt-1'>
+                                        {suggestedProjectSitesForSelectedCompany.map((site) => (
+                                            <button
+                                                key={site}
+                                                type='button'
+                                                onClick={() => setFormData((prev) => ({ ...prev, sede_objetivo: site }))}
+                                                className='px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-500/30 text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors cursor-pointer'
+                                            >
+                                                Usar: {site}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                {selectedCompany && normalizeCompanyScopeValue((selectedCompany as any).alcance_empresa) === 'internacional' && suggestedProjectSitesForSelectedCompany.length > 0 && (
+                                    <p className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                        Se priorizan sedes locales en México para acelerar la selección.
+                                    </p>
+                                )}
+                            </div>
 
                             {companies.length === 0 && (
                                 <div className='mt-2 p-3 rounded-xl border text-xs font-bold'
@@ -2396,7 +2557,7 @@ export default function ClientModal({
                 </form>
 
                 {/* Footer */}
-                <div className='p-8 border-t flex items-center justify-between gap-4 shrink-0' style={{ background: 'var(--table-header-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='ah-modal-footer justify-between gap-4'>
                     <div className='flex items-center gap-3'>
                         {mode === 'edit' && (
                             <>
@@ -2404,8 +2565,7 @@ export default function ClientModal({
                                     <button
                                         type='button'
                                         onClick={() => { setPendingCloseOutcome('won'); setShowCloseLeadPanel(true) }}
-                                        className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-emerald-500'
-                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        className='ah-modal-btn ah-modal-btn-secondary'
                                     >
                                         Cerrar Lead
                                     </button>
@@ -2414,16 +2574,14 @@ export default function ClientModal({
                                         <button
                                             type='button'
                                             onClick={() => { setPendingCloseOutcome(isWonStageLocal(formData.etapa) ? 'won' : 'lost'); setShowCloseLeadPanel(true) }}
-                                            className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-blue-500'
-                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                            className='ah-modal-btn ah-modal-btn-secondary'
                                         >
                                             Editar Cierre
                                         </button>
                                         <button
                                             type='button'
                                             onClick={reopenLead}
-                                            className='px-4 py-2.5 rounded-xl border font-black transition-all uppercase text-[10px] tracking-widest cursor-pointer hover:border-amber-500'
-                                            style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                            className='ah-modal-btn ah-modal-btn-secondary'
                                         >
                                             Reabrir
                                         </button>
@@ -2434,12 +2592,11 @@ export default function ClientModal({
                         <p className='text-[10px] font-black uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>* Campos obligatorios</p>
                     </div>
 
-                    <div className='flex gap-4'>
+                    <div className='flex gap-2'>
                         <button
                             type='button'
                             onClick={onClose}
-                            className='px-6 py-2.5 rounded-xl font-black hover:bg-black/5 transition-all uppercase text-[10px] tracking-widest'
-                            style={{ color: 'var(--text-secondary)' }}
+                            className='ah-modal-btn ah-modal-btn-secondary'
                         >
                             Cancelar
                         </button>
@@ -2447,7 +2604,7 @@ export default function ClientModal({
                             type='submit'
                             form='client-form'
                             disabled={isSubmitting || !formData.empresa_id}
-                            className={`px-8 py-2.5 text-white rounded-xl font-black shadow-xl transition-all transform active:scale-95 uppercase text-[10px] tracking-widest disabled:opacity-30 ${mode === 'convert' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-500/20' : 'bg-[#2048FF] shadow-blue-500/20 hover:bg-[#1700AC]'}`}
+                            className='ah-modal-btn ah-modal-btn-primary'
                         >
                             {isSubmitting
                                 ? 'Guardando...'

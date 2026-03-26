@@ -10,7 +10,7 @@ import TaskModal from './TaskModal'
 import MeetingModal from './MeetingModal'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { createMeeting } from '@/lib/meetingsService'
-import { FileText, MapPin, Globe, Users2, ClipboardList, FolderClosed, CalendarClock, CheckCircle2, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil, Camera, ArrowUpRight, ArrowDownRight, Minus, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, MapPin, Globe, Users2, UserRound, ClipboardList, FolderClosed, CalendarClock, CheckCircle2, CheckSquare, TrendingUp, ShieldCheck, Plus, FolderPlus, CalendarPlus, ListTodo, StickyNote, X, Pencil, Camera, ArrowUpRight, ArrowDownRight, Minus, ChevronDown, ChevronUp } from 'lucide-react'
 import { buildIndustryBadgeVisualMap, getIndustryBadgeLevelMedallionVisual, getIndustryBadgeVisualFromMap } from '@/lib/industryBadgeVisuals'
 import BadgeInfoTooltip from '@/components/BadgeInfoTooltip'
 import BadgeMedallion from '@/components/BadgeMedallion'
@@ -118,6 +118,7 @@ const LEAD_HISTORY_FIELD_LABELS: Record<string, string> = {
     valor_implementacion_estimado: 'Pronóstico implementación',
     valor_implementacion_real_cierre: 'Implementación REAL',
     forecast_close_date: 'Fecha pronosticada de cierre',
+    sede_objetivo: 'Sede objetivo del proyecto',
     closed_at_real: 'Fecha real de cierre',
     calificacion: 'Calificación',
     oportunidad: 'Oportunidad',
@@ -164,6 +165,13 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
     if (!y || !m || !d) return null
     const localDate = new Date(y, m - 1, d, 12, 0, 0, 0)
     return Number.isNaN(localDate.getTime()) ? null : localDate.toISOString()
+}
+
+function isUnknownColumnError(error: any, columnName?: string) {
+    const message = String(error?.message || '').toLowerCase()
+    if (!message.includes('column') || !message.includes('does not exist')) return false
+    if (!columnName) return true
+    return message.includes(String(columnName).toLowerCase())
 }
 
 function parseSnapshotComparableDate(value?: string | null) {
@@ -508,6 +516,7 @@ export default function AdminCompanyDetailView({
         implementedRealProjectIds?: string[]
         forecastProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         implementedRealProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+        projectTargetSite?: string | null
         assignedByUserId?: string | null
     }) => {
         const empresaId = String(params.empresaId || '')
@@ -527,6 +536,7 @@ export default function AdminCompanyDetailView({
             implementedRealProjectIds: implementedReal,
             forecastProjectValues: params.forecastProjectValues || {},
             implementedRealProjectValues: params.implementedRealProjectValues || {},
+            projectTargetSite: params.projectTargetSite || null,
             assignedByUserId: params.assignedByUserId || null
         })
 
@@ -574,6 +584,7 @@ export default function AdminCompanyDetailView({
         try {
             const isWon = isWonStage(leadData.etapa)
             const isLost = isLostStage(leadData.etapa)
+            const normalizedProjectTargetSite = String(leadData.sede_objetivo || '').trim() || null
             if (isWon && (!Array.isArray(leadData.proyectos_implementados_reales_ids) || leadData.proyectos_implementados_reales_ids.length === 0)) {
                 throw new Error('Para guardar un cierre ganado debes asignar al menos 1 proyecto implementado real.')
             }
@@ -611,6 +622,7 @@ export default function AdminCompanyDetailView({
                 valor_implementacion_estimado: leadData.valor_implementacion_estimado ?? 0,
                 valor_implementacion_real_cierre: isWon ? null : realImplementationValue,
                 forecast_close_date: leadData.forecast_close_date || null,
+                sede_objetivo: normalizedProjectTargetSite,
                 oportunidad: leadData.oportunidad || '',
                 calificacion: leadData.calificacion ?? 3,
                 notas: leadData.notas || '',
@@ -627,9 +639,17 @@ export default function AdminCompanyDetailView({
                 payload.loss_recorded_by = leadData.loss_recorded_by || currentUser.id
             }
 
-            const { data: insertedRows, error: insertError } = await (supabase.from('clientes') as any)
+            let insertResult = await (supabase.from('clientes') as any)
                 .insert([payload])
                 .select()
+            if (insertResult?.error && isUnknownColumnError(insertResult.error, 'sede_objetivo')) {
+                const fallbackPayload = { ...payload }
+                delete fallbackPayload.sede_objetivo
+                insertResult = await (supabase.from('clientes') as any)
+                    .insert([fallbackPayload])
+                    .select()
+            }
+            const { data: insertedRows, error: insertError } = insertResult
             if (insertError) throw insertError
             const inserted = Array.isArray(insertedRows) ? insertedRows[0] : null
             if (!inserted?.id) throw new Error('No se pudo confirmar el lead creado')
@@ -659,7 +679,8 @@ export default function AdminCompanyDetailView({
                 { lead_id: leadId, field_name: 'probabilidad', new_value: String(leadData.probabilidad ?? 50), changed_by: currentUser.id },
                 ...(leadData.valor_estimado != null ? [{ lead_id: leadId, field_name: 'valor_estimado', new_value: String(leadData.valor_estimado), changed_by: currentUser.id }] : []),
                 ...(leadData.valor_implementacion_estimado != null ? [{ lead_id: leadId, field_name: 'valor_implementacion_estimado', new_value: String(leadData.valor_implementacion_estimado), changed_by: currentUser.id }] : []),
-                ...(leadData.forecast_close_date ? [{ lead_id: leadId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
+                ...(leadData.forecast_close_date ? [{ lead_id: leadId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : []),
+                ...(normalizedProjectTargetSite ? [{ lead_id: leadId, field_name: 'sede_objetivo', new_value: normalizedProjectTargetSite, changed_by: currentUser.id }] : [])
             ])
 
             try {
@@ -672,6 +693,7 @@ export default function AdminCompanyDetailView({
                     implementedRealProjectIds: leadData.proyectos_implementados_reales_ids || [],
                     forecastProjectValues: leadData.proyectos_pronosticados_valores || {},
                     implementedRealProjectValues: leadData.proyectos_implementados_reales_valores || {},
+                    projectTargetSite: normalizedProjectTargetSite,
                     assignedByUserId: currentUser.id
                 })
             } catch (projectSyncError) {
@@ -789,6 +811,8 @@ export default function AdminCompanyDetailView({
                 setQuickActionError('Lead inválido para asignar el proyecto.')
                 return
             }
+            const sourceLead = clients.find((lead) => Number(lead.id) === leadId)
+            const projectTargetSite = String((sourceLead as any)?.sede_objetivo || '').trim() || null
 
             const existingRows = await fetchLeadProjectAssignments(supabase as any, {
                 leadId,
@@ -845,6 +869,7 @@ export default function AdminCompanyDetailView({
                 implementedRealProjectIds: Array.from(implementedReal),
                 forecastProjectValues,
                 implementedRealProjectValues,
+                projectTargetSite,
                 assignedByUserId: currentUserProfile?.id || null
             })
 
@@ -1010,6 +1035,7 @@ export default function AdminCompanyDetailView({
         probabilidad: 50,
         forecast_close_date: null,
         closed_at_real: null,
+        sede_objetivo: String((company as any).sede_objetivo || '').trim() || null,
         proyectos_pronosticados_ids: [],
         proyectos_prospeccion_mismo_cierre_ids: [],
         proyectos_futuro_lead_ids: [],
@@ -1031,7 +1057,7 @@ export default function AdminCompanyDetailView({
         prospect_preferred_contact_channel: null,
         prospect_linkedin_url: '',
         prospect_is_family_member: false
-    }), [company.id, company.nombre, currentUserProfile?.id])
+    }), [company.id, company.nombre, (company as any).sede_objetivo, currentUserProfile?.id])
 
     const companyStats = useMemo(() => {
         const wonLeads = clients.filter((client) => String(client.etapa || '').toLowerCase() === 'cerrado ganado')
@@ -1796,6 +1822,21 @@ export default function AdminCompanyDetailView({
                                 </div>
 
                                 <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-2'>Registro</label>
+                                    <div className='flex items-center gap-2'>
+                                        <UserRound size={18} className='text-[var(--text-secondary)] shrink-0' />
+                                        <div className='min-w-0'>
+                                            <p className='text-[var(--text-primary)] font-bold truncate'>
+                                                {String((company as any).registered_by_name || '').trim() || 'No disponible'}
+                                            </p>
+                                            <p className='text-[11px] font-semibold text-[var(--text-secondary)] opacity-80'>
+                                                {formatDateTime(String((company as any).created_at || '') || null)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className='p-4 bg-[var(--hover-bg)] rounded-2xl border border-[var(--card-border)]'>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-[0.2em] block mb-1'>Tamaño de Empresa</label>
                                     <div className='flex items-center gap-3 mt-2'>
                                         <span className='text-3xl font-black text-[var(--text-primary)]'>{company.tamano || 0}</span>
@@ -2511,7 +2552,15 @@ export default function AdminCompanyDetailView({
                 onSave={handleQuickLeadSave}
                 initialData={quickLeadDraft}
                 mode='create'
-                companies={company.id ? [{ id: String(company.id), nombre: company.nombre, industria: company.industria || null, ubicacion: company.ubicacion || null }] : []}
+                companies={company.id ? [{
+                    id: String(company.id),
+                    nombre: company.nombre,
+                    industria: company.industria || null,
+                    ubicacion: company.ubicacion || null,
+                    alcance_empresa: (company as any).alcance_empresa || null,
+                    sede_objetivo: (company as any).sede_objetivo || null,
+                    sedes_sugeridas: Array.isArray((company as any).sedes_sugeridas) ? (company as any).sedes_sugeridas : []
+                }] : []}
             />
 
             <TaskModal
@@ -2837,10 +2886,10 @@ export default function AdminCompanyDetailView({
                             )}
                         </div>
 
-                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end'>
+                        <div className='ah-modal-footer'>
                             <button
                                 onClick={() => setIsForecastHistoryModalOpen(false)}
-                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                                className='ah-modal-btn ah-modal-btn-secondary'
                             >
                                 Cerrar
                             </button>
@@ -2958,18 +3007,17 @@ export default function AdminCompanyDetailView({
                                 </div>
                             )}
                         </div>
-                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end gap-2'>
+                        <div className='ah-modal-footer'>
                             <button
                                 onClick={() => setIsQuickProjectModalOpen(false)}
-                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                                className='ah-modal-btn ah-modal-btn-secondary'
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleSaveQuickProjectAssignment}
                                 disabled={quickProjectSaving}
-                                className={`h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] disabled:opacity-60 ${toneChipHoverButtonClassName}`}
-                                style={toneVars('amber')}
+                                className='ah-modal-btn ah-modal-btn-primary'
                             >
                                 {quickProjectSaving ? 'Guardando...' : 'Guardar Proyecto'}
                             </button>
@@ -3024,18 +3072,17 @@ export default function AdminCompanyDetailView({
                                 </div>
                             )}
                         </div>
-                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end gap-2'>
+                        <div className='ah-modal-footer'>
                             <button
                                 onClick={() => setIsQuickNoteModalOpen(false)}
-                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                                className='ah-modal-btn ah-modal-btn-secondary'
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleQuickNoteSave}
                                 disabled={quickNoteSaving}
-                                className={`h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] disabled:opacity-60 ${toneChipHoverButtonClassName}`}
-                                style={toneVars('emerald')}
+                                className='ah-modal-btn ah-modal-btn-primary'
                             >
                                 {quickNoteSaving ? 'Guardando...' : 'Guardar Nota'}
                             </button>

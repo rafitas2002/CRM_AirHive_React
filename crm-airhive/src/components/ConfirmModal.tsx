@@ -39,7 +39,7 @@ export default function ConfirmModal({
                 </div>
 
                 {/* Body */}
-                <div className='p-6 text-center space-y-4'>
+                <div className='ah-modal-body text-center space-y-4'>
                     <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${isDestructive ? 'bg-red-100' : 'bg-blue-100'}`}>
                         {isDestructive ? (
                             <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
@@ -57,10 +57,10 @@ export default function ConfirmModal({
                 </div>
 
                 {/* Footer */}
-                <div className='bg-[var(--hover-bg)] px-6 py-4 flex items-center justify-center gap-3 shrink-0 border-t border-[var(--card-border)]'>
+                <div className='ah-modal-footer justify-center'>
                     <button
                         onClick={onClose}
-                        className='w-full px-4 py-2 text-[var(--text-secondary)] font-medium hover:text-[var(--text-primary)] transition-colors bg-[var(--card-bg)] border border-[var(--input-border)] rounded-lg shadow-sm hover:shadow hover:border-[var(--text-secondary)]'
+                        className='ah-modal-btn ah-modal-btn-secondary w-full'
                     >
                         Cancelar
                     </button>
@@ -69,10 +69,7 @@ export default function ConfirmModal({
                             onConfirm()
                             onClose()
                         }}
-                        className={`w-full px-4 py-2 text-white font-medium rounded-lg shadow-md transition-all transform active:scale-95 ${isDestructive
-                            ? 'bg-red-600 hover:bg-red-700'
-                            : 'bg-[#2048FF] hover:bg-[#1700AC]'
-                            }`}
+                        className={`ah-modal-btn w-full ${isDestructive ? 'ah-modal-btn-danger' : 'ah-modal-btn-primary'}`}
                     >
                         {isDestructive ? 'Eliminar' : 'Aceptar'}
                     </button>

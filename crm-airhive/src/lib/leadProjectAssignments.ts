@@ -15,6 +15,7 @@ type SyncLeadProjectAssignmentsParams = {
     implementedRealProjectIds?: string[]
     forecastProjectValues?: ProjectValueMap
     implementedRealProjectValues?: ProjectValueMap
+    projectTargetSite?: string | null
     assignedByUserId?: string | null
 }
 
@@ -23,6 +24,7 @@ type RawAssignmentRow = {
     assignment_stage: string
     mensualidad_pactada_usd: number | null
     implementacion_pactada_usd: number | null
+    sede_objetivo?: string | null
 }
 
 type NormalizedLeadProjectAssignment = {
@@ -30,6 +32,7 @@ type NormalizedLeadProjectAssignment = {
     stage: AssignmentStage
     monthlyUsd: number | null
     implementationUsd: number | null
+    targetSite: string | null
 }
 
 type LeadProjectSelection = {
@@ -76,6 +79,22 @@ function isMissingLeadAssignmentsTableError(error: any) {
         || (message.includes('does not exist') && message.includes('lead'))
 }
 
+function isUnknownColumnError(error: any, columnName?: string) {
+    const message = String(error?.message || '').toLowerCase()
+    if (!message) return false
+    if (!message.includes('column')) return false
+    if (!message.includes('does not exist')) return false
+    if (!columnName) return true
+    return message.includes(String(columnName).toLowerCase())
+}
+
+function stripSedeObjetivoField(rows: any[]) {
+    return (rows || []).map((row) => {
+        const { sede_objetivo, ...rest } = row || {}
+        return rest
+    })
+}
+
 function buildLeadRows(params: SyncLeadProjectAssignmentsParams) {
     const leadId = Number(params.leadId || 0)
     if (!leadId) return [] as any[]
@@ -89,7 +108,8 @@ function buildLeadRows(params: SyncLeadProjectAssignmentsParams) {
 
     const common = {
         lead_id: leadId,
-        assigned_by: params.assignedByUserId || null
+        assigned_by: params.assignedByUserId || null,
+        sede_objetivo: String(params.projectTargetSite || '').trim() || null
     }
 
     const rows = [
@@ -140,18 +160,26 @@ async function syncLegacyCompanyRows(supabase: any, params: SyncLeadProjectAssig
 
     if (leadRows.length === 0) return
 
-    const legacyRows = leadRows.map((row) => ({
+    const legacyRowsWithSite = leadRows.map((row) => ({
         empresa_id: empresaId,
         proyecto_id: row.proyecto_id,
         assignment_stage: row.assignment_stage,
         source_lead_id: leadId,
         assigned_by: row.assigned_by,
+        sede_objetivo: row.sede_objetivo ?? null,
         mensualidad_pactada_usd: row.mensualidad_pactada_usd ?? null,
         implementacion_pactada_usd: row.implementacion_pactada_usd ?? null
     }))
 
-    const { error: upsertError } = await (supabase.from('empresa_proyecto_asignaciones') as any)
-        .upsert(legacyRows, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
+    let { error: upsertError } = await (supabase.from('empresa_proyecto_asignaciones') as any)
+        .upsert(legacyRowsWithSite, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
+
+    if (upsertError && isUnknownColumnError(upsertError, 'sede_objetivo')) {
+        const legacyRowsWithoutSite = stripSedeObjetivoField(legacyRowsWithSite)
+        const fallback = await (supabase.from('empresa_proyecto_asignaciones') as any)
+            .upsert(legacyRowsWithoutSite, { onConflict: 'empresa_id,proyecto_id,assignment_stage' })
+        upsertError = fallback?.error || null
+    }
 
     if (upsertError) throw upsertError
 }
@@ -174,8 +202,14 @@ export async function syncLeadProjectAssignments(supabase: any, params: SyncLead
     }
 
     if (leadRows.length > 0) {
-        const { error: upsertError } = await (supabase.from('lead_proyecto_asignaciones') as any)
+        let { error: upsertError } = await (supabase.from('lead_proyecto_asignaciones') as any)
             .upsert(leadRows, { onConflict: 'lead_id,proyecto_id,assignment_stage' })
+        if (upsertError && isUnknownColumnError(upsertError, 'sede_objetivo')) {
+            const leadRowsWithoutSite = stripSedeObjetivoField(leadRows)
+            const fallback = await (supabase.from('lead_proyecto_asignaciones') as any)
+                .upsert(leadRowsWithoutSite, { onConflict: 'lead_id,proyecto_id,assignment_stage' })
+            upsertError = fallback?.error || null
+        }
         if (upsertError) throw upsertError
     }
 
@@ -196,14 +230,21 @@ export async function fetchLeadProjectAssignments(supabase: any, params: { leadI
                 projectId,
                 stage,
                 monthlyUsd: row?.mensualidad_pactada_usd == null ? null : Number(row.mensualidad_pactada_usd),
-                implementationUsd: row?.implementacion_pactada_usd == null ? null : Number(row.implementacion_pactada_usd)
+                implementationUsd: row?.implementacion_pactada_usd == null ? null : Number(row.implementacion_pactada_usd),
+                targetSite: String(row?.sede_objetivo || '').trim() || null
             } as NormalizedLeadProjectAssignment
         })
         .filter((row: NormalizedLeadProjectAssignment | null): row is NormalizedLeadProjectAssignment => !!row)
 
-    const leadRes = await (supabase.from('lead_proyecto_asignaciones') as any)
-        .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
+    let leadRes = await (supabase.from('lead_proyecto_asignaciones') as any)
+        .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd, sede_objetivo')
         .eq('lead_id', leadId)
+
+    if (leadRes?.error && isUnknownColumnError(leadRes.error, 'sede_objetivo')) {
+        leadRes = await (supabase.from('lead_proyecto_asignaciones') as any)
+            .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
+            .eq('lead_id', leadId)
+    }
 
     if (!leadRes?.error) {
         return parseRows(Array.isArray(leadRes?.data) ? leadRes.data : [])
@@ -216,10 +257,17 @@ export async function fetchLeadProjectAssignments(supabase: any, params: { leadI
     const empresaId = String(params.empresaId || '').trim()
     if (!empresaId) return []
 
-    const legacyRes = await (supabase.from('empresa_proyecto_asignaciones') as any)
-        .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
+    let legacyRes = await (supabase.from('empresa_proyecto_asignaciones') as any)
+        .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd, sede_objetivo')
         .eq('empresa_id', empresaId)
         .eq('source_lead_id', leadId)
+
+    if (legacyRes?.error && isUnknownColumnError(legacyRes.error, 'sede_objetivo')) {
+        legacyRes = await (supabase.from('empresa_proyecto_asignaciones') as any)
+            .select('proyecto_id, assignment_stage, mensualidad_pactada_usd, implementacion_pactada_usd')
+            .eq('empresa_id', empresaId)
+            .eq('source_lead_id', leadId)
+    }
 
     if (legacyRes?.error) throw legacyRes.error
     return parseRows(Array.isArray(legacyRes?.data) ? legacyRes.data : [])

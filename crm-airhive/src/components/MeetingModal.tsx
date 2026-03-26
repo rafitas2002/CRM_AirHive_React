@@ -850,7 +850,7 @@ export default function MeetingModal({
                     </h2>
                     <button
                         onClick={onClose}
-                        className='ah-modal-close text-xl cursor-pointer'
+                        className='ah-modal-close'
                     >
                         <X size={20} />
                     </button>
@@ -1359,12 +1359,11 @@ export default function MeetingModal({
                 </div>
 
                 {/* Footer */}
-                <div className='px-6 py-4 flex items-center justify-end gap-3 shrink-0 border-t' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                <div className='ah-modal-footer'>
                     <button
                         type='button'
                         onClick={onClose}
-                        className='px-4 py-2 font-medium transition-colors rounded-lg shadow-sm hover:shadow border cursor-pointer'
-                        style={{ color: 'var(--text-secondary)', background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+                        className='ah-modal-btn ah-modal-btn-secondary'
                     >
                         Cancelar
                     </button>
@@ -1372,7 +1371,7 @@ export default function MeetingModal({
                         type='submit'
                         form='meeting-form'
                         disabled={isSubmitting}
-                        className='px-6 py-2 bg-[#2048FF] text-white font-black rounded-lg shadow-md hover:bg-[#1700AC] transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 uppercase text-xs tracking-widest'
+                        className='ah-modal-btn ah-modal-btn-primary'
                     >
                         {isSubmitting
                             ? 'Guardando...'

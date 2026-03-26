@@ -422,11 +422,11 @@ export default function GlobalMeetingHandler() {
                                 Esto te permite ajustar probabilidad, mensualidad, implementación y fecha estimada de cierre.
                             </p>
                         </div>
-                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end gap-2'>
+                        <div className='ah-modal-footer'>
                             <button
                                 type='button'
                                 onClick={() => setPostConfirmationForecastPrompt(null)}
-                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                                className='ah-modal-btn ah-modal-btn-secondary'
                             >
                                 Cerrar
                             </button>
@@ -434,10 +434,7 @@ export default function GlobalMeetingHandler() {
                                 type='button'
                                 onClick={openForecastEditor}
                                 disabled={openingForecastEditor}
-                                className='h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-[0.14em] text-white disabled:opacity-60 cursor-pointer'
-                                style={{
-                                    background: 'color-mix(in srgb, #16a34a 90%, var(--card-bg))'
-                                }}
+                                className='ah-modal-btn ah-modal-btn-success'
                             >
                                 {openingForecastEditor ? 'Abriendo...' : 'Confirmar y actualizar'}
                             </button>

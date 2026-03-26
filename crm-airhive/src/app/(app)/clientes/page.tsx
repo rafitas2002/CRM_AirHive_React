@@ -73,6 +73,7 @@ const normalizeLead = (lead: Lead) => ({
     probabilidad: (lead as any).probabilidad || 0,
     forecast_close_date: (lead as any).forecast_close_date || null,
     closed_at_real: ((lead as any).closed_at_real ? String((lead as any).closed_at_real).slice(0, 10) : null),
+    sede_objetivo: (lead as any).sede_objetivo || '',
     loss_reason_id: (lead as any).loss_reason_id ?? null,
     loss_subreason_id: (lead as any).loss_subreason_id ?? null,
     loss_notes: (lead as any).loss_notes ?? '',
@@ -143,6 +144,13 @@ function parseSupabaseError(error: any, fallback: string) {
     return fallback
 }
 
+function isUnknownColumnError(error: any, columnName?: string) {
+    const message = String(error?.message || '').toLowerCase()
+    if (!message.includes('column') || !message.includes('does not exist')) return false
+    if (!columnName) return true
+    return message.includes(String(columnName).toLowerCase())
+}
+
 function isWonStage(stage: unknown) {
     const normalized = String(stage || '').trim().toLowerCase()
     return normalized === 'cerrado ganado' || normalized === 'cerrada ganada'
@@ -193,7 +201,15 @@ export default function LeadsPage() {
     // Company Module State
     const [isDetailViewOpen, setIsDetailViewOpen] = useState(false)
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-    const [companiesList, setCompaniesList] = useState<{ id: string, nombre: string, industria?: string, ubicacion?: string }[]>([])
+    const [companiesList, setCompaniesList] = useState<{
+        id: string
+        nombre: string
+        industria?: string
+        ubicacion?: string
+        alcance_empresa?: string | null
+        sede_objetivo?: string | null
+        sedes_sugeridas?: string[]
+    }[]>([])
 
     // Filtering State
     const [filterSearch, setFilterSearch] = useState('')
@@ -619,6 +635,7 @@ export default function LeadsPage() {
         implementedRealProjectIds?: string[]
         forecastProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
         implementedRealProjectValues?: Record<string, { mensualidad_usd: number | null; implementacion_usd: number | null }>
+        projectTargetSite?: string | null
         assignedByUserId?: string | null
     }) => {
         const empresaId = String(params.empresaId || '')
@@ -638,6 +655,7 @@ export default function LeadsPage() {
             implementedRealProjectIds: implementedReal,
             forecastProjectValues: params.forecastProjectValues || {},
             implementedRealProjectValues: params.implementedRealProjectValues || {},
+            projectTargetSite: params.projectTargetSite || null,
             assignedByUserId: params.assignedByUserId || null
         })
 
@@ -757,6 +775,7 @@ export default function LeadsPage() {
         const primaryOwnerId = String(requestedAssignees[0] || fallbackOwnerId || '').trim()
         const assignedUserIds = uniqueStringIds([...requestedAssignees, primaryOwnerId])
         const primaryOwnerUsername = resolveOwnerUsername(primaryOwnerId, currentUser)
+        const normalizedProjectTargetSite = String((leadData as any).sede_objetivo || '').trim() || null
 
         if (!primaryOwnerId || assignedUserIds.length === 0) {
             alert('Debes definir al menos un usuario asignado para el lead.')
@@ -807,6 +826,7 @@ export default function LeadsPage() {
                 valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? null,
                 valor_implementacion_real_cierre: isWon ? null : realImplementationValue,
                 forecast_close_date: leadData.forecast_close_date || null,
+                sede_objetivo: normalizedProjectTargetSite,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -826,10 +846,19 @@ export default function LeadsPage() {
                 payload.loss_recorded_by = (leadData as any).loss_recorded_by || currentUser.id
             }
 
-            const { data, error } = await (supabase
+            let createResult = await (supabase
                 .from('clientes') as any)
                 .insert([payload])
                 .select()
+            if (createResult?.error && isUnknownColumnError(createResult.error, 'sede_objetivo')) {
+                const fallbackPayload = { ...payload }
+                delete fallbackPayload.sede_objetivo
+                createResult = await (supabase
+                    .from('clientes') as any)
+                    .insert([fallbackPayload])
+                    .select()
+            }
+            const { data, error } = createResult
 
             if (error) {
                 const parsed = parseSupabaseError(error, 'No se pudo crear el lead.')
@@ -873,6 +902,7 @@ export default function LeadsPage() {
                     implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
                     forecastProjectValues: (leadData as any).proyectos_pronosticados_valores || {},
                     implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                    projectTargetSite: normalizedProjectTargetSite,
                     assignedByUserId: currentUser.id
                 }
 
@@ -934,7 +964,8 @@ export default function LeadsPage() {
                     { lead_id: newId, field_name: 'probabilidad', new_value: String(leadData.probabilidad), changed_by: currentUser.id },
                     ...(leadData.valor_estimado != null ? [{ lead_id: newId, field_name: 'valor_estimado', new_value: String(leadData.valor_estimado), changed_by: currentUser.id }] : []),
                     ...((leadData as any).valor_implementacion_estimado != null ? [{ lead_id: newId, field_name: 'valor_implementacion_estimado', new_value: String((leadData as any).valor_implementacion_estimado), changed_by: currentUser.id }] : []),
-                    ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : [])
+                    ...(leadData.forecast_close_date ? [{ lead_id: newId, field_name: 'forecast_close_date', new_value: String(leadData.forecast_close_date), changed_by: currentUser.id }] : []),
+                    ...(normalizedProjectTargetSite ? [{ lead_id: newId, field_name: 'sede_objetivo', new_value: normalizedProjectTargetSite, changed_by: currentUser.id }] : [])
                 ])
 
                 if (!assignmentsSyncedBeforeClose) {
@@ -953,6 +984,7 @@ export default function LeadsPage() {
             const monthlyForecastChanged = (leadData.valor_estimado ?? null) !== ((currentLead as any).valor_estimado ?? null)
             const implementationForecastChanged = ((leadData as any).valor_implementacion_estimado ?? null) !== ((currentLead as any).valor_implementacion_estimado ?? null)
             const forecastCloseDateChanged = (leadData.forecast_close_date || null) !== ((currentLead as any).forecast_close_date || null)
+            const projectTargetSiteChanged = normalizedProjectTargetSite !== (String((currentLead as any).sede_objetivo || '').trim() || null)
 
             if (stageChanged) {
                 historyEntries.push({ lead_id: currentLead.id, field_name: 'etapa', old_value: currentLead.etapa, new_value: leadData.etapa, changed_by: currentUser.id })
@@ -984,6 +1016,15 @@ export default function LeadsPage() {
                     field_name: 'forecast_close_date',
                     old_value: (currentLead as any).forecast_close_date ? String((currentLead as any).forecast_close_date) : null,
                     new_value: leadData.forecast_close_date ? String(leadData.forecast_close_date) : null,
+                    changed_by: currentUser.id
+                })
+            }
+            if (projectTargetSiteChanged) {
+                historyEntries.push({
+                    lead_id: currentLead.id,
+                    field_name: 'sede_objetivo',
+                    old_value: (currentLead as any).sede_objetivo ? String((currentLead as any).sede_objetivo) : null,
+                    new_value: normalizedProjectTargetSite,
                     changed_by: currentUser.id
                 })
             }
@@ -1030,6 +1071,7 @@ export default function LeadsPage() {
                 valor_implementacion_estimado: (leadData as any).valor_implementacion_estimado ?? null,
                 valor_implementacion_real_cierre: realImplementationValue,
                 forecast_close_date: leadData.forecast_close_date || null,
+                sede_objetivo: normalizedProjectTargetSite,
                 oportunidad: leadData.oportunidad,
                 calificacion: leadData.calificacion,
                 notas: leadData.notas,
@@ -1071,6 +1113,7 @@ export default function LeadsPage() {
                 implementedRealProjectIds: (leadData as any).proyectos_implementados_reales_ids || [],
                 forecastProjectValues: (leadData as any).proyectos_pronosticados_valores || {},
                 implementedRealProjectValues: (leadData as any).proyectos_implementados_reales_valores || {},
+                projectTargetSite: normalizedProjectTargetSite,
                 assignedByUserId: currentUser.id
             }
             let assignmentsSyncedBeforeUpdate = false
@@ -1105,10 +1148,19 @@ export default function LeadsPage() {
                 }
             }
 
-            const { error } = await (supabase
+            let updateResult = await (supabase
                 .from('clientes') as any)
                 .update(payload)
                 .eq('id', currentLead.id)
+            if (updateResult?.error && isUnknownColumnError(updateResult.error, 'sede_objetivo')) {
+                const fallbackPayload = { ...payload }
+                delete fallbackPayload.sede_objetivo
+                updateResult = await (supabase
+                    .from('clientes') as any)
+                    .update(fallbackPayload)
+                    .eq('id', currentLead.id)
+            }
+            const { error } = updateResult
 
             if (error) {
                 alert(`Error al actualizar el lead: ${parseSupabaseError(error, 'No se pudo actualizar el lead.')}`)

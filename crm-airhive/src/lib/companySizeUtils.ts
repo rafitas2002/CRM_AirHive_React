@@ -89,6 +89,14 @@ export const COMPANY_SIZE_SOURCE_OPTIONS: CompanySizeSourceOption[] = [
     }
 ]
 
+const COMPANY_SIZE_SOURCE_ALLOWED_VALUES = new Set<CompanySizeSourceValue>(
+    COMPANY_SIZE_SOURCE_OPTIONS.map((option) => option.value)
+)
+
+const COMPANY_SIZE_CONFIDENCE_ALLOWED_VALUES = new Set<CompanySizeConfidenceValue>(
+    COMPANY_SIZE_CONFIDENCE_OPTIONS.map((option) => option.value)
+)
+
 const COMPANY_SIZE_GUIDES: Record<number, CompanySizeGuide> = {
     1: {
         title: 'Micro',
@@ -177,4 +185,40 @@ export function getCompanySizeGuide(sizeValue?: number | null): CompanySizeGuide
 export function normalizeCompanySizeEvidenceText(value: unknown): string | null {
     const normalized = String(value ?? '').trim()
     return normalized ? normalized : null
+}
+
+export function normalizeCompanySizeSourceValue(value: unknown): CompanySizeSourceValue | null {
+    const normalized = String(value ?? '').trim().toLowerCase()
+    if (!normalized) return null
+
+    if (COMPANY_SIZE_SOURCE_ALLOWED_VALUES.has(normalized as CompanySizeSourceValue)) {
+        return normalized as CompanySizeSourceValue
+    }
+
+    // Legacy aliases from enrichment/autofill pipelines.
+    if (
+        normalized === 'agente_enriquecimiento'
+        || normalized === 'enrichment_agent'
+        || normalized === 'ai'
+        || normalized === 'autofill'
+    ) {
+        return 'sitio_web'
+    }
+
+    return 'inferencia_comercial'
+}
+
+export function normalizeCompanySizeConfidenceValue(value: unknown): CompanySizeConfidenceValue | null {
+    const normalized = String(value ?? '').trim().toLowerCase()
+    if (!normalized) return null
+
+    if (COMPANY_SIZE_CONFIDENCE_ALLOWED_VALUES.has(normalized as CompanySizeConfidenceValue)) {
+        return normalized as CompanySizeConfidenceValue
+    }
+
+    if (normalized === 'high') return 'alta'
+    if (normalized === 'medium') return 'media'
+    if (normalized === 'low') return 'baja'
+
+    return 'media'
 }

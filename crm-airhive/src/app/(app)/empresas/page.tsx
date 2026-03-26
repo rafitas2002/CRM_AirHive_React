@@ -1,17 +1,18 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { createClient } from '@/lib/supabase'
 import CompaniesTable from '@/components/CompaniesTable'
 import CompanyModal, { CompanyData } from '@/components/CompanyModal'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
-import Link from 'next/link'
-import Image from 'next/image'
-import { Search, Table as TableIcon, Pencil, Building2 } from 'lucide-react'
+import { Search, Table as TableIcon, Building2 } from 'lucide-react'
 import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
+import { companyHasTag, normalizeCompanyTags } from '@/lib/companyTags'
+import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
+import { enrichMissingCompanies } from '@/app/actions/company-enrichment'
 
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
@@ -30,6 +31,61 @@ export type CompanyWithProjects = CompanyData & {
     ubicacion_municipio?: string | null
     ubicacion_municipio_key?: string | null
     ubicacion_is_monterrey_metro?: boolean | null
+    owner_id?: string | null
+    created_by?: string | null
+    created_at?: string | null
+    registered_by_id?: string | null
+    registered_by_name?: string | null
+    responsible_name?: string | null
+    next_action_type?: 'task' | 'meeting' | 'none'
+    next_action_label?: string | null
+    next_action_at?: string | null
+    last_contact_at?: string | null
+    enrichment_status?: 'not_requested' | 'queued' | 'processing' | 'ready' | 'applied' | 'rejected' | 'failed' | string | null
+    enrichment_payload?: any
+    enrichment_last_run_at?: string | null
+    enrichment_last_error?: string | null
+    enriched_at?: string | null
+}
+
+type CompanyUnifiedView = 'all' | 'suspects' | 'leads' | 'clients'
+
+function resolveCompanyUnifiedStage(company: CompanyWithProjects): 'suspect' | 'lead' | 'client' {
+    if (Number(company.activeProjects || 0) > 0) return 'client'
+
+    const lifecycle = (company.lifecycle_stage || '').toLowerCase()
+    const sourceChannel = (company.source_channel || '').toLowerCase()
+    const preLeadsCount = Number(company.pre_leads_count || 0)
+    const leadsCount = Number(company.leads_count || 0)
+    const isSuspectCompany =
+        lifecycle === 'pre_lead' ||
+        sourceChannel === 'pre_lead' ||
+        (preLeadsCount > 0 && leadsCount === 0)
+
+    return isSuspectCompany ? 'suspect' : 'lead'
+}
+
+function normalizeCompanyViewParam(value: string | null): CompanyUnifiedView {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (normalized === 'suspects' || normalized === 'leads' || normalized === 'clients') return normalized
+    return 'all'
+}
+
+const RECENT_COMPANY_WINDOW_MS = 24 * 60 * 60 * 1000
+const NEW_COMPANY_HIGHLIGHT_WINDOW_MS = 5 * 60 * 1000
+
+function parseCompanyCreatedAtMs(company: { created_at?: string | null }) {
+    const raw = String(company?.created_at || '').trim()
+    if (!raw) return Number.NaN
+    const createdAtMs = new Date(raw).getTime()
+    return Number.isFinite(createdAtMs) ? createdAtMs : Number.NaN
+}
+
+function parseDateMs(value?: string | null): number {
+    const raw = String(value || '').trim()
+    if (!raw) return Number.NaN
+    const ms = new Date(raw).getTime()
+    return Number.isFinite(ms) ? ms : Number.NaN
 }
 
 function parseSupabaseError(error: any, fallback: string) {
@@ -50,9 +106,39 @@ function parseSupabaseError(error: any, fallback: string) {
     return fallback
 }
 
+function normalizeCompanyScopeValue(value: unknown): 'local' | 'nacional' | 'internacional' | 'por_definir' | null {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (
+        normalized === 'local'
+        || normalized === 'nacional'
+        || normalized === 'internacional'
+        || normalized === 'por_definir'
+    ) {
+        return normalized
+    }
+    return null
+}
+
+function normalizeSiteSuggestions(value: unknown): string[] {
+    const list = Array.isArray(value) ? value : []
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const item of list) {
+        const normalized = String(item || '').trim()
+        if (!normalized) continue
+        const key = normalized.toLocaleLowerCase('es-MX')
+        if (seen.has(key)) continue
+        seen.add(key)
+        result.push(normalized)
+        if (result.length >= 12) break
+    }
+    return result
+}
+
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [companies, setCompanies] = useState<CompanyWithProjects[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedCompany, setSelectedCompany] = useState<CompanyWithProjects | null>(null)
@@ -72,8 +158,14 @@ export default function EmpresasPage() {
     const [filterSize, setFilterSize] = useState('All')
     const [filterLocation, setFilterLocation] = useState('All')
     const [filterMonterreyMunicipality, setFilterMonterreyMunicipality] = useState('All')
-    const [filterLifecycle, setFilterLifecycle] = useState<'All' | 'lead' | 'pre_lead'>('All')
+    const [companyView, setCompanyView] = useState<CompanyUnifiedView>('all')
+    const [filterRecent, setFilterRecent] = useState<'all' | 'recent_24h'>('all')
+    const [filterTag, setFilterTag] = useState('All')
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+    const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now())
+    const [isEnrichingMissing, setIsEnrichingMissing] = useState(false)
+    const [enrichmentSummary, setEnrichmentSummary] = useState('')
     const [preLeadColumns, setPreLeadColumns] = useState<Record<string, boolean>>({
         empresa_id: true,
         industria_id: true,
@@ -91,6 +183,11 @@ export default function EmpresasPage() {
     const supabase = createClient()
 
     useEffect(() => {
+        const intervalId = window.setInterval(() => setCurrentTimestamp(Date.now()), 30_000)
+        return () => window.clearInterval(intervalId)
+    }, [])
+
+    useEffect(() => {
         // Redirect if not logged in
         if (!auth.loading && !auth.loggedIn) {
             router.push('/home')
@@ -102,6 +199,20 @@ export default function EmpresasPage() {
             void detectPreLeadColumns()
         }
     }, [auth.loading, auth.loggedIn, router])
+
+    useEffect(() => {
+        const nextView = normalizeCompanyViewParam(searchParams.get('view'))
+        setCompanyView((prev) => (prev === nextView ? prev : nextView))
+    }, [searchParams])
+
+    const handleCompanyViewChange = (nextView: CompanyUnifiedView) => {
+        setCompanyView(nextView)
+        const params = new URLSearchParams(searchParams.toString())
+        if (nextView === 'all') params.delete('view')
+        else params.set('view', nextView)
+        const query = params.toString()
+        router.replace(query ? `/empresas?${query}` : '/empresas')
+    }
 
     const detectPreLeadColumns = async () => {
         const candidates = [
@@ -218,8 +329,8 @@ export default function EmpresasPage() {
         if (preLeadColumns.empresa_id) payload.empresa_id = companyId
         if (preLeadColumns.industria_id) payload.industria_id = companyData.industria_id || null
         if (preLeadColumns.tamano) payload.tamano = Number(companyData.tamano || 1)
-        if (preLeadColumns.tamano_fuente) payload.tamano_fuente = normalizeOptionalText((companyData as any).tamano_fuente)
-        if (preLeadColumns.tamano_confianza) payload.tamano_confianza = normalizeOptionalText((companyData as any).tamano_confianza)
+        if (preLeadColumns.tamano_fuente) payload.tamano_fuente = normalizeCompanySizeSourceValue((companyData as any).tamano_fuente)
+        if (preLeadColumns.tamano_confianza) payload.tamano_confianza = normalizeCompanySizeConfidenceValue((companyData as any).tamano_confianza)
         if (preLeadColumns.tamano_senal_principal) payload.tamano_senal_principal = normalizeOptionalText((companyData as any).tamano_senal_principal)
         if (preLeadColumns.website) payload.website = normalizeOptionalText(companyData.website)
         if (preLeadColumns.logo_url) payload.logo_url = normalizeOptionalText(companyData.logo_url)
@@ -276,13 +387,17 @@ export default function EmpresasPage() {
     // Filter and Sort Logic
     const filteredCompanies = useMemo(() => {
         let result = companies.filter(company => {
-            const matchesSearch = !filterSearch ||
-                company.nombre?.toLowerCase().includes(filterSearch.toLowerCase()) ||
-                company.ubicacion?.toLowerCase().includes(filterSearch.toLowerCase())
+            const normalizedSearch = filterSearch.trim().toLocaleLowerCase('es-MX')
+            const companyTags = normalizeCompanyTags(company.tags)
+            const matchesSearch = !normalizedSearch ||
+                company.nombre?.toLocaleLowerCase('es-MX').includes(normalizedSearch) ||
+                company.ubicacion?.toLocaleLowerCase('es-MX').includes(normalizedSearch) ||
+                companyTags.some((tag) => tag.toLocaleLowerCase('es-MX').includes(normalizedSearch))
 
             const companyIndustries = company.industrias || (company.industria ? [company.industria] : [])
             const matchesIndustry = filterIndustry === 'All' || companyIndustries.includes(filterIndustry)
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
+            const matchesTag = filterTag === 'All' || companyHasTag(companyTags, filterTag)
             const locationFacet = companyLocationFacetsById.get(String(company.id ?? '')) || getLocationFilterFacetFromStructured(company)
             const matchesLocationGroup =
                 filterLocation === 'All' ||
@@ -295,20 +410,28 @@ export default function EmpresasPage() {
                     !!locationFacet.monterreyMunicipalityKey &&
                     locationFacet.monterreyMunicipalityKey === selectedMonterreyMunicipalityKey
                 )
-            const lifecycle = (company.lifecycle_stage || '').toLowerCase()
-            const sourceChannel = (company.source_channel || '').toLowerCase()
-            const preLeadsCount = Number(company.pre_leads_count || 0)
-            const leadsCount = Number(company.leads_count || 0)
-            const isPreLeadCompany =
-                lifecycle === 'pre_lead' ||
-                sourceChannel === 'pre_lead' ||
-                (preLeadsCount > 0 && leadsCount === 0)
-            const matchesLifecycle =
-                filterLifecycle === 'All' ||
-                (filterLifecycle === 'pre_lead' && isPreLeadCompany) ||
-                (filterLifecycle === 'lead' && !isPreLeadCompany)
+            const unifiedStage = resolveCompanyUnifiedStage(company)
+            const matchesCompanyView =
+                companyView === 'all' ||
+                (companyView === 'suspects' && unifiedStage === 'suspect') ||
+                (companyView === 'leads' && unifiedStage === 'lead') ||
+                (companyView === 'clients' && unifiedStage === 'client')
+            const companyCreatedAtMs = parseCompanyCreatedAtMs(company)
+            const isRecentByCreationDate =
+                Number.isFinite(companyCreatedAtMs) &&
+                (currentTimestamp - Number(companyCreatedAtMs) <= RECENT_COMPANY_WINDOW_MS)
+            const matchesRecentFilter =
+                filterRecent === 'all' ||
+                (filterRecent === 'recent_24h' && isRecentByCreationDate)
 
-            return matchesSearch && matchesIndustry && matchesSize && matchesLocationGroup && matchesMonterreyMunicipality && matchesLifecycle
+            return matchesSearch
+                && matchesIndustry
+                && matchesSize
+                && matchesTag
+                && matchesLocationGroup
+                && matchesMonterreyMunicipality
+                && matchesCompanyView
+                && matchesRecentFilter
         })
 
         // Sorting
@@ -332,13 +455,55 @@ export default function EmpresasPage() {
         filterSearch,
         filterIndustry,
         filterSize,
+        filterTag,
         filterLocation,
         filterMonterreyMunicipality,
         selectedLocationKey,
         selectedMonterreyMunicipalityKey,
-        filterLifecycle,
+        companyView,
+        filterRecent,
+        currentTimestamp,
         sortBy
     ])
+
+    const recentCompanies = useMemo(() => {
+        return [...filteredCompanies]
+            .filter((company) => {
+                const createdAtMs = parseCompanyCreatedAtMs(company)
+                return Number.isFinite(createdAtMs) && (currentTimestamp - Number(createdAtMs) <= RECENT_COMPANY_WINDOW_MS)
+            })
+            .sort((a, b) => Number(parseCompanyCreatedAtMs(b)) - Number(parseCompanyCreatedAtMs(a)))
+    }, [filteredCompanies, currentTimestamp])
+
+    const highlightedCompanyId = useMemo(() => {
+        const mostRecent = recentCompanies[0]
+        if (!mostRecent) return null
+        const createdAtMs = parseCompanyCreatedAtMs(mostRecent)
+        if (!Number.isFinite(createdAtMs)) return null
+        if (currentTimestamp - Number(createdAtMs) > NEW_COMPANY_HIGHLIGHT_WINDOW_MS) return null
+        const companyId = String(mostRecent.id || '').trim()
+        return companyId || null
+    }, [recentCompanies, currentTimestamp])
+
+    const filteredStageCounts = useMemo(() => {
+        const counts = { suspects: 0, leads: 0, clients: 0 }
+        for (const company of filteredCompanies) {
+            const stage = resolveCompanyUnifiedStage(company)
+            if (stage === 'suspect') counts.suspects += 1
+            else if (stage === 'client') counts.clients += 1
+            else counts.leads += 1
+        }
+        return counts
+    }, [filteredCompanies])
+
+    const missingCoreDataCount = useMemo(() => {
+        return companies.filter((company) => {
+            const missingSize = !Number(company.tamano || 0)
+            const missingIndustry = !String(company.industria || '').trim()
+            const missingLocation = !String(company.ubicacion || '').trim()
+            return missingSize || missingIndustry || missingLocation
+        }).length
+    }, [companies])
 
     // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
@@ -348,6 +513,15 @@ export default function EmpresasPage() {
                 .filter((i): i is string => !!i)
         )
         return Array.from(industries).sort()
+    }, [companies])
+
+    const uniqueTags = useMemo(() => {
+        const tags = new Set(
+            companies
+                .flatMap((company) => normalizeCompanyTags(company.tags))
+                .filter(Boolean)
+        )
+        return Array.from(tags).sort((a, b) => a.localeCompare(b, 'es'))
     }, [companies])
 
     const uniqueLocations = useMemo(() => {
@@ -395,24 +569,133 @@ export default function EmpresasPage() {
             return
         }
 
-        // Fetch all leads to associate
-        const [{ data: leadsData, error: leadsError }, companyIndustriesResult] = await Promise.all([
-            supabase
-                .from('clientes')
-                .select('empresa_id, etapa, created_at'),
-            supabase
-                .from('company_industries')
-                .select('empresa_id, industria_id, is_primary, industrias(name)')
-        ])
+        // Fetch all leads to associate.
+        // Some environments have different owner fields in `clientes` (owner_* vs vendedor_*),
+        // so we try progressively simpler selects before failing.
+        const companyIndustriesPromise = supabase
+            .from('company_industries')
+            .select('empresa_id, industria_id, is_primary, industrias(name)')
 
-        const leads = (leadsData || []) as { empresa_id: string, etapa: string, created_at: string }[] // Fixed leads data typing
+        const leadSelectAttempts = [
+            'id, empresa_id, etapa, created_at, updated_at, owner_id, owner_username',
+            'id, empresa_id, etapa, created_at, updated_at, owner_id:vendedor_id, owner_username:vendedor_name',
+            'id, empresa_id, etapa, created_at, owner_id:vendedor_id, owner_username:vendedor_name',
+            'id, empresa_id, etapa, created_at'
+        ]
+
+        let leadsError: any = null
+        let leadsDataRaw: any[] = []
+        for (const selectAttempt of leadSelectAttempts) {
+            const { data, error } = await (supabase.from('clientes') as any).select(selectAttempt)
+            if (error) {
+                leadsError = error
+                continue
+            }
+            leadsDataRaw = Array.isArray(data) ? data : []
+            leadsError = null
+            break
+        }
+
+        const companyIndustriesResult = await companyIndustriesPromise
+
+        type LeadLite = {
+            id: number
+            empresa_id: string | null
+            etapa: string | null
+            created_at: string
+            updated_at: string | null
+            owner_id: string | null
+            owner_username: string | null
+        }
+        type TaskLite = {
+            lead_id: number
+            titulo: string | null
+            fecha_vencimiento: string
+            estado: 'pendiente' | 'completada' | 'atrasada' | 'cancelada'
+            prioridad: 'baja' | 'media' | 'alta'
+            updated_at: string
+        }
+        type MeetingLite = {
+            lead_id: number
+            title: string | null
+            start_time: string
+            status: string | null
+            meeting_status: string | null
+            confirmation_timestamp: string | null
+            updated_at: string
+        }
+
+        const leads = (leadsDataRaw || [])
+            .map((leadRow: any): LeadLite | null => {
+                const id = Number(leadRow?.id)
+                if (!Number.isFinite(id)) return null
+                const createdAt = String(leadRow?.created_at || '').trim()
+                const updatedAt = String(leadRow?.updated_at || '').trim()
+                return {
+                    id,
+                    empresa_id: leadRow?.empresa_id ? String(leadRow.empresa_id) : null,
+                    etapa: leadRow?.etapa ? String(leadRow.etapa) : null,
+                    created_at: createdAt || updatedAt || new Date(0).toISOString(),
+                    updated_at: updatedAt || null,
+                    owner_id: leadRow?.owner_id ? String(leadRow.owner_id) : null,
+                    owner_username: leadRow?.owner_username ? String(leadRow.owner_username) : null
+                }
+            })
+            .filter((lead): lead is LeadLite => Boolean(lead))
         const companyIndustries = (companyIndustriesResult.data || []) as any[]
 
         if (leadsError) {
-            console.error('Error fetching leads:', leadsError)
+            console.error('Error fetching leads:', parseSupabaseError(leadsError, 'No se pudieron cargar leads de clientes.'))
         }
         if (companyIndustriesResult.error) {
             console.warn('company_industries is not available yet, using primary industry only:', companyIndustriesResult.error.message)
+        }
+
+        const leadIds = Array.from(new Set(
+            leads
+                .map((lead) => Number(lead.id))
+                .filter((leadId) => Number.isFinite(leadId))
+        ))
+
+        let tasks: TaskLite[] = []
+        let meetings: MeetingLite[] = []
+        if (leadIds.length > 0) {
+            const [{ data: tasksData, error: tasksError }, { data: meetingsData, error: meetingsError }] = await Promise.all([
+                (supabase.from('tareas') as any)
+                    .select('lead_id, titulo, fecha_vencimiento, estado, prioridad, updated_at')
+                    .in('lead_id', leadIds),
+                (supabase.from('meetings') as any)
+                    .select('lead_id, title, start_time, status, meeting_status, confirmation_timestamp, updated_at')
+                    .in('lead_id', leadIds)
+            ])
+
+            tasks = (tasksData || []) as TaskLite[]
+            meetings = (meetingsData || []) as MeetingLite[]
+
+            if (tasksError) {
+                console.warn('Could not load task context for companies table:', tasksError.message)
+            }
+            if (meetingsError) {
+                console.warn('Could not load meeting context for companies table:', meetingsError.message)
+            }
+        }
+
+        const tasksByLeadId = new Map<number, TaskLite[]>()
+        for (const task of tasks) {
+            const leadId = Number(task.lead_id)
+            if (!Number.isFinite(leadId)) continue
+            const bucket = tasksByLeadId.get(leadId) || []
+            bucket.push(task)
+            tasksByLeadId.set(leadId, bucket)
+        }
+
+        const meetingsByLeadId = new Map<number, MeetingLite[]>()
+        for (const meeting of meetings) {
+            const leadId = Number(meeting.lead_id)
+            if (!Number.isFinite(leadId)) continue
+            const bucket = meetingsByLeadId.get(leadId) || []
+            bucket.push(meeting)
+            meetingsByLeadId.set(leadId, bucket)
         }
 
         const industryMapByCompany: Record<string, { ids: string[], names: string[], primaryId?: string, primaryName?: string }> = {}
@@ -435,13 +718,132 @@ export default function EmpresasPage() {
         }
 
         const companies = (companiesData || []) as any[]
+        const registrantIds = Array.from(new Set(
+            [
+                ...companies.flatMap((company) => [
+                    String(company?.created_by || '').trim(),
+                    String(company?.owner_id || '').trim()
+                ].filter(Boolean)),
+                ...leads.map((lead) => String(lead.owner_id || '').trim()).filter(Boolean)
+            ]
+        ))
+        const registrantNameById = new Map<string, string>()
+        if (registrantIds.length > 0) {
+            const { data: registrantProfiles, error: registrantProfilesError } = await (supabase.from('profiles') as any)
+                .select('id, full_name, username')
+                .in('id', registrantIds)
+
+            if (registrantProfilesError) {
+                console.warn('Could not load company registrant profiles:', registrantProfilesError.message)
+            } else {
+                ;((registrantProfiles || []) as any[]).forEach((profileRow) => {
+                    const id = String(profileRow?.id || '').trim()
+                    if (!id) return
+                    const displayName = String(profileRow?.full_name || '').trim() || String(profileRow?.username || '').trim()
+                    if (displayName) registrantNameById.set(id, displayName)
+                })
+            }
+        }
+        const nowMs = Date.now()
         const companiesWithProjects = companies.map(company => {
-            const companyLeads = leads.filter(l => l.empresa_id === company.id)
+            const companyLeads = leads.filter((lead) => String(lead.empresa_id || '') === String(company.id || ''))
             const industriesForCompany = industryMapByCompany[company.id]
             const industryNames = Array.from(new Set(industriesForCompany?.names || []))
             const industryIds = Array.from(new Set(industriesForCompany?.ids || []))
             const primaryIndustryName = industriesForCompany?.primaryName || company.industria || null
             const primaryIndustryId = industriesForCompany?.primaryId || company.industria_id || null
+            const registeredByIdRaw = String(company.created_by || company.owner_id || '').trim()
+            const registeredById = registeredByIdRaw || null
+            const fallbackOwnerUsername = String(company.owner_username || '').trim() || null
+            const registeredByName = (
+                (registeredById ? registrantNameById.get(registeredById) : null)
+                || fallbackOwnerUsername
+                || null
+            )
+            const companyLeadIds = Array.from(new Set(
+                companyLeads
+                    .map((lead) => Number(lead.id))
+                    .filter((leadId) => Number.isFinite(leadId))
+            ))
+            const companyTasks = companyLeadIds.flatMap((leadId) => tasksByLeadId.get(leadId) || [])
+            const companyMeetings = companyLeadIds.flatMap((leadId) => meetingsByLeadId.get(leadId) || [])
+
+            const latestAssignedLead = [...companyLeads]
+                .filter((lead) => String(lead.owner_id || '').trim() || String(lead.owner_username || '').trim())
+                .sort((a, b) => {
+                    const bMs = parseDateMs(b.updated_at || b.created_at)
+                    const aMs = parseDateMs(a.updated_at || a.created_at)
+                    return bMs - aMs
+                })[0]
+            const responsibleOwnerId = String(latestAssignedLead?.owner_id || '').trim()
+            const responsibleName = (
+                (responsibleOwnerId ? registrantNameById.get(responsibleOwnerId) : null)
+                || String(latestAssignedLead?.owner_username || '').trim()
+                || registeredByName
+                || null
+            )
+
+            const pendingTasks = [...companyTasks]
+                .filter((task) => task.estado === 'pendiente' || task.estado === 'atrasada')
+                .sort((a, b) => parseDateMs(a.fecha_vencimiento) - parseDateMs(b.fecha_vencimiento))
+            const nextTask = pendingTasks[0] || null
+
+            const upcomingMeetings = [...companyMeetings]
+                .filter((meeting) => {
+                    const startMs = parseDateMs(meeting.start_time)
+                    if (!Number.isFinite(startMs)) return false
+                    if (startMs < nowMs) return false
+                    const status = String(meeting.status || '').toLowerCase()
+                    const meetingStatus = String(meeting.meeting_status || '').toLowerCase()
+                    return status !== 'cancelled' && (meetingStatus === 'scheduled' || meetingStatus === 'pending_confirmation' || !meetingStatus)
+                })
+                .sort((a, b) => parseDateMs(a.start_time) - parseDateMs(b.start_time))
+            const nextMeeting = upcomingMeetings[0] || null
+
+            const nextTaskMs = parseDateMs(nextTask?.fecha_vencimiento || null)
+            const nextMeetingMs = parseDateMs(nextMeeting?.start_time || null)
+            let nextActionType: 'task' | 'meeting' | 'none' = 'none'
+            let nextActionLabel: string | null = null
+            let nextActionAt: string | null = null
+            if (nextTask && (!Number.isFinite(nextMeetingMs) || nextTaskMs <= nextMeetingMs)) {
+                nextActionType = 'task'
+                nextActionLabel = `Tarea: ${String(nextTask.titulo || '').trim() || 'Seguimiento'}`
+                nextActionAt = nextTask.fecha_vencimiento
+            } else if (nextMeeting) {
+                nextActionType = 'meeting'
+                nextActionLabel = `Junta: ${String(nextMeeting.title || '').trim() || 'Seguimiento'}`
+                nextActionAt = nextMeeting.start_time
+            }
+
+            const latestTaskContactMs = [...companyTasks]
+                .filter((task) => task.estado === 'completada')
+                .reduce((max, task) => {
+                    const timestamp = parseDateMs(task.updated_at || task.fecha_vencimiento)
+                    return Number.isFinite(timestamp) ? Math.max(max, timestamp) : max
+                }, Number.NEGATIVE_INFINITY)
+
+            const latestMeetingContactMs = [...companyMeetings]
+                .filter((meeting) => {
+                    const status = String(meeting.status || '').toLowerCase()
+                    const meetingStatus = String(meeting.meeting_status || '').toLowerCase()
+                    return status === 'completed'
+                        || status === 'cancelled'
+                        || meetingStatus === 'held'
+                        || meetingStatus === 'not_held'
+                        || meetingStatus === 'cancelled'
+                })
+                .reduce((max, meeting) => {
+                    const timestamp =
+                        parseDateMs(meeting.confirmation_timestamp)
+                        || parseDateMs(meeting.updated_at)
+                        || parseDateMs(meeting.start_time)
+                    return Number.isFinite(timestamp) ? Math.max(max, timestamp) : max
+                }, Number.NEGATIVE_INFINITY)
+
+            const latestContactMs = Math.max(latestTaskContactMs, latestMeetingContactMs)
+            const lastContactAt = Number.isFinite(latestContactMs)
+                ? new Date(latestContactMs).toISOString()
+                : null
 
             const activeProjects = companyLeads.filter(l => l.etapa === 'Cerrado Ganado').length
             const processProjects = companyLeads.filter(l =>
@@ -462,11 +864,19 @@ export default function EmpresasPage() {
                 industria_id: primaryIndustryId,
                 industria_ids: industryIds.length > 0 ? industryIds : (company.industria_id ? [company.industria_id] : []),
                 industrias: industryNames.length > 0 ? industryNames : (company.industria ? [company.industria] : []),
+                tags: normalizeCompanyTags(company.tags),
                 activeProjects,
                 processProjects,
                 lostProjects,
                 antiquityDate: company.created_at,
-                projectAntiquityDate
+                projectAntiquityDate,
+                registered_by_id: registeredById,
+                registered_by_name: registeredByName,
+                responsible_name: responsibleName,
+                next_action_type: nextActionType,
+                next_action_label: nextActionLabel,
+                next_action_at: nextActionAt,
+                last_contact_at: lastContactAt
             }
         })
 
@@ -597,26 +1007,51 @@ export default function EmpresasPage() {
             industria: companyData.industria,
             industria_id: companyData.industria_id || null
         }
+        const operationalContextPayload: any = {
+            alcance_empresa: normalizeCompanyScopeValue((companyData as any).alcance_empresa) || 'por_definir',
+            sede_objetivo: normalizeOptionalText((companyData as any).sede_objetivo)
+        }
         const sizeAssessmentPayload: any = {
-            tamano_fuente: normalizeOptionalText((companyData as any).tamano_fuente),
-            tamano_confianza: normalizeOptionalText((companyData as any).tamano_confianza),
+            tamano_fuente: normalizeCompanySizeSourceValue((companyData as any).tamano_fuente),
+            tamano_confianza: normalizeCompanySizeConfidenceValue((companyData as any).tamano_confianza),
             tamano_senal_principal: normalizeOptionalText((companyData as any).tamano_senal_principal)
         }
         const basePayloadWithSizeAssessment = {
             ...basePayload,
             ...sizeAssessmentPayload
         }
-        const profileFieldsPayload: any = {
+        const normalizedTags = normalizeCompanyTags(companyData.tags)
+        const profileFieldsPayloadWithoutTags: any = {
             logo_url: normalizeOptionalText(companyData.logo_url),
             descripcion: normalizeOptionalText(companyData.descripcion)
+        }
+        const profileFieldsPayloadWithTags: any = {
+            ...profileFieldsPayloadWithoutTags,
+            tags: normalizedTags
+        }
+        const profileFieldsPayloadWithTagsAndSites: any = {
+            ...profileFieldsPayloadWithTags,
+            sedes_sugeridas: normalizeSiteSuggestions((companyData as any).sedes_sugeridas)
         }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
 
         const getPayloadCandidates = () => {
             const candidates: any[] = []
             const corePayloadVariants = [
-                { ...basePayloadWithSizeAssessment, ...profileFieldsPayload },
-                { ...basePayload, ...profileFieldsPayload },
+                { ...basePayloadWithSizeAssessment, ...operationalContextPayload, ...profileFieldsPayloadWithTagsAndSites },
+                { ...basePayload, ...operationalContextPayload, ...profileFieldsPayloadWithTagsAndSites },
+                { ...basePayloadWithSizeAssessment, ...operationalContextPayload, ...profileFieldsPayloadWithTags },
+                { ...basePayload, ...operationalContextPayload, ...profileFieldsPayloadWithTags },
+                { ...basePayloadWithSizeAssessment, ...profileFieldsPayloadWithTagsAndSites },
+                { ...basePayload, ...profileFieldsPayloadWithTagsAndSites },
+                { ...basePayloadWithSizeAssessment, ...profileFieldsPayloadWithTags },
+                { ...basePayload, ...profileFieldsPayloadWithTags },
+                { ...basePayloadWithSizeAssessment, ...operationalContextPayload, ...profileFieldsPayloadWithoutTags },
+                { ...basePayload, ...operationalContextPayload, ...profileFieldsPayloadWithoutTags },
+                { ...basePayloadWithSizeAssessment, ...profileFieldsPayloadWithoutTags },
+                { ...basePayload, ...profileFieldsPayloadWithoutTags },
+                { ...basePayloadWithSizeAssessment, ...operationalContextPayload },
+                { ...basePayload, ...operationalContextPayload },
                 basePayloadWithSizeAssessment,
                 basePayload
             ]
@@ -680,7 +1115,11 @@ export default function EmpresasPage() {
                         industria_id: companyData.industria_id || prev.industria_id,
                         industria_ids: companyData.industria_ids || prev.industria_ids,
                         industrias: companyData.industrias || prev.industrias,
-                        website: companyData.website
+                        tags: normalizeCompanyTags(companyData.tags || prev.tags),
+                        website: companyData.website,
+                        alcance_empresa: normalizeCompanyScopeValue((companyData as any).alcance_empresa) || prev.alcance_empresa || 'por_definir',
+                        sede_objetivo: ((companyData as any).sede_objetivo ?? prev.sede_objetivo ?? null),
+                        sedes_sugeridas: normalizeSiteSuggestions((companyData as any).sedes_sugeridas || prev.sedes_sugeridas || [])
                     } as CompanyWithProjects
                     : prev
             ))
@@ -738,6 +1177,38 @@ export default function EmpresasPage() {
         await fetchCompanies()
     }
 
+    const handleEnrichMissingCompanies = async () => {
+        if (isEnrichingMissing) return
+        setIsEnrichingMissing(true)
+        setEnrichmentSummary('')
+
+        try {
+            const result = await enrichMissingCompanies({
+                limit: 8,
+                applyMode: 'fill_missing',
+                autoApply: true
+            })
+
+            if (!result.success) {
+                const msg = String(result.error || 'No se pudo enriquecer empresas faltantes.')
+                setEnrichmentSummary(`Error: ${msg}`)
+                alert(msg)
+                return
+            }
+
+            const data = result.data
+            const summary = `Procesadas ${data.processed} • Aplicadas ${data.applied} • Listas para revisar ${data.ready} • Fallidas ${data.failed}`
+            setEnrichmentSummary(summary)
+            await fetchCompanies()
+        } catch (error: any) {
+            const msg = parseSupabaseError(error, 'No se pudo ejecutar enriquecimiento en lote.')
+            setEnrichmentSummary(`Error: ${msg}`)
+            alert(msg)
+        } finally {
+            setIsEnrichingMissing(false)
+        }
+    }
+
     useEffect(() => {
         const onPopState = () => {
             setIsDetailOpen(false)
@@ -776,16 +1247,32 @@ export default function EmpresasPage() {
                             </div>
                             <div>
                                 <h1 className='text-4xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
-                                    Catálogo de Empresas
+                                    Empresas
                                 </h1>
                                 <p className='font-medium' style={{ color: 'var(--text-secondary)' }}>
-                                    Alta única de empresas: cada registro nuevo crea su suspect inicial para mantener el funnel conectado.
+                                    Vista unificada: suspects, leads y clientes en una sola mesa de trabajo.
                                 </p>
                             </div>
                         </div>
                     </div>
 
                     <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
+                        <button
+                            onClick={handleEnrichMissingCompanies}
+                            disabled={isEnrichingMissing || missingCoreDataCount === 0}
+                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEnrichingMissing || missingCoreDataCount === 0
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'cursor-pointer hover:scale-105 active:scale-95'
+                                }`}
+                            style={{
+                                borderColor: 'color-mix(in srgb, #16a34a 40%, var(--card-border))',
+                                background: 'color-mix(in srgb, #16a34a 10%, var(--card-bg))',
+                                color: 'color-mix(in srgb, #166534 70%, var(--text-primary))'
+                            }}
+                            title={missingCoreDataCount === 0 ? 'No hay empresas con datos incompletos' : 'Enriquece automáticamente tamaño, ubicación e industria faltantes'}
+                        >
+                            {isEnrichingMissing ? 'Enriqueciendo...' : `Enriquecer faltantes (${missingCoreDataCount})`}
+                        </button>
                         <button
                             onClick={() => setIsEditingMode(!isEditingMode)}
                             className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
@@ -823,6 +1310,19 @@ export default function EmpresasPage() {
                     </div>
                 </div>
 
+                {enrichmentSummary && (
+                    <div
+                        className='px-5 py-3 rounded-2xl border text-xs font-bold'
+                        style={{
+                            borderColor: 'color-mix(in srgb, #16a34a 35%, var(--card-border))',
+                            background: 'color-mix(in srgb, #16a34a 8%, var(--card-bg))',
+                            color: 'var(--text-primary)'
+                        }}
+                    >
+                        {enrichmentSummary}
+                    </div>
+                )}
+
                 {/* Main Table Container */}
                 <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col mb-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                     <div className='px-8 py-6 border-b flex flex-col gap-6' style={{ borderColor: 'var(--card-border)' }}>
@@ -832,8 +1332,8 @@ export default function EmpresasPage() {
                                     <TableIcon size={22} strokeWidth={2} />
                                 </div>
                                 <div>
-                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Tabla Maestra de Empresas</h2>
-                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Gestión de Inteligencia Corporativa</p>
+                                    <h2 className='text-xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>Mesa Unificada de Empresas</h2>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.2em] opacity-60' style={{ color: 'var(--text-secondary)' }}>Un solo flujo comercial</p>
                                 </div>
                             </div>
 
@@ -841,125 +1341,192 @@ export default function EmpresasPage() {
                                 <div className='ah-count-chip'>
                                     <span className='ah-count-chip-number'>{filteredCompanies.length}</span>
                                     <div className='ah-count-chip-meta'>
-                                        <span className='ah-count-chip-title'>Registros</span>
-                                        <span className='ah-count-chip-subtitle'>Encontrados</span>
+                                        <span className='ah-count-chip-title'>Empresas</span>
+                                        <span className='ah-count-chip-subtitle'>Filtradas</span>
                                     </div>
                                 </div>
                                 <div className='ah-count-chip'>
-                                    <span className='ah-count-chip-number'>
-                                        {filteredCompanies.filter((c) => {
-                                            const lifecycle = (c.lifecycle_stage || '').toLowerCase()
-                                            const source = (c.source_channel || '').toLowerCase()
-                                            const preCount = Number(c.pre_leads_count || 0)
-                                            const leadCount = Number(c.leads_count || 0)
-                                            return lifecycle === 'pre_lead' || source === 'pre_lead' || (preCount > 0 && leadCount === 0)
-                                        }).length}
-                                    </span>
+                                    <span className='ah-count-chip-number'>{filteredStageCounts.suspects}</span>
                                     <div className='ah-count-chip-meta'>
                                         <span className='ah-count-chip-title'>Suspects</span>
                                         <span className='ah-count-chip-subtitle'>Empresas</span>
                                     </div>
                                 </div>
                                 <div className='ah-count-chip'>
-                                    <span className='ah-count-chip-number'>
-                                        {filteredCompanies.filter((c) => {
-                                            const lifecycle = (c.lifecycle_stage || '').toLowerCase()
-                                            const source = (c.source_channel || '').toLowerCase()
-                                            const preCount = Number(c.pre_leads_count || 0)
-                                            const leadCount = Number(c.leads_count || 0)
-                                            return !(lifecycle === 'pre_lead' || source === 'pre_lead' || (preCount > 0 && leadCount === 0))
-                                        }).length}
-                                    </span>
+                                    <span className='ah-count-chip-number'>{filteredStageCounts.leads}</span>
                                     <div className='ah-count-chip-meta'>
                                         <span className='ah-count-chip-title'>Leads</span>
                                         <span className='ah-count-chip-subtitle'>Empresas</span>
+                                    </div>
+                                </div>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{filteredStageCounts.clients}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Clientes</span>
+                                        <span className='ah-count-chip-subtitle'>Empresas</span>
+                                    </div>
+                                </div>
+                                <div className='ah-count-chip'>
+                                    <span className='ah-count-chip-number'>{recentCompanies.length}</span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Recientes</span>
+                                        <span className='ah-count-chip-subtitle'>Últimas 24h</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div className='ah-table-toolbar'>
-                            <div className='ah-table-controls'>
-                                <div className='ah-search-control'>
-                                    <Search className='ah-search-icon' size={18} />
-                                    <input
-                                        type='text'
-                                        placeholder='Buscar por nombre, ubicación, etiquetas...'
-                                        value={filterSearch}
-                                        onChange={(e) => setFilterSearch(e.target.value)}
-                                        className='ah-search-input'
-                                    />
-                                </div>
-                                    <select
-                                        value={filterIndustry}
-                                        onChange={(e) => setFilterIndustry(e.target.value)}
-                                        className='ah-select-control'
-                                    >
-                                        <option value="All">Industria: Todas</option>
-                                        {uniqueIndustries.map(ind => (
-                                            <option key={ind} value={ind!}>{ind}</option>
-                                        ))}
-                                    </select>
+                            <div className='flex flex-col gap-3 w-full'>
+                                <div className='flex flex-wrap items-center justify-between gap-3'>
+                                    <div className='inline-flex flex-wrap items-center gap-2 p-1 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)]'>
+                                        {([
+                                            { key: 'all', label: 'Todas' },
+                                            { key: 'suspects', label: 'Suspects' },
+                                            { key: 'leads', label: 'Leads' },
+                                            { key: 'clients', label: 'Clientes' }
+                                        ] as const).map((option) => {
+                                            const selected = companyView === option.key
+                                            return (
+                                                <button
+                                                    key={option.key}
+                                                    type='button'
+                                                    onClick={() => handleCompanyViewChange(option.key)}
+                                                    className='px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.16em] transition-all cursor-pointer'
+                                                    style={selected
+                                                        ? {
+                                                            background: 'color-mix(in srgb, #2048FF 16%, var(--card-bg))',
+                                                            borderColor: 'color-mix(in srgb, #2048FF 42%, var(--card-border))',
+                                                            color: 'color-mix(in srgb, #2048FF 88%, var(--text-primary))'
+                                                        }
+                                                        : {
+                                                            background: 'var(--card-bg)',
+                                                            borderColor: 'var(--card-border)',
+                                                            color: 'var(--text-secondary)'
+                                                        }}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
 
-                                    <select
-                                        value={filterLocation}
-                                        onChange={(e) => {
-                                            const nextLocation = e.target.value
-                                            setFilterLocation(nextLocation)
-                                            if (nextLocation !== 'Monterrey') {
-                                                setFilterMonterreyMunicipality('All')
-                                            }
+                                    <button
+                                        type='button'
+                                        onClick={() => setShowAdvancedFilters((prev) => !prev)}
+                                        className='px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-[0.16em] transition-all cursor-pointer'
+                                        style={{
+                                            background: showAdvancedFilters
+                                                ? 'color-mix(in srgb, #2563eb 14%, var(--card-bg))'
+                                                : 'var(--card-bg)',
+                                            borderColor: showAdvancedFilters
+                                                ? 'color-mix(in srgb, #2563eb 36%, var(--card-border))'
+                                                : 'var(--card-border)',
+                                            color: showAdvancedFilters
+                                                ? 'color-mix(in srgb, #1d4ed8 86%, var(--text-primary))'
+                                                : 'var(--text-secondary)'
                                         }}
-                                        className='ah-select-control'
                                     >
-                                        <option value="All">Ubicación: Todas</option>
-                                        {uniqueLocations.map(loc => (
-                                            <option key={loc} value={loc}>{loc}</option>
-                                        ))}
-                                    </select>
-                                    {filterLocation === 'Monterrey' && (
+                                        {showAdvancedFilters ? 'Ocultar filtros avanzados' : 'Mostrar filtros avanzados'}
+                                    </button>
+                                </div>
+
+                                <div className='ah-table-controls'>
+                                    <div className='ah-search-control'>
+                                        <Search className='ah-search-icon' size={18} />
+                                        <input
+                                            type='text'
+                                            placeholder='Buscar por nombre, ubicación, etiquetas...'
+                                            value={filterSearch}
+                                            onChange={(e) => setFilterSearch(e.target.value)}
+                                            className='ah-search-input'
+                                        />
+                                    </div>
+                                </div>
+
+                                {showAdvancedFilters && (
+                                    <div className='ah-table-controls'>
                                         <select
-                                            value={filterMonterreyMunicipality}
-                                            onChange={(e) => setFilterMonterreyMunicipality(e.target.value)}
+                                            value={filterIndustry}
+                                            onChange={(e) => setFilterIndustry(e.target.value)}
                                             className='ah-select-control'
                                         >
-                                            <option value="All">Municipio MTY: Todos</option>
-                                            {uniqueMonterreyMunicipalities.map((municipality) => (
-                                                <option key={municipality} value={municipality}>{municipality}</option>
+                                            <option value="All">Industria: Todas</option>
+                                            {uniqueIndustries.map(ind => (
+                                                <option key={ind} value={ind!}>{ind}</option>
                                             ))}
                                         </select>
-                                    )}
-                                    <select
-                                        value={filterLifecycle}
-                                        onChange={(e) => setFilterLifecycle(e.target.value as 'All' | 'lead' | 'pre_lead')}
-                                        className='ah-select-control'
-                                    >
-                                        <option value="All">Tipo: Todos</option>
-                                        <option value="lead">Tipo: Lead</option>
-                                        <option value="pre_lead">Tipo: Suspect</option>
-                                    </select>
-                                    <select
-                                        value={filterSize}
-                                        onChange={(e) => setFilterSize(e.target.value)}
-                                        className='ah-select-control'
-                                    >
-                                        <option value="All">Tamaño: Todo</option>
-                                        <option value="1">Micro</option>
-                                        <option value="2">Pequeña</option>
-                                        <option value="3">Mediana</option>
-                                        <option value="4">Grande</option>
-                                        <option value="5">Corporativo</option>
-                                    </select>
+                                        <select
+                                            value={filterTag}
+                                            onChange={(e) => setFilterTag(e.target.value)}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="All">Tags: Todas</option>
+                                            {uniqueTags.map((tag) => (
+                                                <option key={tag} value={tag}>{tag}</option>
+                                            ))}
+                                        </select>
 
-                                    <select
-                                        value={sortBy}
-                                        onChange={(e) => setSortBy(e.target.value)}
-                                        className='ah-select-control'
-                                    >
-                                        <option value="alphabetical">Orden: Nombre</option>
-                                        <option value="antiquity">Orden: Antigüedad</option>
-                                        <option value="projectAntiquity">Orden: Proyectos</option>
-                                    </select>
+                                        <select
+                                            value={filterLocation}
+                                            onChange={(e) => {
+                                                const nextLocation = e.target.value
+                                                setFilterLocation(nextLocation)
+                                                if (nextLocation !== 'Monterrey') {
+                                                    setFilterMonterreyMunicipality('All')
+                                                }
+                                            }}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="All">Ubicación: Todas</option>
+                                            {uniqueLocations.map(loc => (
+                                                <option key={loc} value={loc}>{loc}</option>
+                                            ))}
+                                        </select>
+                                        {filterLocation === 'Monterrey' && (
+                                            <select
+                                                value={filterMonterreyMunicipality}
+                                                onChange={(e) => setFilterMonterreyMunicipality(e.target.value)}
+                                                className='ah-select-control'
+                                            >
+                                                <option value="All">Municipio MTY: Todos</option>
+                                                {uniqueMonterreyMunicipalities.map((municipality) => (
+                                                    <option key={municipality} value={municipality}>{municipality}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        <select
+                                            value={filterRecent}
+                                            onChange={(e) => setFilterRecent(e.target.value as 'all' | 'recent_24h')}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="all">Recientes: Todas</option>
+                                            <option value="recent_24h">Recientes: Últimas 24h</option>
+                                        </select>
+                                        <select
+                                            value={filterSize}
+                                            onChange={(e) => setFilterSize(e.target.value)}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="All">Tamaño: Todo</option>
+                                            <option value="1">Micro</option>
+                                            <option value="2">Pequeña</option>
+                                            <option value="3">Mediana</option>
+                                            <option value="4">Grande</option>
+                                            <option value="5">Corporativo</option>
+                                        </select>
+
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value)}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="alphabetical">Orden: Nombre</option>
+                                            <option value="antiquity">Orden: Antigüedad</option>
+                                            <option value="projectAntiquity">Orden: Proyectos</option>
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -967,6 +1534,8 @@ export default function EmpresasPage() {
                     <div className='flex-1 overflow-x-auto custom-scrollbar'>
                         <CompaniesTable
                             companies={filteredCompanies}
+                            recentCompanies={recentCompanies}
+                            highlightedCompanyId={highlightedCompanyId}
                             isEditingMode={isEditingMode}
                             currentUserProfile={auth.profile}
                             onRowClick={handleRowClick}

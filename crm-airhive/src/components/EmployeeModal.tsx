@@ -826,14 +826,14 @@ export default function EmployeeModal({ isOpen, onClose, onSave, employee, readO
                     </div>
 
                     {/* Footer */}
-                    <div className='p-6 border-t border-[var(--card-border)] bg-[color-mix(in_srgb,var(--hover-bg)_80%,var(--card-bg))] flex justify-end gap-3 flex-shrink-0'>
+                    <div className='ah-modal-footer'>
                         <button type='button' onClick={onClose}
-                            className='px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--hover-bg)] rounded-lg transition-colors'>
+                            className='ah-modal-btn ah-modal-btn-secondary'>
                             Cancelar
                         </button>
                         {!readOnlyMode && (
                             <button type='submit' form='employee-form' disabled={loading || uploadingAvatar || !hasChanges}
-                                className='px-4 py-2 text-sm font-semibold text-white bg-[var(--input-focus)] hover:brightness-95 rounded-lg flex items-center gap-2 transition-all disabled:opacity-50'>
+                                className='ah-modal-btn ah-modal-btn-primary'>
                                 {loading ? <div className='w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin' /> : <Save size={16} />}
                                 Guardar Cambios
                             </button>

@@ -13,6 +13,7 @@ import { Search, Target, Pencil, RotateCw, Filter, ListFilter, ArrowUpDown, Buil
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 import { useAuth } from '@/lib/auth'
 import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
+import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
 
 export default function PreLeadsPage() {
     const auth = useAuth()
@@ -184,7 +185,8 @@ export default function PreLeadsPage() {
     }, [auth.loading, auth.loggedIn])
 
     const fetchCompanies = async () => {
-        const { data, error } = await supabase.from('empresas').select('id, nombre')
+        const { data, error } = await (supabase.from('empresas') as any)
+            .select('id, nombre, industria, ubicacion, alcance_empresa, sede_objetivo, sedes_sugeridas')
         if (!error && data) setCompanies(data)
     }
 
@@ -305,8 +307,8 @@ export default function PreLeadsPage() {
             }
             if (preLeadColumns.industria_id) preLeadData.industria_id = data.industria_id || null
             if (preLeadColumns.tamano) preLeadData.tamano = data.tamano || 1
-            if (preLeadColumns.tamano_fuente) preLeadData.tamano_fuente = data.tamano_fuente || null
-            if (preLeadColumns.tamano_confianza) preLeadData.tamano_confianza = data.tamano_confianza || null
+            if (preLeadColumns.tamano_fuente) preLeadData.tamano_fuente = normalizeCompanySizeSourceValue(data.tamano_fuente)
+            if (preLeadColumns.tamano_confianza) preLeadData.tamano_confianza = normalizeCompanySizeConfidenceValue(data.tamano_confianza)
             if (preLeadColumns.tamano_senal_principal) preLeadData.tamano_senal_principal = data.tamano_senal_principal || null
             if (preLeadColumns.website) preLeadData.website = data.website || null
             if (preLeadColumns.logo_url) preLeadData.logo_url = data.logo_url || null

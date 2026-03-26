@@ -36,6 +36,7 @@ type ClientData = {
     probability_locked?: boolean | null
     next_meeting_id?: string | null
     last_snapshot_at?: string | null
+    sede_objetivo?: string | null
     email?: string | null
     telefono?: string | null
     loss_reason_id?: string | null
@@ -683,6 +684,15 @@ export default function ClientDetailView({
                                     </p>
                                 </div>
 
+                                <div className='group'>
+                                    <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>
+                                        Sede Objetivo
+                                    </label>
+                                    <p className='text-[var(--text-primary)] font-bold text-base'>
+                                        {String((client as any).sede_objetivo || '').trim() || 'Por definir'}
+                                    </p>
+                                </div>
+
                                 <div>
                                     <label className='text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest block mb-2'>Contacto Directo</label>
                                     <div className='flex flex-wrap gap-2'>
@@ -1318,10 +1328,10 @@ export default function ClientDetailView({
                             )}
                         </div>
 
-                        <div className='px-5 py-4 border-t border-[var(--card-border)] flex items-center justify-end'>
+                        <div className='ah-modal-footer'>
                             <button
                                 onClick={() => setIsSnapshotsModalOpen(false)}
-                                className='h-10 px-4 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-primary)] text-[10px] font-black uppercase tracking-[0.14em] cursor-pointer'
+                                className='ah-modal-btn ah-modal-btn-secondary'
                             >
                                 Cerrar
                             </button>

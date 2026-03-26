@@ -52,8 +52,7 @@ export default function PreLeadDetailView({
                     </div>
                     <button
                         onClick={onClose}
-                        className='h-10 px-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all hover:brightness-110 hover:shadow-lg hover:scale-[1.02] active:scale-95'
-                        style={{ background: 'var(--card-bg)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
+                        className='ah-modal-btn ah-modal-btn-secondary'
                         title='Regresar'
                     >
                         Regresar
@@ -104,7 +103,7 @@ export default function PreLeadDetailView({
                                             </a>
                                             <button
                                                 onClick={() => onEmailClick(c, preLead.nombre_contacto || preLead.nombre_empresa)}
-                                                className='w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20'
+                                                className='w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-blue-500/20 cursor-pointer hover:bg-blue-600 hover:-translate-y-px hover:scale-105 active:scale-95'
                                                 title='Redactar en CRM'
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -183,10 +182,10 @@ export default function PreLeadDetailView({
                 </div>
 
                 {/* Botones de Acción */}
-                <div className='p-6 flex flex-col md:flex-row gap-3 shrink-0 border-t bg-[var(--hover-bg)]' style={{ borderColor: 'var(--card-border)' }}>
+                <div className='ah-modal-footer flex-col md:flex-row'>
                     <button
                         onClick={() => onPromote(preLead)}
-                        className='flex-1 h-12 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all'
+                        className='ah-modal-btn ah-modal-btn-success flex-1 min-h-[48px]'
                     >
                         <span className='inline-flex items-center justify-center gap-2'>
                             <Rocket size={13} strokeWidth={2.5} />
@@ -196,7 +195,7 @@ export default function PreLeadDetailView({
                     <div className='flex gap-3 flex-1'>
                         <button
                             onClick={() => onEdit(preLead)}
-                            className='flex-1 h-12 bg-[#2048FF] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95'
+                            className='ah-modal-btn ah-modal-btn-primary flex-1 min-h-[48px]'
                         >
                             <span className='inline-flex items-center justify-center gap-2'>
                                 <Pencil size={13} strokeWidth={2.5} />
@@ -205,8 +204,7 @@ export default function PreLeadDetailView({
                         </button>
                         <button
                             onClick={onClose}
-                            className='px-6 h-12 border rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black/5 transition-all'
-                            style={{ borderColor: 'var(--card-border)', color: 'var(--text-secondary)' }}
+                            className='ah-modal-btn ah-modal-btn-secondary min-h-[48px]'
                         >
                             Cerrar
                         </button>

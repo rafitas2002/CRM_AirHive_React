@@ -223,7 +223,7 @@ export default function TaskModal({
                                 <Pencil size={16} />
                             </button>
                         )}
-                        <button onClick={onClose} className='ah-modal-close w-8 h-8'>
+                        <button onClick={onClose} className='ah-modal-close'>
                             <X size={18} />
                         </button>
                     </div>
@@ -424,12 +424,12 @@ export default function TaskModal({
                 </form>
 
                 {/* Footer */}
-                <div className='p-8 bg-[var(--hover-bg)] border-t border-[var(--card-border)] flex gap-3 shrink-0'>
+                <div className='ah-modal-footer'>
                     {!isModificationMode && mode === 'edit' ? (
                         <button
                             onClick={onClose}
                             type="button"
-                            className='w-full py-3 px-4 bg-[#2048FF] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95'
+                            className='ah-modal-btn ah-modal-btn-primary w-full'
                         >
                             Listo / Salir
                         </button>
@@ -456,14 +456,14 @@ export default function TaskModal({
                                     }
                                 }}
                                 type="button"
-                                className='flex-1 py-3 px-4 bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-secondary)] rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-[var(--hover-bg)] hover:text-[var(--text-primary)] transition-all'
+                                className='ah-modal-btn ah-modal-btn-secondary flex-1'
                             >
                                 {mode === 'create' ? 'Cancelar' : 'Cancelar Edición'}
                             </button>
                             <button
                                 type="submit"
                                 form='task-form'
-                                className='flex-[2] py-3 px-4 bg-[#2048FF] text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1700AC] transition-all transform active:scale-95'
+                                className='ah-modal-btn ah-modal-btn-primary flex-[2]'
                             >
                                 {mode === 'create' ? 'Agendar Tarea' : 'Guardar Cambios'}
                             </button>
