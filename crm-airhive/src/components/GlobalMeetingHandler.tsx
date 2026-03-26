@@ -144,8 +144,19 @@ export default function GlobalMeetingHandler() {
                     console.log(`✅ Auto-synced ${res.updatedCount} events from Google`)
                 }
                 if (!res.success) {
-                    disableGoogleSyncRef.current = true
-                    console.warn('Google sync-back disabled for this session due to connection/token error.')
+                    const errorMessage = String(res.error || '').toLowerCase()
+                    const shouldDisable =
+                        errorMessage.includes('no google connection') ||
+                        errorMessage.includes('invalid_grant') ||
+                        errorMessage.includes('invalid_client') ||
+                        errorMessage.includes('unauthorized')
+
+                    if (shouldDisable) {
+                        disableGoogleSyncRef.current = true
+                        console.warn('Google sync-back disabled for this session due to connection/token error.')
+                    } else {
+                        console.warn('Temporary Google sync issue. Will retry automatically.')
+                    }
                 }
             } finally {
                 syncInFlightRef.current = false
@@ -190,7 +201,7 @@ export default function GlobalMeetingHandler() {
         const interval = setInterval(checkUpdates, 15 * 1000)
         const syncInterval = setInterval(() => {
             void runGoogleSync()
-        }, 5 * 60 * 1000)
+        }, 60 * 1000)
 
         return () => {
             supabase.removeChannel(channel)

@@ -50,7 +50,19 @@ export default function UpcomingMeetingsWidget() {
                 return
             }
 
-            const upcomingMeetings = await getUpcomingMeetings(user.id, 5)
+            const { data: profileRow } = await supabase
+                .from('profiles')
+                .select('username')
+                .eq('id', user.id)
+                .maybeSingle()
+
+            const upcomingMeetings = await getUpcomingMeetings(
+                user.id,
+                5,
+                false,
+                user.email || undefined,
+                String((profileRow as { username?: string | null } | null)?.username || '').trim() || undefined
+            )
             setMeetings(upcomingMeetings)
         } catch (error) {
             console.error('Error in fetchMeetings:', error)

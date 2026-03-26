@@ -465,11 +465,12 @@ export async function getEmployeesList() {
     try {
         const cookieStore = await cookies()
         const supabase = createClient(cookieStore)
+        const authDomain = (process.env.NEXT_PUBLIC_AUTH_DOMAIN || process.env.AUTH_DOMAIN || 'airhivemx.com').trim().toLowerCase()
+        const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
 
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('No autenticado')
 
-        // Fetch profiles with email (username in this system seems to be email)
         const { data, error } = await supabase
             .from('profiles')
             .select('id, full_name, username')
@@ -477,7 +478,43 @@ export async function getEmployeesList() {
 
         if (error) throw error
 
-        return { success: true, data }
+        const profiles = (data || []) as Array<{ id: string; full_name: string | null; username: string | null }>
+        const userIds = profiles.map((profile) => String(profile.id || '').trim()).filter(Boolean)
+
+        let integrationMap = new Map<string, string>()
+        if (userIds.length > 0) {
+            const { data: integrations, error: integrationError } = await supabase
+                .from('google_integrations')
+                .select('user_id, email')
+                .in('user_id', userIds)
+
+            if (integrationError) {
+                console.warn('Could not fetch google integration emails for employees list:', integrationError)
+            } else {
+                integrationMap = new Map(
+                    ((integrations || []) as Array<{ user_id: string; email: string | null }>)
+                        .map((entry) => [String(entry.user_id || '').trim(), String(entry.email || '').trim().toLowerCase()])
+                        .filter((entry) => Boolean(entry[0]) && isValidEmail(entry[1]))
+                )
+            }
+        }
+
+        const normalized = profiles.map((profile) => {
+            const usernameRaw = String(profile.username || '').trim()
+            const usernameLower = usernameRaw.toLowerCase()
+            const guessedEmail = usernameLower
+                ? (isValidEmail(usernameLower) ? usernameLower : `${usernameLower}@${authDomain}`)
+                : null
+            const integrationEmail = integrationMap.get(String(profile.id || '').trim()) || null
+            const email = integrationEmail || (guessedEmail && isValidEmail(guessedEmail) ? guessedEmail : null)
+
+            return {
+                ...profile,
+                email
+            }
+        })
+
+        return { success: true, data: normalized }
     } catch (error: any) {
         console.error('Error fetching employees list:', error)
         return { success: false, error: error.message }

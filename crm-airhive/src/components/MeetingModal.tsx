@@ -135,6 +135,33 @@ function dedupeParticipantLabels(labels: string[]) {
     return out
 }
 
+function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function isLikelyUsername(value: string) {
+    return /^[a-zA-Z0-9._-]+$/.test(String(value || '').trim())
+}
+
+function normalizeInternalAttendeeValues(values: string[]) {
+    const domain = String(process.env.NEXT_PUBLIC_AUTH_DOMAIN || 'airhivemx.com').trim().toLowerCase()
+    const normalized = (values || [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .map((value) => {
+            const lowered = value.toLowerCase()
+            if (isValidEmail(lowered)) return lowered
+            if (isLikelyUsername(lowered)) {
+                const derivedEmail = `${lowered}@${domain}`
+                if (isValidEmail(derivedEmail)) return derivedEmail
+            }
+            return lowered
+        })
+        .filter(Boolean)
+
+    return Array.from(new Set(normalized))
+}
+
 function buildContactOptions(
     companyContacts: CompanyContactRow[],
     companyLeads: Array<{ id: number; nombre?: string | null; contacto: string | null; email: string | null; telefono: string | null }>,
@@ -706,6 +733,8 @@ export default function MeetingModal({
                 .map((key) => contactOptions.find(option => option.key === key))
                 .filter((option): option is ContactOption => !!option)
 
+            const normalizedAttendees = normalizeInternalAttendeeValues(formData.attendees)
+
             const participantLabels = dedupeParticipantLabels([
                 ...(resolvedPrimaryContact
                     ? [buildParticipantLabel(resolvedPrimaryContact.name, resolvedPrimaryContact.email, resolvedPrimaryContact.phone)]
@@ -722,7 +751,7 @@ export default function MeetingModal({
                 duration_minutes: formData.duration_minutes,
                 meeting_type: formData.meeting_type,
                 notes: formData.notes || null,
-                attendees: formData.attendees.length > 0 ? formData.attendees : null,
+                attendees: normalizedAttendees.length > 0 ? normalizedAttendees : null,
                 primary_company_contact_id: resolvedPrimaryContact?.id || null,
                 primary_company_contact_name: resolvedPrimaryContact?.name || null,
                 external_participants: participantLabels.length > 0 ? participantLabels : null,

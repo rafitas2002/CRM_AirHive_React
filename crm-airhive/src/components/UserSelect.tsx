@@ -11,6 +11,36 @@ interface UserSelectProps {
     placeholder?: string
 }
 
+type SelectableUser = {
+    id: string
+    full_name?: string | null
+    username?: string | null
+    email?: string | null
+}
+
+function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function resolveUserKey(user: SelectableUser): string {
+    const email = String(user.email || '').trim().toLowerCase()
+    if (isValidEmail(email)) return email
+
+    const username = String(user.username || '').trim()
+    if (username) return username
+
+    return String(user.id || '').trim()
+}
+
+function getUserAliases(user: SelectableUser): string[] {
+    return Array.from(new Set([
+        resolveUserKey(user),
+        String(user.id || '').trim(),
+        String(user.username || '').trim(),
+        String(user.email || '').trim().toLowerCase()
+    ].filter(Boolean)))
+}
+
 export default function UserSelect({
     value = [],
     onChange,
@@ -18,7 +48,7 @@ export default function UserSelect({
     placeholder = 'Seleccionar usuarios...'
 }: UserSelectProps) {
     const [open, setOpen] = useState(false)
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<SelectableUser[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const wrapperRef = useRef<HTMLDivElement>(null)
@@ -47,14 +77,21 @@ export default function UserSelect({
     const filteredUsers = users.filter((user) =>
         (user.full_name?.toLowerCase() || '').includes(search.toLowerCase())
         || (user.username?.toLowerCase() || '').includes(search.toLowerCase())
+        || (user.email?.toLowerCase() || '').includes(search.toLowerCase())
     )
 
-    const handleSelect = (userKey: string) => {
-        if (value.includes(userKey)) {
-            onChange(value.filter((entry) => entry !== userKey))
+    const handleSelect = (user: SelectableUser) => {
+        const nextKey = resolveUserKey(user)
+        const aliases = getUserAliases(user)
+        const normalizedValue = value.map((entry) => String(entry || '').trim())
+        const hasAnyAlias = normalizedValue.some((entry) => aliases.includes(entry))
+
+        if (hasAnyAlias) {
+            onChange(normalizedValue.filter((entry) => !aliases.includes(entry)))
             return
         }
-        onChange([...value, userKey])
+
+        onChange(Array.from(new Set([...normalizedValue.filter((entry) => !aliases.includes(entry)), nextKey])))
     }
 
     const removeTag = (userKey: string, e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -78,7 +115,19 @@ export default function UserSelect({
                 >
                     {value.length > 0 ? (
                         value.map((userKey) => {
-                            const user = users.find((entry) => entry.username === userKey || entry.email === userKey)
+                            const normalizedUserKey = String(userKey || '').trim().toLowerCase()
+                            const user = users.find((entry) => {
+                                const entryKey = resolveUserKey(entry).toLowerCase()
+                                const entryUsername = String(entry.username || '').trim().toLowerCase()
+                                const entryEmail = String(entry.email || '').trim().toLowerCase()
+                                const entryId = String(entry.id || '').trim().toLowerCase()
+                                return (
+                                    entryKey === normalizedUserKey
+                                    || entryUsername === normalizedUserKey
+                                    || entryEmail === normalizedUserKey
+                                    || entryId === normalizedUserKey
+                                )
+                            })
                             const displayName = user?.full_name || userKey
                             return (
                                 <span
@@ -133,13 +182,13 @@ export default function UserSelect({
                                 </div>
                             ) : filteredUsers.length > 0 ? (
                                 filteredUsers.map((user) => {
-                                    const userKey = user.username
-                                    const isSelected = value.includes(userKey)
+                                    const aliases = getUserAliases(user)
+                                    const isSelected = value.some((entry) => aliases.includes(String(entry || '').trim()))
                                     return (
                                         <button
                                             key={user.id}
                                             type='button'
-                                            onClick={() => handleSelect(userKey)}
+                                            onClick={() => handleSelect(user)}
                                             className='w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors cursor-pointer'
                                             style={isSelected
                                                 ? {
@@ -151,7 +200,7 @@ export default function UserSelect({
                                             <div className='flex flex-col'>
                                                 <span className='font-bold'>{user.full_name}</span>
                                                 <span className='text-xs opacity-70' style={{ color: 'var(--text-secondary)' }}>
-                                                    {user.username}
+                                                    {user.email || user.username || user.id}
                                                 </span>
                                             </div>
                                             {isSelected && <Check size={16} />}
@@ -169,7 +218,7 @@ export default function UserSelect({
             </div>
 
             <p className='text-xs text-right' style={{ color: 'var(--text-secondary)' }}>
-                Selecciona los usuarios internos para la reunión
+                Selecciona usuarios internos. Se enviará invitación a su correo si está disponible.
             </p>
         </div>
     )

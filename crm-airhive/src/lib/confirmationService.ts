@@ -536,12 +536,33 @@ export function calculateMeetingUrgency(startTimeStr: string, durationMinutes: n
     return { level, hoursUntil }
 }
 
-export async function getUpcomingMeetings(userId: string, limit: number = 10, allMeetings: boolean = false, userEmail?: string): Promise<MeetingWithUrgency[]> {
+export async function getUpcomingMeetings(
+    userId: string,
+    limit: number = 10,
+    allMeetings: boolean = false,
+    userEmail?: string,
+    userUsername?: string | null
+): Promise<MeetingWithUrgency[]> {
     try {
         let query = supabase.from('meetings').select('*')
         if (!allMeetings) {
-            if (userEmail) query = query.or(`seller_id.eq.${userId},attendees.cs.{"${userEmail}"}`)
-            else query = query.eq('seller_id', userId)
+            const normalizedEmail = String(userEmail || '').trim().toLowerCase()
+            const normalizedUsername = String(userUsername || '').trim().toLowerCase()
+            const normalizedUserId = String(userId || '').trim().toLowerCase()
+            const attendeeFilters = [
+                normalizedEmail,
+                normalizedUsername,
+                normalizedUserId
+            ]
+                .filter(Boolean)
+                .map((value) => String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"'))
+                .map((value) => `attendees.cs.{"${value}"}`)
+
+            if (attendeeFilters.length > 0) {
+                query = query.or([`seller_id.eq.${userId}`, ...attendeeFilters].join(','))
+            } else {
+                query = query.eq('seller_id', userId)
+            }
         }
 
         const { data: meetings, error } = await query
@@ -562,8 +583,8 @@ export async function getUpcomingMeetings(userId: string, limit: number = 10, al
         const clientsMap = (clients || []).reduce((acc: any, client: any) => { acc[client.id] = client; return acc }, {})
 
         let sellersMap: Record<string, string> = {}
-        if (allMeetings) {
-            const sellerIds = Array.from(new Set(filteredMeetings.map((m: any) => m.seller_id)))
+        const sellerIds = Array.from(new Set(filteredMeetings.map((m: any) => m.seller_id).filter(Boolean)))
+        if (sellerIds.length > 0) {
             const { data: profiles } = await supabase.from('profiles').select('id, username, full_name').in('id', sellerIds)
             if (profiles) sellersMap = profiles.reduce((acc: any, p: any) => { acc[p.id] = p.full_name || p.username || 'Desconocido'; return acc }, {})
         }
