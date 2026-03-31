@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo, type CSSProperties } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useMemo, useRef, type CSSProperties } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import ClientsTable from '@/components/ClientsTable'
 import ClientModal from '@/components/ClientModal'
@@ -145,10 +145,64 @@ function parseSupabaseError(error: any, fallback: string) {
 }
 
 function isUnknownColumnError(error: any, columnName?: string) {
-    const message = String(error?.message || '').toLowerCase()
-    if (!message.includes('column') || !message.includes('does not exist')) return false
+    if (!error) return false
+
+    const code = String(error?.code || error?.error?.code || '').trim()
+    const message = String(error?.message || error?.error?.message || '').toLowerCase()
+
+    const hasUnknownColumnSignal = code === '42703'
+        || (
+            message.includes('column')
+            && (
+                message.includes('does not exist')
+                || message.includes('could not find')
+                || message.includes('unknown')
+                || message.includes('schema cache')
+            )
+        )
+
+    if (!hasUnknownColumnSignal) return false
     if (!columnName) return true
     return message.includes(String(columnName).toLowerCase())
+}
+
+function extractUnknownColumnName(error: any): string | null {
+    if (!error) return null
+
+    const message = String(error?.message || error?.error?.message || '')
+    const details = String(error?.details || error?.error?.details || '')
+    const combined = `${message} ${details}`.trim()
+
+    const patterns = [
+        /could not find the ['"]([a-zA-Z0-9_.]+)['"] column/i,
+        /column ['"]?([a-zA-Z0-9_.]+)['"]? does not exist/i,
+        /column ['"]([a-zA-Z0-9_.]+)['"]/i
+    ]
+
+    for (const pattern of patterns) {
+        const match = combined.match(pattern)
+        if (!match?.[1]) continue
+        const token = String(match[1]).replace(/['"]/g, '').trim()
+        if (!token) continue
+        const clean = token.includes('.') ? token.split('.').pop() : token
+        if (clean) return clean
+    }
+
+    return null
+}
+
+function isNotNullConstraintForColumn(error: any, columnName: string) {
+    if (!error) return false
+    const code = String(error?.code || error?.error?.code || '').trim()
+    const details = [
+        String(error?.message || error?.error?.message || ''),
+        String(error?.details || error?.error?.details || ''),
+        String(error?.hint || error?.error?.hint || '')
+    ].join(' ').toLowerCase()
+
+    return code === '23502'
+        && details.includes(String(columnName).toLowerCase())
+        && (details.includes('null value') || details.includes('not-null') || details.includes('not null'))
 }
 
 function isWonStage(stage: unknown) {
@@ -183,6 +237,9 @@ export default function LeadsPage() {
     const [loading, setLoading] = useState(true)
     const [supabase] = useState(() => createClient())
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const autoEditLeadHandledRef = useRef<string | null>(null)
+    const autoCreateLeadHandledRef = useRef<string | null>(null)
 
     // Auth Hook
     const { user, loading: authLoading } = useAuth()
@@ -301,6 +358,64 @@ export default function LeadsPage() {
             assigned_user_ids: assignedUserIds
         }
     }, [selectedLead, leadAssigneesByLeadId])
+
+    useEffect(() => {
+        const editLeadIdRaw = String(searchParams.get('editLeadId') || '').trim()
+        if (!editLeadIdRaw) {
+            autoEditLeadHandledRef.current = null
+            return
+        }
+        if (autoEditLeadHandledRef.current === editLeadIdRaw) return
+
+        const editLeadId = Number(editLeadIdRaw)
+        if (!Number.isFinite(editLeadId) || editLeadId <= 0) return
+        if (loading) return
+
+        const targetLead = leads.find((lead) => Number(lead.id) === editLeadId)
+        if (!targetLead) return
+
+        autoEditLeadHandledRef.current = editLeadIdRaw
+        setIsDetailViewOpen(false)
+        setSelectedLead(null)
+        setModalMode('edit')
+        setCurrentLead(targetLead)
+        setIsModalOpen(true)
+
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.delete('editLeadId')
+        const query = nextParams.toString()
+        router.replace(query ? `/clientes?${query}` : '/clientes')
+    }, [searchParams, leads, loading, router])
+
+    useEffect(() => {
+        const createLeadParamRaw = String(
+            searchParams.get('createLead')
+            || searchParams.get('newLead')
+            || ''
+        ).trim().toLowerCase()
+        if (!createLeadParamRaw) {
+            autoCreateLeadHandledRef.current = null
+            return
+        }
+        if (autoCreateLeadHandledRef.current === createLeadParamRaw) return
+
+        const shouldOpenCreateLeadModal = ['1', 'true', 'yes', 'open'].includes(createLeadParamRaw)
+        if (!shouldOpenCreateLeadModal) return
+        if (loading) return
+
+        autoCreateLeadHandledRef.current = createLeadParamRaw
+        setIsDetailViewOpen(false)
+        setSelectedLead(null)
+        setCurrentLead(null)
+        setModalMode('create')
+        setIsModalOpen(true)
+
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.delete('createLead')
+        nextParams.delete('newLead')
+        const query = nextParams.toString()
+        router.replace(query ? `/clientes?${query}` : '/clientes')
+    }, [searchParams, loading, router])
 
     // Sort & Filter Logic
     const sortedAndFilteredLeads = useMemo(() => {
@@ -753,6 +868,79 @@ export default function LeadsPage() {
         return null
     }
 
+    const tryApplyLegacyLeadPayloadFallback = (
+        payload: Record<string, any>,
+        error: any,
+        removedUnknownColumns: Set<string>,
+        appliedLegacyDefaults: Set<string>
+    ) => {
+        const unknownColumn = extractUnknownColumnName(error)
+        if (
+            unknownColumn
+            && Object.prototype.hasOwnProperty.call(payload, unknownColumn)
+        ) {
+            delete payload[unknownColumn]
+            removedUnknownColumns.add(unknownColumn)
+            return true
+        }
+
+        if (
+            isNotNullConstraintForColumn(error, 'valor_implementacion_estimado')
+            && (payload.valor_implementacion_estimado == null || payload.valor_implementacion_estimado === '')
+        ) {
+            payload.valor_implementacion_estimado = 0
+            appliedLegacyDefaults.add('valor_implementacion_estimado')
+            return true
+        }
+
+        if (
+            isNotNullConstraintForColumn(error, 'valor_estimado')
+            && (payload.valor_estimado == null || payload.valor_estimado === '')
+        ) {
+            payload.valor_estimado = 0
+            appliedLegacyDefaults.add('valor_estimado')
+            return true
+        }
+
+        return false
+    }
+
+    const executeLeadMutationWithCompatibility = async (
+        initialPayload: Record<string, any>,
+        mutate: (payload: Record<string, any>) => Promise<any>
+    ) => {
+        const candidatePayload: Record<string, any> = { ...initialPayload }
+        const removedUnknownColumns = new Set<string>()
+        const appliedLegacyDefaults = new Set<string>()
+        let response: any = null
+
+        for (let attempt = 0; attempt < 24; attempt += 1) {
+            response = await mutate(candidatePayload)
+            if (!response?.error) break
+
+            const canRetry = tryApplyLegacyLeadPayloadFallback(
+                candidatePayload,
+                response.error,
+                removedUnknownColumns,
+                appliedLegacyDefaults
+            )
+            if (!canRetry) break
+        }
+
+        if (removedUnknownColumns.size > 0 || appliedLegacyDefaults.size > 0) {
+            console.warn('Lead payload compatibility fallback applied.', {
+                removedUnknownColumns: Array.from(removedUnknownColumns),
+                appliedLegacyDefaults: Array.from(appliedLegacyDefaults)
+            })
+        }
+
+        return {
+            response,
+            removedUnknownColumns: Array.from(removedUnknownColumns),
+            appliedLegacyDefaults: Array.from(appliedLegacyDefaults)
+        }
+    }
+
     const handleSaveLead = async (leadData: ReturnType<typeof normalizeLead> & { empresa_id?: string }) => {
         if (!currentUser) {
             alert('No se pudo identificar al usuario actual.')
@@ -846,19 +1034,14 @@ export default function LeadsPage() {
                 payload.loss_recorded_by = (leadData as any).loss_recorded_by || currentUser.id
             }
 
-            let createResult = await (supabase
-                .from('clientes') as any)
-                .insert([payload])
-                .select()
-            if (createResult?.error && isUnknownColumnError(createResult.error, 'sede_objetivo')) {
-                const fallbackPayload = { ...payload }
-                delete fallbackPayload.sede_objetivo
-                createResult = await (supabase
+            const createCompatResult = await executeLeadMutationWithCompatibility(
+                payload,
+                (candidatePayload) => (supabase
                     .from('clientes') as any)
-                    .insert([fallbackPayload])
+                    .insert([candidatePayload])
                     .select()
-            }
-            const { data, error } = createResult
+            )
+            const { data, error } = createCompatResult.response || {}
 
             if (error) {
                 const parsed = parseSupabaseError(error, 'No se pudo crear el lead.')
@@ -929,10 +1112,14 @@ export default function LeadsPage() {
                         closed_at_real: toIsoFromDateOnly((leadData as any).closed_at_real) || new Date().toISOString()
                     }
 
-                    const { error: wonUpdateError } = await (supabase
-                        .from('clientes') as any)
-                        .update(wonUpdatePayload)
-                        .eq('id', newId)
+                    const wonUpdateCompatResult = await executeLeadMutationWithCompatibility(
+                        wonUpdatePayload,
+                        (candidatePayload) => (supabase
+                            .from('clientes') as any)
+                            .update(candidatePayload)
+                            .eq('id', newId)
+                    )
+                    const wonUpdateError = wonUpdateCompatResult.response?.error
 
                     if (wonUpdateError) {
                         console.error('Error promoting created lead to Cerrado Ganado:', wonUpdateError)
@@ -1148,19 +1335,14 @@ export default function LeadsPage() {
                 }
             }
 
-            let updateResult = await (supabase
-                .from('clientes') as any)
-                .update(payload)
-                .eq('id', currentLead.id)
-            if (updateResult?.error && isUnknownColumnError(updateResult.error, 'sede_objetivo')) {
-                const fallbackPayload = { ...payload }
-                delete fallbackPayload.sede_objetivo
-                updateResult = await (supabase
+            const updateCompatResult = await executeLeadMutationWithCompatibility(
+                payload,
+                (candidatePayload) => (supabase
                     .from('clientes') as any)
-                    .update(fallbackPayload)
+                    .update(candidatePayload)
                     .eq('id', currentLead.id)
-            }
-            const { error } = updateResult
+            )
+            const { error } = updateCompatResult.response || {}
 
             if (error) {
                 alert(`Error al actualizar el lead: ${parseSupabaseError(error, 'No se pudo actualizar el lead.')}`)

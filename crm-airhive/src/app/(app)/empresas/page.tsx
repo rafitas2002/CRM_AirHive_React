@@ -13,6 +13,7 @@ import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalize
 import { companyHasTag, normalizeCompanyTags } from '@/lib/companyTags'
 import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
 import { enrichMissingCompanies } from '@/app/actions/company-enrichment'
+import { normalizeLeadOriginValue } from '@/lib/leadOrigin'
 
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
 
@@ -20,6 +21,7 @@ export type CompanyWithProjects = CompanyData & {
     activeProjects: number
     processProjects: number
     lostProjects: number
+    held_meetings_count?: number | null
     antiquityDate: string
     projectAntiquityDate: string | null
     lifecycle_stage?: 'pre_lead' | 'lead' | string | null
@@ -46,6 +48,7 @@ export type CompanyWithProjects = CompanyData & {
     enrichment_last_run_at?: string | null
     enrichment_last_error?: string | null
     enriched_at?: string | null
+    lead_origin?: string | null
 }
 
 type CompanyUnifiedView = 'all' | 'suspects' | 'leads' | 'clients'
@@ -53,16 +56,13 @@ type CompanyUnifiedView = 'all' | 'suspects' | 'leads' | 'clients'
 function resolveCompanyUnifiedStage(company: CompanyWithProjects): 'suspect' | 'lead' | 'client' {
     if (Number(company.activeProjects || 0) > 0) return 'client'
 
-    const lifecycle = (company.lifecycle_stage || '').toLowerCase()
-    const sourceChannel = (company.source_channel || '').toLowerCase()
-    const preLeadsCount = Number(company.pre_leads_count || 0)
-    const leadsCount = Number(company.leads_count || 0)
-    const isSuspectCompany =
-        lifecycle === 'pre_lead' ||
-        sourceChannel === 'pre_lead' ||
-        (preLeadsCount > 0 && leadsCount === 0)
+    const heldMeetingsCount = Number(company.held_meetings_count || 0)
+    if (heldMeetingsCount > 0) return 'lead'
 
-    return isSuspectCompany ? 'suspect' : 'lead'
+    const lifecycle = (company.lifecycle_stage || '').toLowerCase()
+    if (lifecycle === 'lead') return 'lead'
+
+    return 'suspect'
 }
 
 function normalizeCompanyViewParam(value: string | null): CompanyUnifiedView {
@@ -135,6 +135,14 @@ function normalizeSiteSuggestions(value: unknown): string[] {
     return result
 }
 
+function isClosedLeadStage(stage: unknown) {
+    const normalized = String(stage || '').trim().toLowerCase()
+    return normalized === 'cerrado ganado'
+        || normalized === 'cerrada ganada'
+        || normalized === 'cerrado perdido'
+        || normalized === 'cerrada perdida'
+}
+
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
@@ -161,6 +169,7 @@ export default function EmpresasPage() {
     const [companyView, setCompanyView] = useState<CompanyUnifiedView>('all')
     const [filterRecent, setFilterRecent] = useState<'all' | 'recent_24h'>('all')
     const [filterTag, setFilterTag] = useState('All')
+    const [filterResponsible, setFilterResponsible] = useState('All')
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
     const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now())
@@ -175,6 +184,7 @@ export default function EmpresasPage() {
         tamano_senal_principal: true,
         website: true,
         logo_url: true,
+        lead_origin: true,
         created_by: true,
         updated_by: true,
         is_converted: true
@@ -224,6 +234,7 @@ export default function EmpresasPage() {
             'tamano_senal_principal',
             'website',
             'logo_url',
+            'lead_origin',
             'created_by',
             'updated_by',
             'is_converted'
@@ -240,8 +251,45 @@ export default function EmpresasPage() {
     }
 
     const isUnknownColumnError = (error: any) => {
+        if (!error) return false
+        const code = String(error?.code || error?.error?.code || '').trim()
         const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
-        return msg.includes('could not find the') && msg.includes('column of')
+        return code === '42703'
+            || (
+                msg.includes('column')
+                && (
+                    msg.includes('does not exist')
+                    || msg.includes('could not find')
+                    || msg.includes('unknown')
+                    || msg.includes('schema cache')
+                )
+            )
+    }
+
+    const isMissingTableError = (error: any) => {
+        if (!error) return false
+        const code = String(error?.code || error?.error?.code || '').trim()
+        const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
+        return code === '42P01'
+            || code === 'PGRST205'
+            || (msg.includes('relation') && msg.includes('does not exist'))
+            || (msg.includes('table') && msg.includes('does not exist'))
+    }
+
+    const isForeignKeyViolationError = (error: any) => {
+        const code = String(error?.code || error?.error?.code || '').trim()
+        const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
+        return code === '23503'
+            || (msg.includes('foreign key') && msg.includes('constraint'))
+    }
+
+    const isPermissionDeniedError = (error: any) => {
+        const code = String(error?.code || error?.error?.code || '').trim()
+        const msg = String(parseSupabaseError(error, '') || '').toLowerCase()
+        return code === '42501'
+            || msg.includes('permission denied')
+            || msg.includes('row-level security')
+            || msg.includes('rls')
     }
 
     const markCompanyAsPreLead = async (companyId: string) => {
@@ -334,6 +382,7 @@ export default function EmpresasPage() {
         if (preLeadColumns.tamano_senal_principal) payload.tamano_senal_principal = normalizeOptionalText((companyData as any).tamano_senal_principal)
         if (preLeadColumns.website) payload.website = normalizeOptionalText(companyData.website)
         if (preLeadColumns.logo_url) payload.logo_url = normalizeOptionalText(companyData.logo_url)
+        if (preLeadColumns.lead_origin) payload.lead_origin = normalizeLeadOriginValue((companyData as any).lead_origin) || 'sin_definir'
         if (preLeadColumns.created_by) payload.created_by = auth.user.id
         if (preLeadColumns.updated_by) payload.updated_by = auth.user.id
         if (preLeadColumns.is_converted) payload.is_converted = false
@@ -389,15 +438,18 @@ export default function EmpresasPage() {
         let result = companies.filter(company => {
             const normalizedSearch = filterSearch.trim().toLocaleLowerCase('es-MX')
             const companyTags = normalizeCompanyTags(company.tags)
+            const responsibleName = String(company.responsible_name || company.registered_by_name || '').trim() || 'Sin responsable'
             const matchesSearch = !normalizedSearch ||
                 company.nombre?.toLocaleLowerCase('es-MX').includes(normalizedSearch) ||
                 company.ubicacion?.toLocaleLowerCase('es-MX').includes(normalizedSearch) ||
+                responsibleName.toLocaleLowerCase('es-MX').includes(normalizedSearch) ||
                 companyTags.some((tag) => tag.toLocaleLowerCase('es-MX').includes(normalizedSearch))
 
             const companyIndustries = company.industrias || (company.industria ? [company.industria] : [])
             const matchesIndustry = filterIndustry === 'All' || companyIndustries.includes(filterIndustry)
             const matchesSize = filterSize === 'All' || company.tamano?.toString() === filterSize
             const matchesTag = filterTag === 'All' || companyHasTag(companyTags, filterTag)
+            const matchesResponsible = filterResponsible === 'All' || responsibleName === filterResponsible
             const locationFacet = companyLocationFacetsById.get(String(company.id ?? '')) || getLocationFilterFacetFromStructured(company)
             const matchesLocationGroup =
                 filterLocation === 'All' ||
@@ -428,6 +480,7 @@ export default function EmpresasPage() {
                 && matchesIndustry
                 && matchesSize
                 && matchesTag
+                && matchesResponsible
                 && matchesLocationGroup
                 && matchesMonterreyMunicipality
                 && matchesCompanyView
@@ -456,6 +509,7 @@ export default function EmpresasPage() {
         filterIndustry,
         filterSize,
         filterTag,
+        filterResponsible,
         filterLocation,
         filterMonterreyMunicipality,
         selectedLocationKey,
@@ -522,6 +576,15 @@ export default function EmpresasPage() {
                 .filter(Boolean)
         )
         return Array.from(tags).sort((a, b) => a.localeCompare(b, 'es'))
+    }, [companies])
+
+    const uniqueResponsibles = useMemo(() => {
+        const responsibles = new Set(
+            companies
+                .map((company) => String(company.responsible_name || company.registered_by_name || '').trim() || 'Sin responsable')
+                .filter(Boolean)
+        )
+        return Array.from(responsibles).sort((a, b) => a.localeCompare(b, 'es'))
     }, [companies])
 
     const uniqueLocations = useMemo(() => {
@@ -850,6 +913,13 @@ export default function EmpresasPage() {
                 l.etapa !== 'Cerrado Ganado' && l.etapa !== 'Cerrado Perdido'
             ).length
             const lostProjects = companyLeads.filter(l => l.etapa === 'Cerrado Perdido').length
+            const heldMeetingsCount = companyMeetings.filter((meeting) => {
+                const meetingStatus = String(meeting.meeting_status || '').toLowerCase()
+                const status = String(meeting.status || '').toLowerCase()
+                if (meetingStatus === 'held') return true
+                if (meetingStatus === 'not_held' || meetingStatus === 'cancelled') return false
+                return status === 'completed'
+            }).length
 
             // Antiquity of first active project
             const activeLeads = companyLeads
@@ -868,6 +938,7 @@ export default function EmpresasPage() {
                 activeProjects,
                 processProjects,
                 lostProjects,
+                held_meetings_count: heldMeetingsCount,
                 antiquityDate: company.created_at,
                 projectAntiquityDate,
                 registered_by_id: registeredById,
@@ -943,22 +1014,90 @@ export default function EmpresasPage() {
         if (!companyToDelete) return
         const companyId = companyToDelete
         const companyToDeleteData = companies.find((company) => company.id === companyId)
+        try {
+            const linkedLeadsRes = await (supabase.from('clientes') as any)
+                .select('id, etapa')
+                .eq('empresa_id', companyId)
+            const linkedLeadsError = linkedLeadsRes?.error
+            const linkedLeads = Array.isArray(linkedLeadsRes?.data) ? linkedLeadsRes.data : []
+            if (linkedLeadsError && !isUnknownColumnError(linkedLeadsError) && !isMissingTableError(linkedLeadsError)) {
+                throw linkedLeadsError
+            }
 
-        const { error } = await supabase
-            .from('empresas')
-            .delete()
-            .eq('id', companyId)
+            const unlinkLeadsRes = await (supabase.from('clientes') as any)
+                .update({ empresa_id: null })
+                .eq('empresa_id', companyId)
 
-        if (error) {
-            console.error('Error deleting company:', {
-                code: (error as any)?.code,
-                message: (error as any)?.message,
-                details: (error as any)?.details,
-                hint: (error as any)?.hint,
-                raw: error
-            })
-            alert(`Error al eliminar la empresa: ${parseSupabaseError(error, 'Operación bloqueada por dependencias o permisos.')}`)
-        } else {
+            if (unlinkLeadsRes?.error) {
+                const notClosedLeads = linkedLeads.filter((lead: any) => !isClosedLeadStage(lead?.etapa))
+                if (notClosedLeads.length > 0) {
+                    alert(`No se puede eliminar esta empresa porque tiene ${notClosedLeads.length} lead(s) activos. Cierra o elimina esos leads primero.`)
+                    return
+                }
+
+                const deleteClosedLeadsRes = await (supabase.from('clientes') as any)
+                    .delete()
+                    .eq('empresa_id', companyId)
+                if (deleteClosedLeadsRes?.error && !isUnknownColumnError(deleteClosedLeadsRes.error)) {
+                    throw deleteClosedLeadsRes.error
+                }
+            }
+
+            const preLeadDetachRes = await (supabase.from('pre_leads') as any)
+                .update({ empresa_id: null })
+                .eq('empresa_id', companyId)
+            if (preLeadDetachRes?.error && !isUnknownColumnError(preLeadDetachRes.error) && !isMissingTableError(preLeadDetachRes.error)) {
+                console.warn('No se pudo desvincular pre_leads de la empresa a eliminar:', preLeadDetachRes.error)
+            }
+
+            let deleteResult = await (supabase.from('empresas') as any)
+                .delete()
+                .eq('id', companyId)
+
+            if (deleteResult?.error && isForeignKeyViolationError(deleteResult.error)) {
+                const cleanupTables = [
+                    'company_contacts',
+                    'company_industries',
+                    'company_notes',
+                    'empresa_proyecto_asignaciones',
+                    'seller_badges',
+                    'company_enrichment_jobs'
+                ]
+
+                for (const table of cleanupTables) {
+                    const cleanupRes = await (supabase.from(table) as any)
+                        .delete()
+                        .eq('empresa_id', companyId)
+                    if (cleanupRes?.error && !isMissingTableError(cleanupRes.error) && !isUnknownColumnError(cleanupRes.error)) {
+                        console.warn(`No se pudo limpiar dependencias en ${table}:`, cleanupRes.error)
+                    }
+                }
+
+                deleteResult = await (supabase.from('empresas') as any)
+                    .delete()
+                    .eq('id', companyId)
+            }
+
+            if (deleteResult?.error) {
+                const parsed = parseSupabaseError(deleteResult.error, 'Operación bloqueada por dependencias o permisos.')
+                console.error('Error deleting company:', {
+                    code: (deleteResult.error as any)?.code,
+                    message: (deleteResult.error as any)?.message,
+                    details: (deleteResult.error as any)?.details,
+                    hint: (deleteResult.error as any)?.hint,
+                    parsed,
+                    raw: deleteResult.error
+                })
+
+                if (isPermissionDeniedError(deleteResult.error)) {
+                    alert('No tienes permisos para eliminar empresas en esta base (RLS).')
+                    return
+                }
+
+                alert(`Error al eliminar la empresa: ${parsed}`)
+                return
+            }
+
             const { trackEvent } = await import('@/app/actions/events')
             await trackEvent({
                 eventType: 'company_deleted',
@@ -972,10 +1111,13 @@ export default function EmpresasPage() {
             })
 
             await fetchCompanies()
+        } catch (error: any) {
+            console.error('Unexpected error deleting company:', error)
+            alert(`Error al eliminar la empresa: ${parseSupabaseError(error, 'No se pudo completar la eliminación.')}`)
+        } finally {
+            setIsDeleteModalOpen(false)
+            setCompanyToDelete(null)
         }
-
-        setIsDeleteModalOpen(false)
-        setCompanyToDelete(null)
     }
 
     const openCreateModal = () => {
@@ -1045,6 +1187,9 @@ export default function EmpresasPage() {
             tamano_confianza: normalizeCompanySizeConfidenceValue((companyData as any).tamano_confianza),
             tamano_senal_principal: normalizeOptionalText((companyData as any).tamano_senal_principal)
         }
+        const leadOriginPayload: any = {
+            lead_origin: normalizeLeadOriginValue((companyData as any).lead_origin) || 'sin_definir'
+        }
         const basePayloadWithSizeAssessment = {
             ...basePayload,
             ...sizeAssessmentPayload
@@ -1086,17 +1231,24 @@ export default function EmpresasPage() {
                 basePayload
             ]
             for (const corePayload of corePayloadVariants) {
-                const corePayloadVariantsWithPhone = [
-                    { ...corePayload, telefono: companyPhoneValue },
+                const corePayloadVariantsWithLeadOrigin = [
+                    { ...corePayload, ...leadOriginPayload },
                     corePayload
                 ]
 
-                for (const payloadVariant of corePayloadVariantsWithPhone) {
-                    if (websiteValue !== null) {
-                        candidates.push({ ...payloadVariant, website: websiteValue })
-                        candidates.push({ ...payloadVariant, sitio_web: websiteValue })
+                for (const corePayloadWithLeadOrigin of corePayloadVariantsWithLeadOrigin) {
+                    const corePayloadVariantsWithPhone = [
+                        { ...corePayloadWithLeadOrigin, telefono: companyPhoneValue },
+                        corePayloadWithLeadOrigin
+                    ]
+
+                    for (const payloadVariant of corePayloadVariantsWithPhone) {
+                        if (websiteValue !== null) {
+                            candidates.push({ ...payloadVariant, website: websiteValue })
+                            candidates.push({ ...payloadVariant, sitio_web: websiteValue })
+                        }
+                        candidates.push(payloadVariant)
                     }
-                    candidates.push(payloadVariant)
                 }
             }
             return candidates
@@ -1155,6 +1307,7 @@ export default function EmpresasPage() {
                         tags: normalizeCompanyTags(companyData.tags || prev.tags),
                         website: companyData.website,
                         telefono: companyData.telefono,
+                        lead_origin: normalizeLeadOriginValue((companyData as any).lead_origin) || prev.lead_origin || 'sin_definir',
                         alcance_empresa: normalizeCompanyScopeValue((companyData as any).alcance_empresa) || prev.alcance_empresa || 'por_definir',
                         sede_objetivo: ((companyData as any).sede_objetivo ?? prev.sede_objetivo ?? null),
                         sedes_sugeridas: normalizeSiteSuggestions((companyData as any).sedes_sugeridas || prev.sedes_sugeridas || [])
@@ -1345,6 +1498,12 @@ export default function EmpresasPage() {
                         >
                             + Nueva Empresa (Suspect)
                         </button>
+                        <button
+                            onClick={() => router.push('/clientes?createLead=1')}
+                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
+                        >
+                            + Nuevo Lead
+                        </button>
                     </div>
                 </div>
 
@@ -1504,6 +1663,16 @@ export default function EmpresasPage() {
                                                 <option key={tag} value={tag}>{tag}</option>
                                             ))}
                                         </select>
+                                        <select
+                                            value={filterResponsible}
+                                            onChange={(e) => setFilterResponsible(e.target.value)}
+                                            className='ah-select-control'
+                                        >
+                                            <option value="All">Responsable: Todos</option>
+                                            {uniqueResponsibles.map((responsible) => (
+                                                <option key={responsible} value={responsible}>{responsible}</option>
+                                            ))}
+                                        </select>
 
                                         <select
                                             value={filterLocation}
@@ -1617,7 +1786,7 @@ export default function EmpresasPage() {
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={confirmDelete}
                 title="Eliminar Empresa"
-                message="¿Estás seguro de que deseas eliminar esta empresa? Los leads asociados no se eliminarán, pero ya no estarán vinculados a esta empresa."
+                message="¿Estás seguro de que deseas eliminar esta empresa? Los leads/suspects vinculados se intentarán conservar desvinculados; en bases legacy, podrían eliminarse si todos están cerrados para completar la operación."
                 isDestructive={true}
             />
         </div>

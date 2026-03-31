@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, type CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { CompanyData } from './CompanyModal'
 import type { Database } from '@/lib/supabase'
@@ -168,10 +169,64 @@ function toIsoFromDateOnly(dateOnly: string | null | undefined) {
 }
 
 function isUnknownColumnError(error: any, columnName?: string) {
-    const message = String(error?.message || '').toLowerCase()
-    if (!message.includes('column') || !message.includes('does not exist')) return false
+    if (!error) return false
+
+    const code = String(error?.code || error?.error?.code || '').trim()
+    const message = String(error?.message || error?.error?.message || '').toLowerCase()
+
+    const hasUnknownColumnSignal = code === '42703'
+        || (
+            message.includes('column')
+            && (
+                message.includes('does not exist')
+                || message.includes('could not find')
+                || message.includes('unknown')
+                || message.includes('schema cache')
+            )
+        )
+
+    if (!hasUnknownColumnSignal) return false
     if (!columnName) return true
     return message.includes(String(columnName).toLowerCase())
+}
+
+function extractUnknownColumnName(error: any): string | null {
+    if (!error) return null
+
+    const message = String(error?.message || error?.error?.message || '')
+    const details = String(error?.details || error?.error?.details || '')
+    const combined = `${message} ${details}`.trim()
+
+    const patterns = [
+        /could not find the ['"]([a-zA-Z0-9_.]+)['"] column/i,
+        /column ['"]?([a-zA-Z0-9_.]+)['"]? does not exist/i,
+        /column ['"]([a-zA-Z0-9_.]+)['"]/i
+    ]
+
+    for (const pattern of patterns) {
+        const match = combined.match(pattern)
+        if (!match?.[1]) continue
+        const token = String(match[1]).replace(/['"]/g, '').trim()
+        if (!token) continue
+        const clean = token.includes('.') ? token.split('.').pop() : token
+        if (clean) return clean
+    }
+
+    return null
+}
+
+function isNotNullConstraintForColumn(error: any, columnName: string) {
+    if (!error) return false
+    const code = String(error?.code || error?.error?.code || '').trim()
+    const details = [
+        String(error?.message || error?.error?.message || ''),
+        String(error?.details || error?.error?.details || ''),
+        String(error?.hint || error?.error?.hint || '')
+    ].join(' ').toLowerCase()
+
+    return code === '23502'
+        && details.includes(String(columnName).toLowerCase())
+        && (details.includes('null value') || details.includes('not-null') || details.includes('not null'))
 }
 
 function parseSnapshotComparableDate(value?: string | null) {
@@ -212,6 +267,7 @@ export default function AdminCompanyDetailView({
     onEditCompany
 }: AdminCompanyDetailViewProps) {
     useBodyScrollLock(isOpen)
+    const router = useRouter()
     const { theme } = useTheme()
     const [clients, setClients] = useState<Cliente[]>([])
     const [loadingClients, setLoadingClients] = useState(false)
@@ -570,6 +626,79 @@ export default function AdminCompanyDetailView({
         }
     }
 
+    const tryApplyLegacyLeadPayloadFallback = (
+        payload: Record<string, any>,
+        error: any,
+        removedUnknownColumns: Set<string>,
+        appliedLegacyDefaults: Set<string>
+    ) => {
+        const unknownColumn = extractUnknownColumnName(error)
+        if (
+            unknownColumn
+            && Object.prototype.hasOwnProperty.call(payload, unknownColumn)
+        ) {
+            delete payload[unknownColumn]
+            removedUnknownColumns.add(unknownColumn)
+            return true
+        }
+
+        if (
+            isNotNullConstraintForColumn(error, 'valor_implementacion_estimado')
+            && (payload.valor_implementacion_estimado == null || payload.valor_implementacion_estimado === '')
+        ) {
+            payload.valor_implementacion_estimado = 0
+            appliedLegacyDefaults.add('valor_implementacion_estimado')
+            return true
+        }
+
+        if (
+            isNotNullConstraintForColumn(error, 'valor_estimado')
+            && (payload.valor_estimado == null || payload.valor_estimado === '')
+        ) {
+            payload.valor_estimado = 0
+            appliedLegacyDefaults.add('valor_estimado')
+            return true
+        }
+
+        return false
+    }
+
+    const executeLeadMutationWithCompatibility = async (
+        initialPayload: Record<string, any>,
+        mutate: (payload: Record<string, any>) => Promise<any>
+    ) => {
+        const candidatePayload: Record<string, any> = { ...initialPayload }
+        const removedUnknownColumns = new Set<string>()
+        const appliedLegacyDefaults = new Set<string>()
+        let response: any = null
+
+        for (let attempt = 0; attempt < 24; attempt += 1) {
+            response = await mutate(candidatePayload)
+            if (!response?.error) break
+
+            const canRetry = tryApplyLegacyLeadPayloadFallback(
+                candidatePayload,
+                response.error,
+                removedUnknownColumns,
+                appliedLegacyDefaults
+            )
+            if (!canRetry) break
+        }
+
+        if (removedUnknownColumns.size > 0 || appliedLegacyDefaults.size > 0) {
+            console.warn('Quick lead payload compatibility fallback applied.', {
+                removedUnknownColumns: Array.from(removedUnknownColumns),
+                appliedLegacyDefaults: Array.from(appliedLegacyDefaults)
+            })
+        }
+
+        return {
+            response,
+            removedUnknownColumns: Array.from(removedUnknownColumns),
+            appliedLegacyDefaults: Array.from(appliedLegacyDefaults)
+        }
+    }
+
     const handleQuickLeadSave = async (leadData: ClientData) => {
         setQuickActionError(null)
         const { data: authRes, error: authError } = await supabase.auth.getUser()
@@ -639,33 +768,33 @@ export default function AdminCompanyDetailView({
                 payload.loss_recorded_by = leadData.loss_recorded_by || currentUser.id
             }
 
-            let insertResult = await (supabase.from('clientes') as any)
-                .insert([payload])
-                .select()
-            if (insertResult?.error && isUnknownColumnError(insertResult.error, 'sede_objetivo')) {
-                const fallbackPayload = { ...payload }
-                delete fallbackPayload.sede_objetivo
-                insertResult = await (supabase.from('clientes') as any)
-                    .insert([fallbackPayload])
+            const insertCompatResult = await executeLeadMutationWithCompatibility(
+                payload,
+                (candidatePayload) => (supabase.from('clientes') as any)
+                    .insert([candidatePayload])
                     .select()
-            }
-            const { data: insertedRows, error: insertError } = insertResult
+            )
+            const { data: insertedRows, error: insertError } = insertCompatResult.response || {}
             if (insertError) throw insertError
             const inserted = Array.isArray(insertedRows) ? insertedRows[0] : null
             if (!inserted?.id) throw new Error('No se pudo confirmar el lead creado')
             const leadId = Number(inserted.id)
 
             if (isWon) {
-                const { error: wonUpdateError } = await (supabase.from('clientes') as any)
-                    .update({
+                const wonUpdateCompatResult = await executeLeadMutationWithCompatibility(
+                    {
                         etapa: 'Cerrado Ganado',
                         valor_estimado: leadData.valor_estimado,
                         valor_real_cierre: realClosureValue,
                         valor_implementacion_estimado: leadData.valor_implementacion_estimado ?? 0,
                         valor_implementacion_real_cierre: realImplementationValue,
                         closed_at_real: toIsoFromDateOnly(leadData.closed_at_real) || new Date().toISOString()
-                    })
-                    .eq('id', leadId)
+                    },
+                    (candidatePayload) => (supabase.from('clientes') as any)
+                        .update(candidatePayload)
+                        .eq('id', leadId)
+                )
+                const wonUpdateError = wonUpdateCompatResult.response?.error
                 if (wonUpdateError) throw wonUpdateError
                 try {
                     await (supabase.rpc as any)('refresh_seller_badges_for_lead', { p_lead_id: leadId })
@@ -1466,6 +1595,20 @@ export default function AdminCompanyDetailView({
             if (stage === 'future_lead_opportunity') return 'Futuro Lead'
             return stage || 'Sin etapa'
         }
+        const formatMeetingTypeLabel = (rawMeetingType: unknown) => {
+            const normalized = String(rawMeetingType || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, '_')
+            if (!normalized) return ''
+            if (normalized === 'visita_empresa' || normalized === 'visita_a_empresa') return 'Visita a empresa'
+            if (normalized === 'presencial') return 'Presencial'
+            if (normalized === 'llamada') return 'Llamada'
+            if (normalized === 'video') return 'Video'
+            return String(rawMeetingType || '').trim()
+        }
 
         leadHistoryEntries.forEach((historyRow) => {
             const leadId = historyRow.lead_id == null ? null : Number(historyRow.lead_id)
@@ -1501,7 +1644,7 @@ export default function AdminCompanyDetailView({
                         : status === 'not_held' ? 'No realizada'
                             : status === 'cancelled' ? 'Cancelada'
                                 : 'Agendada'
-            const meetingType = String((meeting as any)?.meeting_type || '').trim()
+            const meetingType = formatMeetingTypeLabel((meeting as any)?.meeting_type)
             entries.push({
                 id: `meeting-${String((meeting as any)?.id || `${normalizedLeadId || 'lead'}-${String((meeting as any)?.start_time || 'no-time')}`)}`,
                 kind: 'meeting',
@@ -2540,9 +2683,18 @@ export default function AdminCompanyDetailView({
                     isOpen={isClientDetailOpen}
                     onClose={() => setIsClientDetailOpen(false)}
                     client={selectedClient as any}
-                    onEditClient={() => { }} // Read-only for now in this view
+                    onEditClient={(lead) => {
+                        const leadId = Number((lead as any)?.id || 0)
+                        if (!Number.isFinite(leadId) || leadId <= 0) return
+                        setIsClientDetailOpen(false)
+                        router.push(`/clientes?editLeadId=${leadId}`)
+                    }}
                     onEditCompany={() => { }}
-                    onEmailClick={() => { }} // Added missing prop
+                    onEmailClick={(email) => {
+                        if (!email) return
+                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+                        window.open(gmailUrl, '_blank')
+                    }}
                 />
             )}
 
