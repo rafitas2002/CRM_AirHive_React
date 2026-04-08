@@ -1,14 +1,17 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import { MeetingWithUrgency } from '@/lib/confirmationService'
+import type { MeetingWithUrgency } from '@/lib/confirmationService'
+import { meetingIncludesUser } from '@/lib/meetingParticipantUtils'
 
 interface CalendarWeekViewProps {
     meetings: MeetingWithUrgency[]
-    onEditMeeting: (meeting: any) => void
+    onEditMeeting: (meeting: MeetingWithUrgency) => void
     isEditMode: boolean
-    getUrgencyColor: (level: string) => any
-    getStageColor: (stage: string) => any
+    getUrgencyColor: (level: string) => { bg: string; border: string; text: string; label: string }
+    currentUserId?: string | null
+    currentUserEmail?: string | null
+    currentUsername?: string | null
 }
 
 export default function CalendarWeekView({
@@ -16,7 +19,9 @@ export default function CalendarWeekView({
     onEditMeeting,
     isEditMode,
     getUrgencyColor,
-    getStageColor
+    currentUserId,
+    currentUserEmail,
+    currentUsername
 }: CalendarWeekViewProps) {
     // Calculate current week days (Sun-Sat)
     const weekDays = useMemo(() => {
@@ -84,22 +89,29 @@ export default function CalendarWeekView({
                                     <div key={hour} className='h-20 border-b border-gray-100 group hover:bg-gray-50/50 transition-colors'>
                                         {dayMeetings.map(mtg => {
                                             const urgency = getUrgencyColor(mtg.urgencyLevel || 'scheduled')
+                                            const isUserMeeting = meetingIncludesUser(mtg, currentUserId, currentUserEmail, currentUsername)
                                             return (
                                                 <div
                                                     key={mtg.id}
-                                                    onClick={() => onEditMeeting(mtg)}
-                                                    className={`absolute left-1 right-1 p-1.5 rounded-lg border-2 shadow-sm cursor-pointer hover:scale-[1.02] transition-transform z-10 overflow-hidden ${urgency.bg} ${urgency.text} ${urgency.border}`}
+                                                    onClick={() => (isEditMode ? onEditMeeting(mtg) : undefined)}
+                                                    className={`absolute left-1 right-1 p-1.5 rounded-lg border-2 shadow-sm transition-transform z-10 overflow-hidden ${isEditMode ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${urgency.bg} ${urgency.text} ${urgency.border}`}
                                                     style={{
                                                         top: `${(hours.indexOf(hour) * 80) + (new Date(mtg.start_time).getMinutes() / 60 * 80)}px`,
                                                         height: `${(mtg.duration_minutes / 60) * 80 - 2}px`,
-                                                        minHeight: '40px'
+                                                        minHeight: '40px',
+                                                        boxShadow: isUserMeeting ? 'inset 4px 0 0 #2048FF' : 'inset 4px 0 0 #f59e0b',
+                                                        borderColor: isUserMeeting ? 'rgba(37,99,235,0.65)' : 'rgba(245,158,11,0.62)'
                                                     }}
+                                                    title={isUserMeeting ? 'Incluido en esta junta' : 'No incluido en esta junta'}
                                                 >
                                                     <p className='text-[9px] font-black leading-tight truncate uppercase opacity-80'>
                                                         {new Date(mtg.start_time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                                                     </p>
                                                     <p className='text-[10px] font-black leading-tight mt-0.5 break-words line-clamp-2'>
                                                         {mtg.title}
+                                                    </p>
+                                                    <p className='text-[8px] font-black uppercase tracking-wider mt-1 opacity-80'>
+                                                        {isUserMeeting ? 'Incluido' : 'No incluido'}
                                                     </p>
 
                                                     {mtg.notes?.includes('[MEET_LINK]:') && (

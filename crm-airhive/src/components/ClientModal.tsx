@@ -263,6 +263,14 @@ type AgeRangeCatalogItem = {
     is_active?: boolean
 }
 
+type LeadAdditionalContactDraft = {
+    id: string
+    full_name: string
+    email: string
+    phone: string
+    job_title: string
+}
+
 const PROSPECT_DECISION_ROLE_OPTIONS: Array<{ value: NonNullable<ClientData['prospect_decision_role']>; label: string }> = [
     { value: 'decision_maker', label: 'Tomador/a de decisión' },
     { value: 'influencer', label: 'Influenciador/a' },
@@ -283,6 +291,62 @@ function findAgeRangeIdForAge(age: number | null | undefined, ranges: AgeRangeCa
         }
     }
     return null
+}
+
+function createTempContactId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function normalizeContactName(value: unknown) {
+    return String(value || '').trim()
+}
+
+function normalizeContactEmail(value: unknown) {
+    return String(value || '').trim().toLowerCase()
+}
+
+function normalizeContactPhone(value: unknown) {
+    return String(value || '').replace(/\D/g, '').slice(0, 15)
+}
+
+function buildContactKey(name: unknown, email: unknown, phone: unknown) {
+    return `${normalizeComparisonText(name)}|${normalizeContactEmail(email)}|${normalizeContactPhone(phone)}`
+}
+
+function normalizeAdditionalContacts(value: LeadAdditionalContactDraft[]) {
+    const seen = new Set<string>()
+    const contacts: LeadAdditionalContactDraft[] = []
+    for (const raw of value || []) {
+        const fullName = normalizeContactName(raw?.full_name)
+        const email = normalizeContactEmail(raw?.email)
+        const phone = normalizeContactPhone(raw?.phone)
+        const jobTitle = String(raw?.job_title || '').trim()
+        if (!fullName) continue
+        const key = buildContactKey(fullName, email, phone)
+        if (seen.has(key)) continue
+        seen.add(key)
+        contacts.push({
+            id: String(raw?.id || createTempContactId()),
+            full_name: fullName,
+            email,
+            phone,
+            job_title: jobTitle
+        })
+    }
+    return contacts
+}
+
+function buildAdditionalContactsSignature(value: LeadAdditionalContactDraft[]) {
+    return normalizeAdditionalContacts(value)
+        .map((row) => [
+            normalizeComparisonText(row.full_name),
+            normalizeContactEmail(row.email),
+            normalizeContactPhone(row.phone),
+            normalizeComparisonText(row.job_title)
+        ].join('|'))
+        .sort()
+        .join('::')
 }
 
 export default function ClientModal({
@@ -340,6 +404,17 @@ export default function ClientModal({
     })
     const [phoneError, setPhoneError] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [additionalCompanyContacts, setAdditionalCompanyContacts] = useState<LeadAdditionalContactDraft[]>([])
+    const [newCompanyContactDraft, setNewCompanyContactDraft] = useState<LeadAdditionalContactDraft>({
+        id: '',
+        full_name: '',
+        email: '',
+        phone: '',
+        job_title: ''
+    })
+    const [initialAdditionalCompanyContacts, setInitialAdditionalCompanyContacts] = useState<LeadAdditionalContactDraft[]>([])
+    const [companyContactsLoading, setCompanyContactsLoading] = useState(false)
+    const [initialAdditionalContactsSignature, setInitialAdditionalContactsSignature] = useState('')
     const wasOpen = useRef(false)
 
     // Probability editability state
@@ -380,6 +455,16 @@ export default function ClientModal({
 
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
+            setAdditionalCompanyContacts([])
+            setInitialAdditionalCompanyContacts([])
+            setInitialAdditionalContactsSignature('')
+            setNewCompanyContactDraft({
+                id: '',
+                full_name: '',
+                email: '',
+                phone: '',
+                job_title: ''
+            })
             if (initialData) {
                 setFormData({
                     ...initialData,
@@ -979,6 +1064,61 @@ export default function ClientModal({
         [companies, formData.empresa_id]
     )
 
+    useEffect(() => {
+        if (!isOpen) return
+        const companyId = String(formData.empresa_id || '').trim()
+        if (!companyId) {
+            setAdditionalCompanyContacts([])
+            setInitialAdditionalCompanyContacts([])
+            setInitialAdditionalContactsSignature('')
+            return
+        }
+
+        let cancelled = false
+        const loadCompanyContacts = async () => {
+            setCompanyContactsLoading(true)
+            try {
+                const { data, error } = await (supabase.from('company_contacts') as any)
+                    .select('id, full_name, email, phone, job_title, is_active')
+                    .eq('empresa_id', companyId)
+                    .eq('is_active', true)
+                    .order('is_primary', { ascending: false })
+                    .order('created_at', { ascending: true })
+
+                if (cancelled) return
+                if (error) {
+                    console.warn('No se pudieron cargar contactos de empresa para lead modal:', error)
+                    setAdditionalCompanyContacts([])
+                    return
+                }
+
+                const primaryKey = buildContactKey(formData.nombre, formData.email, formData.telefono)
+                const loadedAdditional = ((data || []) as any[])
+                    .map((row) => ({
+                        id: String(row?.id || createTempContactId()),
+                        full_name: String(row?.full_name || '').trim(),
+                        email: String(row?.email || '').trim(),
+                        phone: String(row?.phone || '').trim(),
+                        job_title: String(row?.job_title || '').trim()
+                    }))
+                    .filter((row) => row.full_name)
+                    .filter((row) => buildContactKey(row.full_name, row.email, row.phone) !== primaryKey)
+
+                const normalizedLoadedContacts = normalizeAdditionalContacts(loadedAdditional)
+                setAdditionalCompanyContacts(normalizedLoadedContacts)
+                setInitialAdditionalCompanyContacts(normalizedLoadedContacts)
+                setInitialAdditionalContactsSignature(buildAdditionalContactsSignature(normalizedLoadedContacts))
+            } finally {
+                if (!cancelled) setCompanyContactsLoading(false)
+            }
+        }
+
+        void loadCompanyContacts()
+        return () => {
+            cancelled = true
+        }
+    }, [isOpen, formData.empresa_id, supabase])
+
     const buildPreferredProjectSitesForCompany = (
         company: {
             ubicacion?: string | null
@@ -1177,6 +1317,10 @@ export default function ClientModal({
             sameProjectValuesMap((formData as any).proyectos_implementados_reales_valores, (initialData as any).proyectos_implementados_reales_valores)
         )
     }, [mode, initialData, formData])
+    const additionalContactsChanged = useMemo(
+        () => buildAdditionalContactsSignature(additionalCompanyContacts) !== initialAdditionalContactsSignature,
+        [additionalCompanyContacts, initialAdditionalContactsSignature]
+    )
 
     const handleCompanySelect = (companyId: string) => {
         lastLoadedProjectsScopeRef.current = null
@@ -1398,9 +1542,142 @@ export default function ClientModal({
         return true
     }
 
+    const addAdditionalCompanyContact = () => {
+        const candidate = normalizeAdditionalContacts([{
+            id: createTempContactId(),
+            full_name: newCompanyContactDraft.full_name,
+            email: newCompanyContactDraft.email,
+            phone: newCompanyContactDraft.phone,
+            job_title: newCompanyContactDraft.job_title
+        }])
+
+        if (candidate.length === 0) {
+            alert('Escribe al menos el nombre del contacto adicional.')
+            return
+        }
+
+        setAdditionalCompanyContacts((prev) => normalizeAdditionalContacts([...prev, ...candidate]))
+        setNewCompanyContactDraft({
+            id: '',
+            full_name: '',
+            email: '',
+            phone: '',
+            job_title: ''
+        })
+    }
+
+    const removeAdditionalCompanyContact = (contactId: string) => {
+        setAdditionalCompanyContacts((prev) => prev.filter((row) => row.id !== contactId))
+    }
+
+    const syncCompanyContactsFromLeadModal = async (
+        companyId: string,
+        contacts: LeadAdditionalContactDraft[]
+    ) => {
+        const safeCompanyId = String(companyId || '').trim()
+        if (!safeCompanyId) return
+
+        const leadPrimaryName = normalizeContactName(formData.nombre)
+        const leadPrimaryEmail = normalizeContactEmail(formData.email)
+        const leadPrimaryPhone = normalizeContactPhone(formData.telefono)
+        const normalizedExtraContacts = normalizeAdditionalContacts(contacts || [])
+
+        const allCandidates = normalizeAdditionalContacts([
+            {
+                id: createTempContactId(),
+                full_name: leadPrimaryName,
+                email: leadPrimaryEmail,
+                phone: leadPrimaryPhone,
+                job_title: ''
+            },
+            ...normalizedExtraContacts
+        ])
+
+        if (allCandidates.length === 0) return
+
+        const { data: existingRows, error: existingError } = await (supabase.from('company_contacts') as any)
+            .select('id, full_name, email, phone, job_title, is_primary, is_active')
+            .eq('empresa_id', safeCompanyId)
+            .eq('is_active', true)
+
+        if (existingError) {
+            console.warn('No se pudo consultar company_contacts para sincronizar contactos de lead:', existingError)
+            return
+        }
+
+        const existingByKey = new Map<string, any>()
+        for (const row of (existingRows || []) as any[]) {
+            const key = buildContactKey(row?.full_name, row?.email, row?.phone)
+            if (!key) continue
+            existingByKey.set(key, row)
+        }
+
+        const primaryKey = buildContactKey(leadPrimaryName, leadPrimaryEmail, leadPrimaryPhone)
+
+        for (const candidate of allCandidates) {
+            const key = buildContactKey(candidate.full_name, candidate.email, candidate.phone)
+            const existing = existingByKey.get(key)
+            const shouldBePrimary = key === primaryKey
+
+            if (existing?.id) {
+                const patch: Record<string, any> = {}
+                if (!String(existing.email || '').trim() && candidate.email) patch.email = candidate.email
+                if (!String(existing.phone || '').trim() && candidate.phone) patch.phone = candidate.phone
+                if (!String(existing.job_title || '').trim() && candidate.job_title) patch.job_title = candidate.job_title
+                if (shouldBePrimary && !existing.is_primary) patch.is_primary = true
+                if (Object.keys(patch).length > 0) {
+                    const { error: updateError } = await (supabase.from('company_contacts') as any)
+                        .update(patch)
+                        .eq('id', existing.id)
+                    if (updateError) {
+                        console.warn('No se pudo actualizar contacto existente de empresa:', updateError)
+                    }
+                }
+                continue
+            }
+
+            const { error: insertError } = await (supabase.from('company_contacts') as any)
+                .insert({
+                    empresa_id: safeCompanyId,
+                    full_name: candidate.full_name,
+                    email: candidate.email || null,
+                    phone: candidate.phone || null,
+                    job_title: candidate.job_title || null,
+                    is_primary: shouldBePrimary,
+                    source: 'manual',
+                    created_by: currentUser?.id || null
+                })
+
+            if (insertError) {
+                console.warn('No se pudo insertar contacto de empresa desde lead modal:', insertError)
+            }
+        }
+
+        // If user removed previously loaded additional contacts, deactivate them in company_contacts.
+        const currentAdditionalKeys = new Set(
+            normalizedExtraContacts.map((row) => buildContactKey(row.full_name, row.email, row.phone))
+        )
+        const removedAdditionalIds = initialAdditionalCompanyContacts
+            .filter((row) => {
+                const key = buildContactKey(row.full_name, row.email, row.phone)
+                return !!row.id && !!key && !currentAdditionalKeys.has(key)
+            })
+            .map((row) => String(row.id))
+
+        for (const contactId of removedAdditionalIds) {
+            const { error: deactivateError } = await (supabase.from('company_contacts') as any)
+                .update({ is_active: false, is_primary: false })
+                .eq('id', contactId)
+                .eq('empresa_id', safeCompanyId)
+            if (deactivateError) {
+                console.warn('No se pudo desactivar contacto removido desde lead modal:', deactivateError)
+            }
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!formData.empresa_id) {
+        if (!formData.empresa_id && mode !== 'edit') {
             alert('Debes seleccionar una empresa de la lista.')
             return
         }
@@ -1410,7 +1687,9 @@ export default function ClientModal({
             return
         }
 
-        if (mode === 'edit' && !hasLeadChanges) {
+        const normalizedAdditionalCompanyContacts = normalizeAdditionalContacts(additionalCompanyContacts)
+
+        if (mode === 'edit' && !hasLeadChanges && !additionalContactsChanged) {
             onClose()
             return
         }
@@ -1459,13 +1738,19 @@ export default function ClientModal({
 
         if (enableLeadAssignees) {
             const normalizedAssignedUserIds = uniqueStringIds((formData as any).assigned_user_ids)
-            if (normalizedAssignedUserIds.length === 0) {
+            const fallbackAssignedUserIds = uniqueStringIds([
+                ...normalizedAssignedUserIds,
+                ...(mode === 'edit' ? uniqueStringIds(defaultAssignedUserIds) : []),
+                String((initialData as any)?.owner_id || ''),
+                String((formData as any)?.owner_id || '')
+            ])
+            if (fallbackAssignedUserIds.length === 0) {
                 alert('Debes asignar al menos un usuario interno al lead.')
                 return
             }
             normalizedFormData = {
                 ...normalizedFormData,
-                assigned_user_ids: normalizedAssignedUserIds
+                assigned_user_ids: fallbackAssignedUserIds
             }
         } else {
             delete (normalizedFormData as any).assigned_user_ids
@@ -1523,6 +1808,15 @@ export default function ClientModal({
         setIsSubmitting(true)
         try {
             await onSave(normalizedFormData)
+            const companyIdForContacts = String(
+                normalizedFormData.empresa_id
+                || formData.empresa_id
+                || initialData?.empresa_id
+                || ''
+            ).trim()
+            if (companyIdForContacts) {
+                await syncCompanyContactsFromLeadModal(companyIdForContacts, normalizedAdditionalCompanyContacts)
+            }
             onClose()
         } catch (error) {
             console.error('Error saving client:', error)
@@ -1729,7 +2023,7 @@ export default function ClientModal({
                         </div>
 
                         <div className='space-y-4'>
-                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Nombre del Prospecto *</label>
+                            <label className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-secondary)', opacity: 0.6 }}>Nombre del Contacto Principal *</label>
                             <input
                                 required
                                 type="text"
@@ -2037,12 +2331,109 @@ export default function ClientModal({
                     <div className='space-y-6 pt-6 border-t' style={{ borderColor: 'var(--card-border)' }}>
                         <div className='flex items-center gap-2'>
                             <div className='w-1 h-4 bg-blue-500 rounded-full'></div>
-                            <h3 className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Canales de Comunicación</h3>
+                            <h3 className='text-[10px] font-black uppercase tracking-widest' style={{ color: 'var(--text-primary)' }}>Contacto Principal + Contactos de Empresa</h3>
+                        </div>
+
+                        <div className='rounded-2xl border p-4 space-y-3' style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
+                            <div className='flex items-center justify-between gap-3 flex-wrap'>
+                                <p className='text-[10px] font-black uppercase tracking-[0.14em]' style={{ color: 'var(--text-secondary)' }}>
+                                    Contactos adicionales de la empresa
+                                </p>
+                                {companyContactsLoading && (
+                                    <span className='text-[10px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                        Cargando contactos...
+                                    </span>
+                                )}
+                            </div>
+
+                            <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                Estos contactos se guardan en la empresa cliente y después aparecen al agendar juntas como participantes externos.
+                            </p>
+
+                            <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                                <input
+                                    type='text'
+                                    value={newCompanyContactDraft.full_name}
+                                    onChange={(e) => setNewCompanyContactDraft((prev) => ({ ...prev, full_name: e.target.value }))}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='Nombre del contacto'
+                                />
+                                <input
+                                    type='text'
+                                    value={newCompanyContactDraft.job_title}
+                                    onChange={(e) => setNewCompanyContactDraft((prev) => ({ ...prev, job_title: e.target.value }))}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='Puesto / área (opcional)'
+                                />
+                                <input
+                                    type='email'
+                                    value={newCompanyContactDraft.email}
+                                    onChange={(e) => setNewCompanyContactDraft((prev) => ({ ...prev, email: e.target.value }))}
+                                    className='w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all'
+                                    style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                    placeholder='Correo (opcional)'
+                                />
+                                <div className='flex gap-2'>
+                                    <input
+                                        type='text'
+                                        value={newCompanyContactDraft.phone}
+                                        onChange={(e) => {
+                                            const phone = e.target.value.replace(/\D/g, '').slice(0, 10)
+                                            setNewCompanyContactDraft((prev) => ({ ...prev, phone }))
+                                        }}
+                                        className='flex-1 px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-xs transition-all'
+                                        style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                        placeholder='WhatsApp (opcional)'
+                                    />
+                                    <button
+                                        type='button'
+                                        onClick={addAdditionalCompanyContact}
+                                        className='px-4 py-3 rounded-xl border font-black text-[10px] uppercase tracking-wider cursor-pointer'
+                                        style={{ background: 'color-mix(in srgb, #2048FF 10%, var(--card-bg))', borderColor: 'color-mix(in srgb, #2048FF 32%, var(--card-border))', color: 'var(--text-primary)' }}
+                                    >
+                                        Agregar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {additionalCompanyContacts.length > 0 && (
+                                <div className='flex flex-wrap gap-2 pt-1'>
+                                    {additionalCompanyContacts.map((contact) => (
+                                        <div
+                                            key={contact.id}
+                                            className='inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold'
+                                            style={{
+                                                background: 'color-mix(in srgb, #2048FF 10%, var(--card-bg))',
+                                                borderColor: 'color-mix(in srgb, #2048FF 30%, var(--card-border))',
+                                                color: 'var(--text-primary)'
+                                            }}
+                                        >
+                                            <span>
+                                                {contact.full_name}
+                                                {contact.job_title ? ` · ${contact.job_title}` : ''}
+                                                {contact.email ? ` · ${contact.email}` : ''}
+                                                {contact.phone ? ` · ${contact.phone}` : ''}
+                                            </span>
+                                            <button
+                                                type='button'
+                                                onClick={() => removeAdditionalCompanyContact(contact.id)}
+                                                className='text-[10px] font-black uppercase tracking-wide cursor-pointer'
+                                                style={{ color: 'var(--text-secondary)' }}
+                                                title='Quitar contacto adicional'
+                                            >
+                                                Quitar
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Correo Electrónico</label>
+                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Correo Electrónico (Contacto Principal)</label>
                                 <input
                                     type='email'
                                     value={formData.email}
@@ -2054,7 +2445,7 @@ export default function ClientModal({
                             </div>
 
                             <div className='space-y-2'>
-                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono WhatsApp</label>
+                                <label className='text-[10px] font-black text-blue-500 uppercase tracking-widest'>Teléfono WhatsApp (Contacto Principal)</label>
                                 <div className='relative'>
                                     <input
                                         type='text'
@@ -2603,7 +2994,7 @@ export default function ClientModal({
                         <button
                             type='submit'
                             form='client-form'
-                            disabled={isSubmitting || !formData.empresa_id}
+                            disabled={isSubmitting || (mode !== 'edit' && !formData.empresa_id)}
                             className='ah-modal-btn ah-modal-btn-primary'
                         >
                             {isSubmitting
@@ -2612,7 +3003,7 @@ export default function ClientModal({
                                     ? '🚀 Confirmar Ascenso'
                                     : mode === 'create'
                                         ? 'Crear Lead'
-                                        : hasLeadChanges ? 'Guardar Cambios' : 'Cerrar'}
+                                        : (hasLeadChanges || additionalContactsChanged) ? 'Guardar Cambios' : 'Cerrar'}
                         </button>
                     </div>
                 </div>

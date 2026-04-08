@@ -6,7 +6,6 @@ import {
     getPendingConfirmations,
     confirmMeeting,
     getPendingAlerts,
-    markAlertAsSent,
     dismissAlert
 } from '@/lib/confirmationService'
 import { freezeMeetingProbability } from '@/lib/meetingsService'
@@ -97,28 +96,34 @@ export default function GlobalMeetingHandler() {
 
             // 2. Check for due alerts
             const alerts = await getPendingAlerts(userId)
-            if (alerts.length > 0) {
-                setActiveAlerts((prev: any[]) => {
-                    const newAlerts = alerts.filter((a: any) => !prev.some((p: any) => p.id === a.id))
-                    if (newAlerts.length === 0) return prev
+            setActiveAlerts((prev: any[]) => {
+                const prevIds = new Set(prev.map((item: any) => String(item?.id || '')))
+                const incomingById = new Map(
+                    alerts.map((item: any) => [String(item?.id || ''), item])
+                )
 
-                    newAlerts.forEach((alert: any) => {
-                        if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'granted') {
-                            const title = alert.meetings?.title || 'Junta Próxima'
-                            const timeText = alert.alert_type === '5min' ? '5 minutos' :
-                                alert.alert_type === '15min' ? '15 minutos' :
-                                    alert.alert_type === '2h' ? '2 horas' : '24 horas'
+                const persisted = prev
+                    .filter((item: any) => incomingById.has(String(item?.id || '')))
+                    .map((item: any) => incomingById.get(String(item?.id || '')) || item)
 
-                            new Notification('Recordatorio de Junta', {
-                                body: `${title} - En ${timeText}\nEmpresa: ${alert.meetings?.clientes?.empresa || 'N/A'}`,
-                                icon: '/favicon.ico'
-                            })
-                        }
-                    })
+                const newAlerts = alerts.filter((item: any) => !prevIds.has(String(item?.id || '')))
 
-                    return [...prev, ...newAlerts]
+                newAlerts.forEach((alert: any) => {
+                    if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'granted') {
+                        const title = alert.meetings?.title || 'Junta Próxima'
+                        const timeText = alert.alert_type === '5min' ? '5 minutos' :
+                            alert.alert_type === '15min' ? '15 minutos' :
+                                alert.alert_type === '2h' ? '2 horas' : '24 horas'
+
+                        new Notification('Recordatorio de Junta', {
+                            body: `${title} - En ${timeText}\nEmpresa: ${alert.meetings?.clientes?.empresa || 'N/A'}`,
+                            icon: '/favicon.ico'
+                        })
+                    }
                 })
-            }
+
+                return [...persisted, ...newAlerts]
+            })
         } catch (error) {
             console.error('Error checking global meeting updates:', error)
         }

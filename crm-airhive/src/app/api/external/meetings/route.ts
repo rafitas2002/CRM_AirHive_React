@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 
 const AGENT_API_KEY = process.env.AGENT_API_KEY
+type ExternalMeetingType = 'presencial' | 'visita_empresa' | 'llamada' | 'video'
+
+function normalizeMeetingType(value: unknown): ExternalMeetingType {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+
+    if (normalized === 'visita_a_empresa' || normalized === 'visita_empresa') return 'visita_empresa'
+    if (normalized === 'presencial') return 'presencial'
+    if (normalized === 'llamada') return 'llamada'
+    if (normalized === 'video') return 'video'
+    return 'llamada'
+}
 
 export async function POST(request: Request) {
     const apiKey = request.headers.get('x-api-key')
@@ -41,7 +57,7 @@ export async function POST(request: Request) {
                 title,
                 start_time,
                 duration_minutes: duration_minutes || 60,
-                meeting_type: meeting_type || 'llamada',
+                meeting_type: normalizeMeetingType(meeting_type),
                 notes,
                 attendees: Array.isArray(attendees) ? attendees : null,
                 primary_company_contact_id: primary_company_contact_id || null,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
 import { Handshake, Building2, ChevronDown, Search, ShieldCheck, XCircle, TrendingDown, AlertTriangle, BarChart3 } from 'lucide-react'
@@ -229,6 +230,7 @@ function calculateLossAnalyticsKpis(rows: LeadLossAnalyticsRow[]): LossAnalytics
 
 export default function ClosedCompaniesPage() {
     const auth = useAuth()
+    const router = useRouter()
     const { theme } = useTheme()
     const [supabase] = useState(() => createClient())
     const [loading, setLoading] = useState(true)
@@ -1559,9 +1561,18 @@ export default function ClosedCompaniesPage() {
                     isOpen={isLossLeadDetailOpen}
                     onClose={() => setIsLossLeadDetailOpen(false)}
                     client={selectedLossLead as any}
-                    onEditClient={() => { }}
+                    onEditClient={(lead) => {
+                        const leadId = Number((lead as any)?.id || 0)
+                        if (!Number.isFinite(leadId) || leadId <= 0) return
+                        setIsLossLeadDetailOpen(false)
+                        router.push('/empresas?view=leads')
+                    }}
                     onEditCompany={() => { }}
-                    onEmailClick={() => { }}
+                    onEmailClick={(email, _name) => {
+                        if (!email) return
+                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`
+                        window.open(gmailUrl, '_blank')
+                    }}
                 />
             )}
         </div>

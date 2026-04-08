@@ -9,6 +9,145 @@ type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
 
 const supabase = createClient()
 
+function isUnknownColumnError(error: any): boolean {
+    if (!error) return false
+    if (String(error?.code || '') === '42703') return true
+    const message = String(error?.message || '').toLowerCase()
+    return message.includes('column') && (
+        message.includes('does not exist')
+        || message.includes('could not find')
+        || message.includes('unknown')
+    )
+}
+
+function isHeldMeetingOutcome(meeting: { status?: string | null; meeting_status?: string | null }): boolean {
+    const meetingStatus = String(meeting?.meeting_status || '').trim().toLowerCase()
+    const status = String(meeting?.status || '').trim().toLowerCase()
+
+    if (meetingStatus === 'held') return true
+    if (meetingStatus === 'not_held' || meetingStatus === 'cancelled') return false
+    return status === 'completed'
+}
+
+async function promoteCompanyAfterFirstHeldMeeting(leadId: number, userId: string) {
+    const safeLeadId = Number(leadId)
+    if (!Number.isFinite(safeLeadId) || safeLeadId <= 0) return
+
+    const { data: leadRow, error: leadError } = await (supabase
+        .from('clientes') as any)
+        .select('id, empresa_id')
+        .eq('id', safeLeadId)
+        .maybeSingle()
+
+    if (leadError || !leadRow?.id) {
+        if (leadError) {
+            console.warn('[confirmMeeting] Could not resolve lead/company for lifecycle promotion:', leadError)
+        }
+        return
+    }
+
+    const companyId = String(leadRow.empresa_id || '').trim()
+    if (!companyId) return
+
+    const { data: companyLeadRows, error: companyLeadsError } = await (supabase
+        .from('clientes') as any)
+        .select('id')
+        .eq('empresa_id', companyId)
+
+    if (companyLeadsError) {
+        console.warn('[confirmMeeting] Could not load company leads for lifecycle promotion:', companyLeadsError)
+        return
+    }
+
+    const companyLeadIds = ((companyLeadRows || []) as Array<{ id: number | string }>)
+        .map((row) => Number(row.id))
+        .filter((id) => Number.isFinite(id))
+
+    if (companyLeadIds.length === 0) return
+
+    const { data: companyMeetingRows, error: companyMeetingsError } = await (supabase
+        .from('meetings') as any)
+        .select('status, meeting_status')
+        .in('lead_id', companyLeadIds)
+
+    if (companyMeetingsError) {
+        console.warn('[confirmMeeting] Could not load company meetings for lifecycle promotion:', companyMeetingsError)
+        return
+    }
+
+    const heldMeetingsCount = ((companyMeetingRows || []) as Array<{ status?: string | null; meeting_status?: string | null }>)
+        .filter((meeting) => isHeldMeetingOutcome(meeting))
+        .length
+
+    if (heldMeetingsCount <= 0) return
+
+    const nowIso = new Date().toISOString()
+    const { data: companyMeta } = await (supabase
+        .from('empresas') as any)
+        .select('first_lead_at, leads_count')
+        .eq('id', companyId)
+        .maybeSingle()
+
+    const existingFirstLeadAtRaw = String((companyMeta as any)?.first_lead_at || '').trim()
+    const existingFirstLeadAt = existingFirstLeadAtRaw || null
+    const existingLeadsCount = Number((companyMeta as any)?.leads_count || 0)
+    const normalizedLeadsCount = Number.isFinite(existingLeadsCount) ? existingLeadsCount : 0
+    const nextLeadsCount = Math.max(normalizedLeadsCount, companyLeadIds.length)
+
+    const companyStageUpdateAttempts: Array<Record<string, any>> = [
+        {
+            lifecycle_stage: 'lead',
+            updated_by: userId,
+            first_lead_at: existingFirstLeadAt || nowIso,
+            last_lead_at: nowIso,
+            leads_count: nextLeadsCount
+        },
+        {
+            lifecycle_stage: 'lead',
+            first_lead_at: existingFirstLeadAt || nowIso,
+            last_lead_at: nowIso
+        },
+        {
+            lifecycle_stage: 'lead'
+        }
+    ]
+
+    for (const payload of companyStageUpdateAttempts) {
+        const { error } = await (supabase.from('empresas') as any)
+            .update(payload)
+            .eq('id', companyId)
+
+        if (!error) break
+        if (!isUnknownColumnError(error)) {
+            console.warn('[confirmMeeting] Failed to promote company lifecycle after held meeting:', error)
+            break
+        }
+    }
+
+    const suspectSyncAttempts: Array<Record<string, any>> = [
+        {
+            is_converted: true,
+            converted_at: nowIso,
+            converted_to_lead_id: safeLeadId,
+            updated_by: userId
+        },
+        { is_converted: true }
+    ]
+
+    for (const payload of suspectSyncAttempts) {
+        const query = (supabase.from('pre_leads') as any)
+            .update(payload)
+            .eq('empresa_id', companyId)
+            .eq('is_converted', false)
+        const { error } = await query
+        if (!error) break
+        if (!isUnknownColumnError(error)) {
+            console.warn('[confirmMeeting] Failed syncing suspect conversion after held meeting:', error)
+            break
+        }
+    }
+}
+
 /**
  * Meeting Confirmation Service
  * Handles post-meeting confirmation flow and conditional snapshot creation
@@ -362,6 +501,14 @@ export async function confirmMeeting(
             throw new Error(`Error al desbloquear el lead: ${leadUpdateError.message}`)
         }
 
+        if (wasHeld) {
+            try {
+                await promoteCompanyAfterFirstHeldMeeting(meeting.lead_id, userId)
+            } catch (promotionError) {
+                console.warn('[confirmMeeting] Meeting confirmed, but company promotion fallback failed:', promotionError)
+            }
+        }
+
         console.log('✨ confirmMeeting finished successfully')
         return {
             success: true,
@@ -455,6 +602,8 @@ export async function getPendingConfirmations(userId: string) {
 
 export async function getPendingAlerts(userId: string) {
     try {
+        const nowIso = new Date().toISOString()
+        const nowMs = new Date(nowIso).getTime()
         const { data, error } = await (supabase
             .from('meeting_alerts') as any)
             .select(`
@@ -463,6 +612,8 @@ export async function getPendingAlerts(userId: string) {
                     id,
                     title,
                     start_time,
+                    status,
+                    meeting_status,
                     lead_id,
                     clientes:lead_id (
                         empresa,
@@ -473,10 +624,83 @@ export async function getPendingAlerts(userId: string) {
             .eq('user_id', userId)
             .eq('sent', false)
             .eq('dismissed', false)
-            .lte('alert_time', new Date().toISOString())
+            .lte('alert_time', nowIso)
             .order('alert_time', { ascending: true })
 
-        return data || []
+        if (error) {
+            console.error('Error fetching pending alerts:', error)
+            return []
+        }
+
+        const rows = Array.isArray(data) ? data : []
+        if (rows.length === 0) return []
+
+        const toleranceMs = 90 * 1000
+        const staleAlertIds: string[] = []
+        const validAlerts = rows.filter((alert: any) => {
+            const meeting = alert?.meetings
+            if (!meeting?.id || !meeting?.start_time) {
+                staleAlertIds.push(String(alert?.id || ''))
+                return false
+            }
+
+            const meetingStatus = String(meeting?.meeting_status || '').trim().toLowerCase()
+            const status = String(meeting?.status || '').trim().toLowerCase()
+            const isMeetingStillScheduled = status === 'scheduled'
+                && (meetingStatus === 'scheduled' || meetingStatus === 'pending_confirmation' || !meetingStatus)
+            if (!isMeetingStillScheduled) {
+                staleAlertIds.push(String(alert?.id || ''))
+                return false
+            }
+
+            const meetingStartMs = new Date(String(meeting.start_time)).getTime()
+            const alertTimeMs = new Date(String(alert?.alert_time || '')).getTime()
+            if (!Number.isFinite(meetingStartMs) || !Number.isFinite(alertTimeMs)) {
+                staleAlertIds.push(String(alert?.id || ''))
+                return false
+            }
+
+            const alertType = String(alert?.alert_type || '').trim().toLowerCase()
+            let expectedAlertMs: number | null = null
+            if (alertType === '24h') expectedAlertMs = meetingStartMs - (24 * 60 * 60 * 1000)
+            if (alertType === '2h') expectedAlertMs = meetingStartMs - (2 * 60 * 60 * 1000)
+            if (alertType === '15min') expectedAlertMs = meetingStartMs - (15 * 60 * 1000)
+            if (alertType === '5min') expectedAlertMs = meetingStartMs - (5 * 60 * 1000)
+
+            if (expectedAlertMs !== null) {
+                const isMismatched = Math.abs(alertTimeMs - expectedAlertMs) > toleranceMs
+                if (isMismatched) {
+                    staleAlertIds.push(String(alert?.id || ''))
+                    return false
+                }
+            }
+
+            // Defensive: if meeting moved to future and this alert is now stale-due, ignore it.
+            if (meetingStartMs > nowMs && alertType !== 'overdue' && alertTimeMs > meetingStartMs) {
+                staleAlertIds.push(String(alert?.id || ''))
+                return false
+            }
+
+            return true
+        })
+
+        const uniqueStaleIds = Array.from(new Set(staleAlertIds.filter(Boolean)))
+        if (uniqueStaleIds.length > 0) {
+            const { error: staleDismissError } = await (supabase
+                .from('meeting_alerts') as any)
+                .update({
+                    dismissed: true,
+                    dismissed_at: nowIso
+                })
+                .eq('user_id', userId)
+                .in('id', uniqueStaleIds)
+
+            if (staleDismissError) {
+                console.warn('Could not dismiss stale meeting alerts:', staleDismissError)
+            }
+        }
+
+        return validAlerts
     } catch (err) {
         console.error('Exception in getPendingAlerts:', err)
         return []
@@ -511,11 +735,19 @@ export interface MeetingWithUrgency extends Meeting {
     seller_name?: string
 }
 
+export interface GetUpcomingMeetingsOptions {
+    includeHistorical?: boolean
+    includeCancelled?: boolean
+}
+
 export function calculateMeetingUrgency(startTimeStr: string, durationMinutes: number = 60, now: Date = new Date()): { level: MeetingWithUrgency['urgencyLevel']; hoursUntil: number } {
     const startTime = new Date(startTimeStr)
     const hoursUntil = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
     const durationMs = durationMinutes * 60 * 1000
     const endTime = new Date(startTime.getTime() + durationMs)
+    const isSameLocalCalendarDay = startTime.getFullYear() === now.getFullYear()
+        && startTime.getMonth() === now.getMonth()
+        && startTime.getDate() === now.getDate()
 
     let level: MeetingWithUrgency['urgencyLevel']
 
@@ -525,7 +757,7 @@ export function calculateMeetingUrgency(startTimeStr: string, durationMinutes: n
         level = 'overdue'
     } else if (hoursUntil < 2) {
         level = 'urgent'
-    } else if (hoursUntil < 24) {
+    } else if (isSameLocalCalendarDay) {
         level = 'today'
     } else if (hoursUntil < 48) {
         level = 'soon'
@@ -541,11 +773,15 @@ export async function getUpcomingMeetings(
     limit: number = 10,
     allMeetings: boolean = false,
     userEmail?: string,
-    userUsername?: string | null
+    userUsername?: string | null,
+    options?: GetUpcomingMeetingsOptions
 ): Promise<MeetingWithUrgency[]> {
     try {
-        let query = supabase.from('meetings').select('*')
-        if (!allMeetings) {
+        const includeHistorical = Boolean(options?.includeHistorical)
+        const includeCancelled = Boolean(options?.includeCancelled)
+
+        const applyVisibilityFilters = (query: any) => {
+            if (allMeetings) return query
             const normalizedEmail = String(userEmail || '').trim().toLowerCase()
             const normalizedUsername = String(userUsername || '').trim().toLowerCase()
             const normalizedUserId = String(userId || '').trim().toLowerCase()
@@ -559,28 +795,90 @@ export async function getUpcomingMeetings(
                 .map((value) => `attendees.cs.{"${value}"}`)
 
             if (attendeeFilters.length > 0) {
-                query = query.or([`seller_id.eq.${userId}`, ...attendeeFilters].join(','))
+                return query.or([`seller_id.eq.${userId}`, ...attendeeFilters].join(','))
             } else {
-                query = query.eq('seller_id', userId)
+                return query.eq('seller_id', userId)
             }
         }
 
-        const { data: meetings, error } = await query
-            .eq('status', 'scheduled')
-            .order('start_time', { ascending: true })
-            .limit(limit * 2)
+        let meetings: any[] = []
 
-        if (error) return []
+        if (includeHistorical) {
+            const pageSize = 500
+            let offset = 0
 
-        const filteredMeetings = (meetings || []).filter((m: any) =>
-            m.meeting_status === 'scheduled' || m.meeting_status === 'pending_confirmation'
-        ).slice(0, limit)
+            while (meetings.length < limit) {
+                const remaining = limit - meetings.length
+                const currentPageSize = Math.min(pageSize, remaining)
+
+                let pageQuery = applyVisibilityFilters(supabase.from('meetings').select('*'))
+                if (!includeCancelled) {
+                    pageQuery = pageQuery
+                        .neq('status', 'cancelled')
+                        .neq('meeting_status', 'cancelled')
+                }
+
+                const { data, error } = await pageQuery
+                    .order('start_time', { ascending: false })
+                    .range(offset, offset + currentPageSize - 1)
+
+                if (error) return []
+                const rows = Array.isArray(data) ? data : []
+                if (rows.length === 0) break
+
+                meetings.push(...rows)
+                if (rows.length < currentPageSize) break
+                offset += currentPageSize
+            }
+        } else {
+            const query = applyVisibilityFilters(supabase.from('meetings').select('*'))
+            const { data, error } = await query
+                .eq('status', 'scheduled')
+                .order('start_time', { ascending: true })
+                .limit(limit * 2)
+
+            if (error) return []
+            meetings = Array.isArray(data) ? data : []
+        }
+
+        const filteredMeetings = meetings
+            .filter((meeting: any) => {
+                const status = String(meeting?.status || '').trim().toLowerCase()
+                const meetingStatus = String(meeting?.meeting_status || '').trim().toLowerCase()
+
+                if (!includeCancelled && (status === 'cancelled' || meetingStatus === 'cancelled')) {
+                    return false
+                }
+
+                if (includeHistorical) {
+                    return status === 'scheduled'
+                        || status === 'completed'
+                        || meetingStatus === 'scheduled'
+                        || meetingStatus === 'pending_confirmation'
+                        || meetingStatus === 'held'
+                        || meetingStatus === 'not_held'
+                }
+
+                return meetingStatus === 'scheduled' || meetingStatus === 'pending_confirmation'
+            })
+            .slice(0, limit)
 
         if (filteredMeetings.length === 0) return []
 
-        const leadIds = Array.from(new Set(filteredMeetings.map((m: any) => m.lead_id)))
-        const { data: clients } = await supabase.from('clientes').select('id, empresa, etapa').in('id', leadIds)
-        const clientsMap = (clients || []).reduce((acc: any, client: any) => { acc[client.id] = client; return acc }, {})
+        const leadIds = Array.from(new Set(
+            filteredMeetings
+                .map((meeting: any) => meeting.lead_id)
+                .filter((leadId: any) => leadId !== null && leadId !== undefined)
+        ))
+
+        let clientsMap: Record<string, any> = {}
+        if (leadIds.length > 0) {
+            const { data: clients } = await supabase.from('clientes').select('id, empresa, etapa').in('id', leadIds)
+            clientsMap = (clients || []).reduce((acc: any, client: any) => {
+                acc[client.id] = client
+                return acc
+            }, {})
+        }
 
         let sellersMap: Record<string, string> = {}
         const sellerIds = Array.from(new Set(filteredMeetings.map((m: any) => m.seller_id).filter(Boolean)))

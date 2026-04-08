@@ -5,19 +5,24 @@ import { Database } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase'
 import { toLocalISOString, fromLocalISOString } from '@/lib/dateUtils'
 import ConfirmModal from './ConfirmModal'
+import MeetingRescheduleReasonModal, { type MeetingRescheduleReasonPayload } from './MeetingRescheduleReasonModal'
 import UserSelect from './UserSelect'
 import { FriendlyDateTimePicker } from './FriendlyDatePickers'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { useTheme } from '@/lib/ThemeContext'
-import { Building2, CalendarDays, CheckCircle2, Link2, PencilLine, Phone, Plus, Sparkles, Trash2, Video, X } from 'lucide-react'
+import { Building2, CalendarDays, CheckCircle2, Link2, MapPinned, PencilLine, Phone, Plus, Sparkles, Trash2, Video, X } from 'lucide-react'
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert']
 type CompanyContactRow = Database['public']['Tables']['company_contacts']['Row']
 
+export type MeetingModalSaveContext = {
+    rescheduleReason?: MeetingRescheduleReasonPayload | null
+}
+
 interface MeetingModalProps {
     isOpen: boolean
     onClose: () => void
-    onSave: (data: MeetingInsert) => Promise<void>
+    onSave: (data: MeetingInsert, context?: MeetingModalSaveContext) => Promise<void>
     leadId: number
     sellerId: string
     initialData?: any
@@ -60,6 +65,53 @@ type LeadContext = {
 }
 
 const OTHER_CONTACT_KEY = '__OTHER_CONTACT__'
+const MEETING_OBJECTIVES_MARKER = '[OBJETIVOS]:'
+
+type MeetingTypeValue = 'presencial' | 'visita_empresa' | 'llamada' | 'video'
+type MeetingObjectiveValue =
+    | 'diagnostico'
+    | 'descubrimiento'
+    | 'levantamiento_sitio'
+    | 'revision_tecnica'
+    | 'presentacion_propuesta'
+    | 'negociacion'
+    | 'prueba_piloto'
+    | 'firma_contrato'
+    | 'seguimiento_post_junta'
+
+const MEETING_TYPE_OPTIONS: Array<{
+    value: MeetingTypeValue
+    label: string
+}> = [
+    { value: 'presencial', label: 'Presencial' },
+    { value: 'visita_empresa', label: 'Visita a empresa' },
+    { value: 'llamada', label: 'Llamada' },
+    { value: 'video', label: 'Video' }
+]
+
+const MEETING_OBJECTIVE_OPTIONS: Array<{
+    value: MeetingObjectiveValue
+    label: string
+}> = [
+    { value: 'diagnostico', label: 'Diagnóstico inicial' },
+    { value: 'descubrimiento', label: 'Descubrimiento de necesidades' },
+    { value: 'levantamiento_sitio', label: 'Levantamiento de sitio' },
+    { value: 'revision_tecnica', label: 'Revisión técnica' },
+    { value: 'presentacion_propuesta', label: 'Presentación de propuesta' },
+    { value: 'negociacion', label: 'Negociación' },
+    { value: 'prueba_piloto', label: 'Prueba piloto / Demo' },
+    { value: 'firma_contrato', label: 'Firma de contrato' },
+    { value: 'seguimiento_post_junta', label: 'Seguimiento y próximos pasos' }
+]
+
+const MEETING_OBJECTIVE_LABEL_BY_VALUE = MEETING_OBJECTIVE_OPTIONS.reduce((acc, option) => {
+    acc[option.value] = option.label
+    return acc
+}, {} as Record<MeetingObjectiveValue, string>)
+
+const MEETING_OBJECTIVE_VALUE_SET = new Set<MeetingObjectiveValue>(
+    MEETING_OBJECTIVE_OPTIONS.map((option) => option.value)
+)
 
 type MeetingDurationOption = {
     value: number
@@ -79,6 +131,135 @@ const MEETING_DURATION_PRESETS = [
 
 function normalizeText(value: string | null | undefined) {
     return String(value || '').trim().toLowerCase()
+}
+
+function normalizeComparableText(value: string | null | undefined) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+}
+
+function normalizeMeetingType(value: unknown): MeetingTypeValue {
+    const normalized = normalizeComparableText(String(value || ''))
+        .replace(/\s+/g, '_')
+    if (normalized === 'visita_a_empresa' || normalized === 'visita_empresa') return 'visita_empresa'
+    if (normalized === 'presencial') return 'presencial'
+    if (normalized === 'llamada') return 'llamada'
+    if (normalized === 'video') return 'video'
+    return 'video'
+}
+
+function normalizeMeetingObjectiveValue(value: unknown): MeetingObjectiveValue | null {
+    const normalized = normalizeComparableText(String(value || ''))
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+    const aliasMap: Record<string, MeetingObjectiveValue> = {
+        diagnostico: 'diagnostico',
+        diagnostico_inicial: 'diagnostico',
+        descubrimiento: 'descubrimiento',
+        descubrimiento_de_necesidades: 'descubrimiento',
+        levantamiento_sitio: 'levantamiento_sitio',
+        levantamiento_de_sitio: 'levantamiento_sitio',
+        revision_tecnica: 'revision_tecnica',
+        presentacion_propuesta: 'presentacion_propuesta',
+        presentacion_de_propuesta: 'presentacion_propuesta',
+        negociacion: 'negociacion',
+        prueba_piloto: 'prueba_piloto',
+        prueba_piloto_demo: 'prueba_piloto',
+        demo: 'prueba_piloto',
+        firma_contrato: 'firma_contrato',
+        firma_de_contrato: 'firma_contrato',
+        seguimiento_post_junta: 'seguimiento_post_junta',
+        seguimiento: 'seguimiento_post_junta',
+        seguimiento_y_proximos_pasos: 'seguimiento_post_junta'
+    }
+    const mapped = aliasMap[normalized] || null
+    if (!mapped) return null
+    return MEETING_OBJECTIVE_VALUE_SET.has(mapped) ? mapped : null
+}
+
+function parseMeetingNotesMetadata(notes: string | null | undefined) {
+    const raw = String(notes || '').trim()
+    if (!raw) {
+        return {
+            notesWithoutMetadata: '',
+            objectives: [] as MeetingObjectiveValue[],
+            customObjectives: [] as string[]
+        }
+    }
+
+    const objectives = new Set<MeetingObjectiveValue>()
+    const customObjectives = new Set<string>()
+    const lines = raw.split('\n')
+    const cleanLines: string[] = []
+
+    lines.forEach((line) => {
+        const trimmed = String(line || '').trim()
+        if (!trimmed) {
+            cleanLines.push('')
+            return
+        }
+
+        if (!trimmed.toUpperCase().startsWith(MEETING_OBJECTIVES_MARKER)) {
+            cleanLines.push(line)
+            return
+        }
+
+        const payload = trimmed.slice(MEETING_OBJECTIVES_MARKER.length).trim()
+        payload
+            .split(/[;,]+/g)
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .forEach((token) => {
+                const normalized = normalizeMeetingObjectiveValue(token)
+                if (normalized) objectives.add(normalized)
+                else customObjectives.add(token)
+            })
+    })
+
+    const notesWithoutMetadata = cleanLines.join('\n').trim()
+    return {
+        notesWithoutMetadata,
+        objectives: Array.from(objectives),
+        customObjectives: Array.from(customObjectives)
+    }
+}
+
+function composeMeetingNotesWithObjectives(
+    notes: string,
+    objectiveValues: MeetingObjectiveValue[],
+    customObjectives: string[]
+) {
+    const normalizedNotes = String(notes || '').trim()
+    const selectedLabels = Array.from(new Set(
+        objectiveValues
+            .map((value) => MEETING_OBJECTIVE_LABEL_BY_VALUE[value])
+            .filter(Boolean)
+    ))
+    const normalizedCustom = Array.from(new Set(
+        (customObjectives || [])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+    ))
+    const objectiveLabels = [...selectedLabels, ...normalizedCustom]
+
+    if (objectiveLabels.length === 0) {
+        return normalizedNotes || null
+    }
+
+    const objectiveLine = `${MEETING_OBJECTIVES_MARKER} ${objectiveLabels.join(', ')}`
+    return normalizedNotes ? `${objectiveLine}\n${normalizedNotes}` : objectiveLine
+}
+
+function parseCustomObjectivesInput(value: string): string[] {
+    return Array.from(new Set(
+        String(value || '')
+            .split(/[,\n;]+/g)
+            .map((token) => String(token || '').trim())
+            .filter(Boolean)
+    ))
 }
 
 function normalizePhone(value: string | null | undefined) {
@@ -266,11 +447,13 @@ export default function MeetingModal({
         title: '',
         start_time: '',
         duration_minutes: 60,
-        meeting_type: 'video' as 'presencial' | 'llamada' | 'video',
+        meeting_type: 'video' as MeetingTypeValue,
         notes: '',
         attendees: [] as string[],
         calendar_provider: null as 'google' | 'outlook' | null
     })
+    const [selectedObjectives, setSelectedObjectives] = useState<MeetingObjectiveValue[]>([])
+    const [customObjectivesInput, setCustomObjectivesInput] = useState('')
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [formAttempted, setFormAttempted] = useState(false)
@@ -297,6 +480,11 @@ export default function MeetingModal({
     // Sync Fail Modal State
     const [showSyncFailModal, setShowSyncFailModal] = useState(false)
     const [pendingMeetingData, setPendingMeetingData] = useState<MeetingInsert | null>(null)
+    const [showRescheduleReasonModal, setShowRescheduleReasonModal] = useState(false)
+    const [pendingRescheduleDraft, setPendingRescheduleDraft] = useState<{
+        meetingData: MeetingInsert
+        leadNameForCalendar: string
+    } | null>(null)
 
     useEffect(() => {
         if (!isOpen) return
@@ -315,17 +503,24 @@ export default function MeetingModal({
             setNewExternalParticipant({ name: '', email: '', phone: '' })
             setNewPrimaryContact({ name: '', email: '', phone: '' })
             setMeetingSequencePreview(mode === 'edit' ? Number(initialData?.meeting_sequence_number || 0) || null : null)
+            setSelectedObjectives([])
+            setCustomObjectivesInput('')
+            setShowRescheduleReasonModal(false)
+            setPendingRescheduleDraft(null)
 
             if (initialData) {
+                const parsedNotes = parseMeetingNotesMetadata(initialData.notes)
                 setFormData({
                     title: initialData.title || '',
                     start_time: toLocalISOString(initialData.start_time),
                     duration_minutes: initialData.duration_minutes || 60,
-                    meeting_type: initialData.meeting_type || 'video',
-                    notes: initialData.notes || '',
+                    meeting_type: normalizeMeetingType(initialData.meeting_type),
+                    notes: parsedNotes.notesWithoutMetadata || '',
                     attendees: initialData.attendees || [],
                     calendar_provider: initialData.calendar_provider || null
                 })
+                setSelectedObjectives(parsedNotes.objectives)
+                setCustomObjectivesInput(parsedNotes.customObjectives.join(', '))
             } else {
                 setFormData({
                     title: '',
@@ -336,6 +531,8 @@ export default function MeetingModal({
                     attendees: [],
                     calendar_provider: null
                 })
+                setSelectedObjectives([])
+                setCustomObjectivesInput('')
             }
 
             try {
@@ -487,7 +684,7 @@ export default function MeetingModal({
 
                 let nextPrimaryKey = defaultPrimaryKey
                 let nextSelectedKeys: string[] = []
-                let nextManualParticipants: ManualParticipant[] = []
+                const nextManualParticipants: ManualParticipant[] = []
                 let nextPrimaryContactDraft = { name: '', email: '', phone: '' }
 
                 if (mode === 'edit' && initialData) {
@@ -588,6 +785,15 @@ export default function MeetingModal({
         })
     }
 
+    const toggleObjective = (objective: MeetingObjectiveValue) => {
+        setSelectedObjectives((prev) => {
+            if (prev.includes(objective)) {
+                return prev.filter((value) => value !== objective)
+            }
+            return [...prev, objective]
+        })
+    }
+
     const addManualExternalParticipant = () => {
         const name = newExternalParticipant.name.trim()
         if (!name) {
@@ -617,6 +823,55 @@ export default function MeetingModal({
             .map((key) => contactOptions.find(option => option.key === key))
             .filter(Boolean)
             .map((option) => buildParticipantLabel(option!.name, option!.email, option!.phone))
+    }
+
+    const hasMeetingStartChanged = (nextStartTimeIso: string) => {
+        if (mode !== 'edit') return false
+        const previousStartRaw = String(initialData?.start_time || '').trim()
+        if (!previousStartRaw) return false
+
+        const previousStartMs = new Date(previousStartRaw).getTime()
+        const nextStartMs = new Date(nextStartTimeIso).getTime()
+        if (!Number.isFinite(previousStartMs) || !Number.isFinite(nextStartMs)) return false
+        return previousStartMs !== nextStartMs
+    }
+
+    const persistMeeting = async (
+        meetingData: MeetingInsert,
+        leadNameForCalendar: string,
+        saveContext?: MeetingModalSaveContext
+    ) => {
+        const { createGoogleEventAction, updateGoogleEventAction } = await import('@/app/actions/google-calendar')
+
+        if (mode === 'edit' && initialData?.calendar_event_id && formData.calendar_provider === 'google') {
+            const result = await updateGoogleEventAction(
+                initialData.calendar_event_id,
+                meetingData,
+                leadNameForCalendar
+            )
+            if (!result.success) console.error('Failed to update Google Event', result.error)
+        } else if (mode === 'create' && formData.calendar_provider === 'google') {
+            const result = await createGoogleEventAction(meetingData, leadNameForCalendar)
+
+            if (result.success && result.eventId) {
+                meetingData.calendar_event_id = result.eventId
+                if (result.hangoutLink) {
+                    const meetMarker = `[MEET_LINK]:${result.hangoutLink}`
+                    meetingData.notes = meetingData.notes
+                        ? `${meetMarker}\n${meetingData.notes}`
+                        : meetMarker
+                }
+            } else {
+                console.error('Failed to create Google Event', result.error)
+                setPendingMeetingData(meetingData)
+                setShowSyncFailModal(true)
+                return false
+            }
+        }
+
+        await onSave(meetingData, saveContext)
+        onClose()
+        return true
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -658,7 +913,6 @@ export default function MeetingModal({
 
         try {
             const supabase = createClient()
-            const { createGoogleEventAction, updateGoogleEventAction } = await import('@/app/actions/google-calendar')
 
             let resolvedPrimaryContact: {
                 id: string | null
@@ -734,6 +988,11 @@ export default function MeetingModal({
                 .filter((option): option is ContactOption => !!option)
 
             const normalizedAttendees = normalizeInternalAttendeeValues(formData.attendees)
+            const notesWithObjectives = composeMeetingNotesWithObjectives(
+                formData.notes,
+                selectedObjectives,
+                parseCustomObjectivesInput(customObjectivesInput)
+            )
 
             const participantLabels = dedupeParticipantLabels([
                 ...(resolvedPrimaryContact
@@ -750,7 +1009,7 @@ export default function MeetingModal({
                 start_time: fromLocalISOString(formData.start_time).toISOString(),
                 duration_minutes: formData.duration_minutes,
                 meeting_type: formData.meeting_type,
-                notes: formData.notes || null,
+                notes: notesWithObjectives,
                 attendees: normalizedAttendees.length > 0 ? normalizedAttendees : null,
                 primary_company_contact_id: resolvedPrimaryContact?.id || null,
                 primary_company_contact_name: resolvedPrimaryContact?.name || null,
@@ -762,38 +1021,46 @@ export default function MeetingModal({
 
             const leadNameForCalendar = leadContext.leadName || leadContext.companyName || 'Cliente'
 
-            if (mode === 'edit' && initialData?.calendar_event_id && formData.calendar_provider === 'google') {
-                const result = await updateGoogleEventAction(
-                    initialData.calendar_event_id,
+            if (hasMeetingStartChanged(String(meetingData.start_time || ''))) {
+                setPendingRescheduleDraft({
                     meetingData,
                     leadNameForCalendar
-                )
-                if (!result.success) console.error('Failed to update Google Event', result.error)
-            } else if (mode === 'create' && formData.calendar_provider === 'google') {
-                const result = await createGoogleEventAction(meetingData, leadNameForCalendar)
-
-                if (result.success && result.eventId) {
-                    meetingData.calendar_event_id = result.eventId
-                    if (result.hangoutLink) {
-                        const meetMarker = `[MEET_LINK]:${result.hangoutLink}`
-                        meetingData.notes = meetingData.notes
-                            ? `${meetMarker}\n${meetingData.notes}`
-                            : meetMarker
-                    }
-                } else {
-                    console.error('Failed to create Google Event', result.error)
-                    setPendingMeetingData(meetingData)
-                    setShowSyncFailModal(true)
-                    setIsSubmitting(false)
-                    return
-                }
+                })
+                setShowRescheduleReasonModal(true)
+                return
             }
 
-            await onSave(meetingData)
-            onClose()
+            await persistMeeting(meetingData, leadNameForCalendar)
         } catch (error) {
             console.error('Error saving meeting:', error)
             alert(error instanceof Error ? error.message : 'Error al guardar la reunión')
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    const handleCloseRescheduleReasonModal = () => {
+        if (isSubmitting) return
+        setShowRescheduleReasonModal(false)
+        setPendingRescheduleDraft(null)
+    }
+
+    const handleConfirmRescheduleReason = async (payload: MeetingRescheduleReasonPayload) => {
+        if (!pendingRescheduleDraft) return
+        setIsSubmitting(true)
+        try {
+            const saved = await persistMeeting(
+                pendingRescheduleDraft.meetingData,
+                pendingRescheduleDraft.leadNameForCalendar,
+                { rescheduleReason: payload }
+            )
+            if (saved) {
+                setShowRescheduleReasonModal(false)
+                setPendingRescheduleDraft(null)
+            }
+        } catch (error) {
+            console.error('Error saving rescheduled meeting:', error)
+            alert(error instanceof Error ? error.message : 'Error al guardar la reunión reagendada')
         } finally {
             setIsSubmitting(false)
         }
@@ -1054,27 +1321,75 @@ export default function MeetingModal({
                             <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
                                 Tipo de Reunión
                             </label>
-                            <div className='grid grid-cols-3 gap-3'>
-                                {(['presencial', 'llamada', 'video'] as const).map((type) => (
+                            <div className='grid grid-cols-2 md:grid-cols-4 gap-3'>
+                                {MEETING_TYPE_OPTIONS.map((option) => (
                                     <button
-                                        key={type}
+                                        key={option.value}
                                         type='button'
-                                        onClick={() => setFormData({ ...formData, meeting_type: type })}
-                                        className={`px-4 py-3 rounded-lg font-bold transition-all border-2 cursor-pointer flex items-center justify-center gap-2 ${formData.meeting_type === type
+                                        onClick={() => setFormData({ ...formData, meeting_type: option.value })}
+                                        className={`px-4 py-3 rounded-lg font-bold transition-all border-2 cursor-pointer flex items-center justify-center gap-2 ${formData.meeting_type === option.value
                                             ? 'bg-[#2048FF] text-white border-[#2048FF] shadow-lg shadow-blue-500/20'
                                             : 'hover:border-[#2048FF]'
                                             }`}
-                                        style={formData.meeting_type === type
+                                        style={formData.meeting_type === option.value
                                             ? undefined
                                             : { background: 'var(--background)', color: 'var(--text-primary)', borderColor: 'var(--card-border)' }}
                                     >
-                                        {type === 'presencial' && <Building2 size={18} />}
-                                        {type === 'llamada' && <Phone size={18} />}
-                                        {type === 'video' && <Video size={18} />}
-                                        <span className='capitalize'>{type}</span>
+                                        {option.value === 'presencial' && <Building2 size={18} />}
+                                        {option.value === 'visita_empresa' && <MapPinned size={18} />}
+                                        {option.value === 'llamada' && <Phone size={18} />}
+                                        {option.value === 'video' && <Video size={18} />}
+                                        <span>{option.label}</span>
                                     </button>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* Objetivos de la junta */}
+                        <div className='space-y-2'>
+                            <label className='block text-sm font-bold' style={{ color: 'var(--text-primary)' }}>
+                                Objetivos de la Junta
+                            </label>
+                            <div className='grid grid-cols-1 md:grid-cols-2 gap-2'>
+                                {MEETING_OBJECTIVE_OPTIONS.map((option) => {
+                                    const selected = selectedObjectives.includes(option.value)
+                                    return (
+                                        <label
+                                            key={option.value}
+                                            className='flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors'
+                                            style={{
+                                                borderColor: selected
+                                                    ? 'color-mix(in srgb, #2048FF 36%, var(--card-border))'
+                                                    : 'var(--card-border)',
+                                                background: selected
+                                                    ? 'color-mix(in srgb, #2048FF 9%, var(--card-bg))'
+                                                    : 'var(--background)'
+                                            }}
+                                        >
+                                            <input
+                                                type='checkbox'
+                                                checked={selected}
+                                                onChange={() => toggleObjective(option.value)}
+                                                className='accent-[#2048FF]'
+                                            />
+                                            <span className='text-xs font-semibold' style={{ color: 'var(--text-primary)' }}>
+                                                {option.label}
+                                            </span>
+                                        </label>
+                                    )
+                                })}
+                            </div>
+                            <input
+                                type='text'
+                                value={customObjectivesInput}
+                                onChange={(e) => setCustomObjectivesInput(e.target.value)}
+                                className='w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
+                                style={{ background: 'var(--background)', borderColor: 'var(--card-border)', color: 'var(--text-primary)' }}
+                                placeholder='Otros objetivos (separar por coma), ej: revisión legal, comité de compras'
+                            />
+                            <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                Los objetivos se agregan automáticamente en la descripción para seguimiento comercial.
+                            </p>
                         </div>
 
                         {/* Contacto principal */}
@@ -1429,6 +1744,16 @@ export default function MeetingModal({
                 title="Google Calendar Error"
                 message="No se pudo conectar con Google Calendar. ¿Deseas guardar la reunión solo en el CRM?"
                 isDestructive={false}
+            />
+
+            <MeetingRescheduleReasonModal
+                isOpen={showRescheduleReasonModal}
+                meetingTitle={pendingRescheduleDraft?.meetingData?.title || initialData?.title || null}
+                oldStartTime={String(initialData?.start_time || '') || null}
+                newStartTime={String(pendingRescheduleDraft?.meetingData?.start_time || '') || null}
+                isSubmitting={isSubmitting}
+                onClose={handleCloseRescheduleReasonModal}
+                onConfirm={handleConfirmRescheduleReason}
             />
         </div>
     )

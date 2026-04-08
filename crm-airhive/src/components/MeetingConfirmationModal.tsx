@@ -5,24 +5,14 @@ import { Database } from '@/lib/supabase'
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock'
 import { getMeetingCancellationReasons } from '@/lib/confirmationService'
 import { CalendarDays, Target, CheckCircle2, XCircle, X } from 'lucide-react'
+import {
+    FALLBACK_MEETING_REASON_OPTIONS,
+    FALLBACK_REASON_PREFIX,
+    OTHER_REASON_VALUE
+} from '@/lib/meetingReasonCatalog'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type MeetingCancellationReason = Database['public']['Tables']['meeting_cancellation_reasons']['Row']
-const OTHER_REASON_VALUE = '__other_reason__'
-const FALLBACK_REASON_PREFIX = 'fallback:'
-
-const FALLBACK_REASON_OPTIONS = [
-    { code: 'cliente_no_asistio', label: 'El cliente no asistió' },
-    { code: 'conflicto_agenda_cliente', label: 'Conflicto de agenda del cliente' },
-    { code: 'conflicto_agenda_interno', label: 'Conflicto de agenda interno' },
-    { code: 'reagenda_solicitada_cliente', label: 'Reprogramación solicitada por el cliente' },
-    { code: 'reagenda_solicitada_interno', label: 'Reprogramación solicitada por nuestro equipo' },
-    { code: 'decision_maker_no_disponible', label: 'Persona decisora no disponible' },
-    { code: 'problema_tecnico_conexion', label: 'Problemas técnicos o de conectividad' },
-    { code: 'falta_informacion_previa', label: 'Información previa insuficiente para realizar la reunión' },
-    { code: 'cambio_prioridad_cliente', label: 'Cambio de prioridad del cliente' },
-    { code: 'motivo_no_especificado', label: 'Motivo no especificado por la contraparte' }
-] as const
 
 interface MeetingConfirmationModalProps {
     meeting: Meeting & { empresa?: string; etapa?: string }
@@ -73,9 +63,35 @@ export default function MeetingConfirmationModal({
     const requiresNotHeldDetails = result === 'not_held'
     const isCustomReason = notHeldReasonId === OTHER_REASON_VALUE
     const showNoCatalogNotice = !loadingReasons && reasonOptions.length === 0
-    const selectedFallbackReason = showNoCatalogNotice && notHeldReasonId.startsWith(FALLBACK_REASON_PREFIX)
-        ? FALLBACK_REASON_OPTIONS.find((reason) => `${FALLBACK_REASON_PREFIX}${reason.code}` === notHeldReasonId) || null
+    const selectedFallbackReason = notHeldReasonId.startsWith(FALLBACK_REASON_PREFIX)
+        ? FALLBACK_MEETING_REASON_OPTIONS.find((reason) => `${FALLBACK_REASON_PREFIX}${reason.code}` === notHeldReasonId) || null
         : null
+    const normalizedReasonOptions = (() => {
+        if (showNoCatalogNotice) {
+            return FALLBACK_MEETING_REASON_OPTIONS.map((reason) => ({
+                value: `${FALLBACK_REASON_PREFIX}${reason.code}`,
+                label: reason.label
+            }))
+        }
+
+        const fromDatabase = reasonOptions.map((reason) => ({
+            value: reason.id,
+            label: reason.label
+        }))
+        const availableCodes = new Set(
+            reasonOptions
+                .map((reason) => String(reason.code || '').trim().toLowerCase())
+                .filter(Boolean)
+        )
+        const fallbackMissingInDb = FALLBACK_MEETING_REASON_OPTIONS
+            .filter((reason) => !availableCodes.has(String(reason.code).toLowerCase()))
+            .map((reason) => ({
+                value: `${FALLBACK_REASON_PREFIX}${reason.code}`,
+                label: `${reason.label} (temporal)`
+            }))
+
+        return [...fromDatabase, ...fallbackMissingInDb]
+    })()
     const resultInvalid = formAttempted && !result
     const responsibilityInvalid = formAttempted && requiresNotHeldDetails && notHeldResponsibility !== 'propia' && notHeldResponsibility !== 'ajena'
     const reasonInvalid = formAttempted && requiresNotHeldDetails && !notHeldReasonId
@@ -92,15 +108,15 @@ export default function MeetingConfirmationModal({
 
         if (requiresNotHeldDetails) {
             if (!notHeldReasonId) {
-                setError('Selecciona un motivo de cancelación.')
+                setError('Selecciona un motivo del cambio de junta.')
                 return
             }
             if (notHeldResponsibility !== 'propia' && notHeldResponsibility !== 'ajena') {
-                setError('Selecciona si la cancelación fue propia o ajena.')
+                setError('Selecciona si el cambio fue propio o ajeno.')
                 return
             }
             if (isCustomReason && !customNotHeldReason.trim()) {
-                setError('Escribe el nuevo motivo de cancelación.')
+                setError('Describe el motivo del cambio de junta.')
                 return
             }
         }
@@ -291,38 +307,68 @@ export default function MeetingConfirmationModal({
 
                     {requiresNotHeldDetails && (
                         <div
-                            className='mb-5 p-3 rounded-xl border'
+                            className='mb-5 p-4 rounded-xl border space-y-3'
                             style={{
                                 background: 'color-mix(in srgb, #ef4444 10%, var(--card-bg))',
                                 borderColor: 'color-mix(in srgb, #ef4444 32%, var(--card-border))'
                             }}
                         >
-                            <label className='block text-sm font-black mb-2 ah-required-label' style={{ color: responsibilityInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
-                                ¿De quién fue la cancelación? <span className='text-rose-600'>*</span>
+                            <label className='block text-sm font-black ah-required-label' style={{ color: responsibilityInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
+                                ¿El cambio fue propio o ajeno? <span className='text-rose-600'>*</span>
                             </label>
-                            <select
-                                value={notHeldResponsibility}
-                                onChange={(e) => {
-                                    setNotHeldResponsibility(e.target.value as 'propia' | 'ajena' | '')
-                                    setError('')
-                                }}
-                                className='ah-modal-field ah-modal-select ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
-                                aria-invalid={responsibilityInvalid ? 'true' : undefined}
-                                data-invalid={responsibilityInvalid ? 'true' : undefined}
-                                style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
-                                    color: 'var(--text-primary)'
-                                }}
-                                disabled={isSubmitting}
-                            >
-                                <option value=''>Seleccionar responsabilidad...</option>
-                                <option value='propia'>Propia (de nuestra empresa)</option>
-                                <option value='ajena'>Ajena (de la otra empresa)</option>
-                            </select>
+                            <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                                <button
+                                    type='button'
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        setNotHeldResponsibility('propia')
+                                        setError('')
+                                    }}
+                                    className='h-11 rounded-xl border text-sm font-black cursor-pointer transition-colors disabled:opacity-50'
+                                    style={notHeldResponsibility === 'propia'
+                                        ? {
+                                            background: 'color-mix(in srgb, #f59e0b 18%, var(--card-bg))',
+                                            borderColor: 'color-mix(in srgb, #f59e0b 46%, var(--card-border))',
+                                            color: 'var(--text-primary)'
+                                        }
+                                        : {
+                                            background: 'var(--background)',
+                                            borderColor: responsibilityInvalid
+                                                ? 'color-mix(in srgb, #ef4444 52%, var(--card-border))'
+                                                : 'var(--card-border)',
+                                            color: 'var(--text-secondary)'
+                                        }}
+                                >
+                                    Propio (equipo AirHive)
+                                </button>
+                                <button
+                                    type='button'
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        setNotHeldResponsibility('ajena')
+                                        setError('')
+                                    }}
+                                    className='h-11 rounded-xl border text-sm font-black cursor-pointer transition-colors disabled:opacity-50'
+                                    style={notHeldResponsibility === 'ajena'
+                                        ? {
+                                            background: 'color-mix(in srgb, #3b82f6 15%, var(--card-bg))',
+                                            borderColor: 'color-mix(in srgb, #3b82f6 44%, var(--card-border))',
+                                            color: 'var(--text-primary)'
+                                        }
+                                        : {
+                                            background: 'var(--background)',
+                                            borderColor: responsibilityInvalid
+                                                ? 'color-mix(in srgb, #ef4444 52%, var(--card-border))'
+                                                : 'var(--card-border)',
+                                            color: 'var(--text-secondary)'
+                                        }}
+                                >
+                                    Ajeno (cliente / externo)
+                                </button>
+                            </div>
 
-                            <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: reasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
-                                Motivo de cancelación <span className='text-rose-600'>*</span>
+                            <label className='block text-sm font-black ah-required-label' style={{ color: reasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
+                                Motivo del cambio de junta <span className='text-rose-600'>*</span>
                             </label>
                             <select
                                 value={notHeldReasonId}
@@ -330,65 +376,58 @@ export default function MeetingConfirmationModal({
                                     setNotHeldReasonId(e.target.value)
                                     setError('')
                                 }}
-                                className='ah-modal-field ah-modal-select ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
+                                className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] transition-colors'
                                 aria-invalid={reasonInvalid ? 'true' : undefined}
                                 data-invalid={reasonInvalid ? 'true' : undefined}
                                 style={{
-                                    background: 'var(--input-bg)',
-                                    borderColor: 'var(--input-border)',
+                                    background: 'var(--background)',
+                                    borderColor: reasonInvalid
+                                        ? 'color-mix(in srgb, #ef4444 52%, var(--input-border))'
+                                        : 'var(--card-border)',
                                     color: 'var(--text-primary)'
                                 }}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || loadingReasons}
                             >
-                                <option value=''>
-                                    {loadingReasons ? 'Cargando motivos...' : 'Seleccionar motivo...'}
-                                </option>
-                                {(showNoCatalogNotice
-                                    ? FALLBACK_REASON_OPTIONS.map((reason) => ({
-                                        value: `${FALLBACK_REASON_PREFIX}${reason.code}`,
-                                        label: reason.label
-                                    }))
-                                    : reasonOptions.map((reason) => ({
-                                        value: reason.id,
-                                        label: reason.label
-                                    }))
-                                ).map((reason) => (
+                                <option value=''>{loadingReasons ? 'Cargando motivos...' : 'Selecciona un motivo...'}</option>
+                                {normalizedReasonOptions.map((reason) => (
                                     <option key={reason.value} value={reason.value}>
                                         {reason.label}
                                     </option>
                                 ))}
-                                <option value={OTHER_REASON_VALUE}>Otra (agregar nuevo motivo)</option>
+                                <option value={OTHER_REASON_VALUE}>Otro (especificar)</option>
                             </select>
                             {showNoCatalogNotice && (
-                                <p className='text-[11px] mt-2' style={{ color: 'var(--text-secondary)' }}>
-                                    Se muestra un catálogo base con 10 motivos comunes. También puedes usar "Otra" para registrar uno nuevo.
+                                <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                    Se está usando un catálogo temporal estandarizado mientras se sincroniza la base.
                                 </p>
                             )}
 
                             {isCustomReason && (
-                                <>
-                                    <label className='block text-sm font-black mt-3 mb-2 ah-required-label' style={{ color: customReasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
-                                        Nuevo motivo <span className='text-rose-600'>*</span>
+                                <div className='space-y-1.5'>
+                                    <label className='block text-sm font-black ah-required-label' style={{ color: customReasonInvalid ? requiredErrorColor : 'var(--text-primary)' }}>
+                                        Describe el motivo <span className='text-rose-600'>*</span>
                                     </label>
-                                    <input
-                                        type='text'
+                                    <textarea
                                         value={customNotHeldReason}
                                         onChange={(e) => {
                                             setCustomNotHeldReason(e.target.value)
                                             setError('')
                                         }}
-                                        placeholder='Escribe el nuevo motivo'
-                                        className='ah-modal-field ah-required-control w-full h-11 px-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent'
+                                        placeholder='Escribe el motivo de forma breve y profesional'
+                                        className='ah-required-control w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF]/30 focus:border-[#2048FF] resize-none transition-colors'
                                         aria-invalid={customReasonInvalid ? 'true' : undefined}
                                         data-invalid={customReasonInvalid ? 'true' : undefined}
                                         style={{
-                                            background: 'var(--input-bg)',
-                                            borderColor: 'var(--input-border)',
+                                            background: 'var(--background)',
+                                            borderColor: customReasonInvalid
+                                                ? 'color-mix(in srgb, #ef4444 52%, var(--input-border))'
+                                                : 'var(--card-border)',
                                             color: 'var(--text-primary)'
                                         }}
+                                        rows={2}
                                         disabled={isSubmitting}
                                     />
-                                </>
+                                </div>
                             )}
                         </div>
                     )}
@@ -396,10 +435,10 @@ export default function MeetingConfirmationModal({
                     {/* Notes */}
                     <div className='mb-4'>
                         <label className='block text-sm font-black mb-2' style={{ color: 'var(--text-primary)' }}>
-                            Notas de la junta (opcional)
+                            Notas para análisis
                         </label>
                         <textarea
-                            placeholder='¿Qué se discutió o qué seguimiento queda pendiente?'
+                            placeholder='Contexto breve para análisis comercial (opcional)'
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             className='ah-modal-field ah-modal-textarea w-full p-3 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent resize-none'

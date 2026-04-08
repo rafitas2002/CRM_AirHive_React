@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
+import { canAccessMindLab } from '@/lib/mindLabAccess'
 import { getQuoteLikeNotificationsForCurrentUser } from '@/app/actions/quotes'
 import { Bell, Building2, CheckSquare, CalendarDays, BarChart3, LineChart, UserRound, Settings, LogOut, Sparkles, FolderClosed, Handshake, Sun, Moon, Circle, Check, Activity, type LucideIcon } from 'lucide-react'
 import BadgeMedallion from '@/components/BadgeMedallion'
@@ -63,6 +64,11 @@ export default function TopBar() {
     const [supabase] = useState(() => createClient())
 
     const isAdmin = auth.profile?.role === 'admin'
+    const canSeeMindLab = canAccessMindLab({
+        email: auth.user?.email,
+        username: auth.profile?.username || auth.username,
+        fullName: auth.profile?.full_name
+    })
     const [quoteNotificationOpen, setQuoteNotificationOpen] = useState(false)
     const [themeMenuOpen, setThemeMenuOpen] = useState(false)
     const [quotePendingCount, setQuotePendingCount] = useState(0)
@@ -757,6 +763,23 @@ export default function TopBar() {
                             ].join(' ')}
                         />
                     </Link>
+
+                    {canSeeMindLab && (
+                        <Link
+                            href='/otros'
+                            className='relative text-white font-semibold text-base px-2 py-2 group whitespace-nowrap'
+                        >
+                            Mente
+                            <span
+                                className={[
+                                    'absolute left-1/2 -translate-x-1/2 bottom-0 h-[3px] rounded bg-[#2048FF]',
+                                    'transition-all duration-300 ease-out',
+                                    pathname.includes('/otros') ? 'w-full opacity-100' : 'w-0 opacity-0',
+                                    'group-hover:w-full group-hover:opacity-100'
+                                ].join(' ')}
+                            />
+                        </Link>
+                    )}
 
                     {/* Menú Desplegable CUSTOMER */}
                     <div className='relative group h-full flex items-center'>

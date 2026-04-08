@@ -21,6 +21,7 @@ import {
 } from '@/lib/companySizeUtils'
 import { normalizeCompanyTags } from '@/lib/companyTags'
 import type { CompanyEnrichmentSuggestion, CompanyScopeValue } from '@/lib/companyEnrichment'
+import { LEAD_ORIGIN_OPTIONS, normalizeLeadOriginValue, type LeadOriginValue } from '@/lib/leadOrigin'
 
 export type CompanyData = {
     id?: string
@@ -38,7 +39,12 @@ export type CompanyData = {
     tags?: string[]
     website: string
     telefono?: string
+    email_empresa?: string
+    contacto_principal_nombre?: string
+    contacto_principal_email?: string
+    contacto_principal_telefono?: string
     descripcion: string
+    lead_origin?: LeadOriginValue | null
     alcance_empresa?: CompanyScopeValue | null
     sede_objetivo?: string | null
     sedes_sugeridas?: string[]
@@ -53,6 +59,13 @@ const normalizeWebsiteCandidate = (value: unknown) => {
     if (/^https?:\/\//i.test(trimmed)) return trimmed
     return `https://${trimmed}`
 }
+
+const normalizeEmailCandidate = (value: unknown) => String(value || '').trim().toLowerCase()
+
+const isValidEmailCandidate = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
+
+const normalizePhoneCandidate = (value: unknown) => String(value || '').trim()
+
 const isLikelyWebsiteCandidate = (value: string) => value.includes('.') && value.length >= 6
 const normalizeComparisonText = (value: unknown) => String(value || '')
     .normalize('NFD')
@@ -169,7 +182,12 @@ export default function CompanyModal({
         tags: [],
         website: '',
         telefono: '',
+        email_empresa: '',
+        contacto_principal_nombre: '',
+        contacto_principal_email: '',
+        contacto_principal_telefono: '',
         descripcion: '',
+        lead_origin: 'sin_definir',
         alcance_empresa: 'por_definir',
         sede_objetivo: '',
         sedes_sugeridas: []
@@ -191,11 +209,11 @@ export default function CompanyModal({
     const [isAutofillConfirmOpen, setIsAutofillConfirmOpen] = useState(false)
     const [autofillSuggestion, setAutofillSuggestion] = useState<CompanyEnrichmentSuggestion | null>(null)
     const [lastWebsiteCheckedForAutofill, setLastWebsiteCheckedForAutofill] = useState('')
+    const [showAdvancedSection, setShowAdvancedSection] = useState(false)
     const overlayScrollRef = useRef<HTMLDivElement>(null)
     const modalBodyScrollRef = useRef<HTMLDivElement>(null)
     const wrapperRef = useRef<HTMLDivElement>(null)
     const toInputString = (value: unknown) => (value == null ? '' : String(value))
-    const isEditMode = mode === 'edit' || Boolean(initialData?.id)
 
     const normalizeCompanyForForm = (raw: any): CompanyData => {
         const industriaIds = Array.isArray(raw?.industria_ids)
@@ -221,7 +239,12 @@ export default function CompanyModal({
             tags: normalizeCompanyTags(raw?.tags),
             website: toInputString(raw?.website ?? raw?.sitio_web),
             telefono: toInputString(raw?.telefono ?? raw?.phone),
+            email_empresa: toInputString(raw?.email_empresa ?? raw?.email),
+            contacto_principal_nombre: toInputString(raw?.contacto_principal_nombre ?? raw?.nombre_contacto),
+            contacto_principal_email: toInputString(raw?.contacto_principal_email),
+            contacto_principal_telefono: toInputString(raw?.contacto_principal_telefono),
             descripcion: toInputString(raw?.descripcion),
+            lead_origin: normalizeLeadOriginValue(raw?.lead_origin) || 'sin_definir',
             alcance_empresa: normalizeCompanyScopeValue(raw?.alcance_empresa) || 'por_definir',
             sede_objetivo: toInputString(raw?.sede_objetivo),
             sedes_sugeridas: normalizeSiteSuggestions(raw?.sedes_sugeridas)
@@ -247,7 +270,12 @@ export default function CompanyModal({
                 tags: [],
                 website: '',
                 telefono: '',
+                email_empresa: '',
+                contacto_principal_nombre: '',
+                contacto_principal_email: '',
+                contacto_principal_telefono: '',
                 descripcion: '',
+                lead_origin: 'sin_definir',
                 alcance_empresa: 'por_definir',
                 sede_objetivo: '',
                 sedes_sugeridas: []
@@ -260,6 +288,7 @@ export default function CompanyModal({
             setIsAutofillConfirmOpen(false)
             setIsAutofillPreviewLoading(false)
             setLastWebsiteCheckedForAutofill(normalizeWebsiteCandidate(initialData?.website || ''))
+            setShowAdvancedSection(Boolean(initialData?.id))
             fetchCatalogs()
 
             window.requestAnimationFrame(() => {
@@ -276,6 +305,7 @@ export default function CompanyModal({
             autofillSuggestion.industria ? 'industria' : null,
             autofillSuggestion.ubicacion ? 'ubicacion' : null,
             autofillSuggestion.telefono ? 'telefono de empresa' : null,
+            autofillSuggestion.email ? 'correo de empresa' : null,
             autofillSuggestion.alcance_empresa ? 'alcance' : null,
             autofillSuggestion.sede_objetivo_sugerida ? 'sede objetivo' : null,
             (autofillSuggestion.sedes_sugeridas || []).length > 0 ? 'sedes sugeridas' : null,
@@ -347,6 +377,38 @@ export default function CompanyModal({
         }
     }
 
+    const loadPrimaryCompanyContact = async (companyId: string) => {
+        const safeCompanyId = String(companyId || '').trim()
+        if (!safeCompanyId) return
+
+        const { data, error } = await (supabase.from('company_contacts') as any)
+            .select('full_name, email, phone, is_primary, updated_at, created_at')
+            .eq('empresa_id', safeCompanyId)
+            .eq('is_active', true)
+            .order('is_primary', { ascending: false })
+            .order('updated_at', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (error) {
+            console.warn('No se pudo cargar contacto principal de la empresa:', error)
+            return
+        }
+
+        const contactName = String(data?.full_name || '').trim()
+        const contactEmail = String(data?.email || '').trim()
+        const contactPhone = String(data?.phone || '').trim()
+        if (!contactName && !contactEmail && !contactPhone) return
+
+        setFormData((prev) => ({
+            ...prev,
+            contacto_principal_nombre: prev.contacto_principal_nombre || contactName,
+            contacto_principal_email: prev.contacto_principal_email || contactEmail,
+            contacto_principal_telefono: prev.contacto_principal_telefono || contactPhone
+        }))
+    }
+
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -356,6 +418,13 @@ export default function CompanyModal({
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [wrapperRef])
+
+    useEffect(() => {
+        if (!isOpen) return
+        const companyId = String(initialData?.id || '').trim()
+        if (!companyId) return
+        void loadPrimaryCompanyContact(companyId)
+    }, [isOpen, initialData?.id])
 
     const handleNombreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value
@@ -375,6 +444,10 @@ export default function CompanyModal({
     const selectCompany = (company: CompanyData) => {
         setFormData(normalizeCompanyForForm(company))
         setShowSuggestions(false)
+        const companyId = String(company.id || '').trim()
+        if (companyId) {
+            void loadPrimaryCompanyContact(companyId)
+        }
     }
 
     const addCompanyTag = (value: string) => {
@@ -520,6 +593,9 @@ export default function CompanyModal({
                     : prev.tamano_senal_principal,
                 ubicacion: suggestion.ubicacion || prev.ubicacion,
                 telefono: suggestion.telefono || prev.telefono,
+                email_empresa: suggestion.email || prev.email_empresa,
+                contacto_principal_email: prev.contacto_principal_email || suggestion.email || '',
+                contacto_principal_telefono: prev.contacto_principal_telefono || suggestion.telefono || '',
                 industria: suggestion.industria || prev.industria,
                 industria_id: nextPrimaryIndustryId,
                 industria_ids: nextIndustryIds,
@@ -564,6 +640,7 @@ export default function CompanyModal({
                 nombre: formData.nombre,
                 ubicacion: formData.ubicacion,
                 telefono: formData.telefono,
+                email: formData.email_empresa,
                 industria: formData.industria,
                 descripcion: formData.descripcion,
                 tamano: sizeForAutofill
@@ -582,6 +659,7 @@ export default function CompanyModal({
                 || suggestion.industria
                 || suggestion.ubicacion
                 || suggestion.telefono
+                || suggestion.email
                 || suggestion.alcance_empresa
                 || suggestion.sede_objetivo_sugerida
                 || (suggestion.sedes_sugeridas || []).length > 0
@@ -608,13 +686,22 @@ export default function CompanyModal({
         e.preventDefault()
         const normalizedName = toInputString(formData.nombre).trim()
         const normalizedWebsite = toInputString(formData.website).trim()
+        const normalizedCompanyEmail = normalizeEmailCandidate(formData.email_empresa)
+        const normalizedCompanyPhone = normalizePhoneCandidate(formData.telefono)
+        const normalizedPrimaryContactName = toInputString(formData.contacto_principal_nombre).trim()
+        const normalizedPrimaryContactEmail = normalizeEmailCandidate(formData.contacto_principal_email)
+        const normalizedPrimaryContactPhone = normalizePhoneCandidate(formData.contacto_principal_telefono)
 
         if (!normalizedName) {
             alert('El nombre de la empresa es obligatorio.')
             return
         }
-        if (!isEditMode && !normalizedWebsite) {
-            alert('Para crear una empresa, primero captura su página web para que el agente complete más datos.')
+        if (normalizedCompanyEmail && !isValidEmailCandidate(normalizedCompanyEmail)) {
+            alert('El correo de empresa no tiene un formato válido.')
+            return
+        }
+        if (normalizedPrimaryContactEmail && !isValidEmailCandidate(normalizedPrimaryContactEmail)) {
+            alert('El correo del contacto principal no tiene un formato válido.')
             return
         }
 
@@ -686,8 +773,13 @@ export default function CompanyModal({
                 ...formData,
                 nombre: normalizedName,
                 website: normalizedWebsite,
-                telefono: toInputString(formData.telefono).trim(),
+                telefono: normalizedCompanyPhone,
+                email_empresa: normalizedCompanyEmail,
+                contacto_principal_nombre: normalizedPrimaryContactName,
+                contacto_principal_email: normalizedPrimaryContactEmail,
+                contacto_principal_telefono: normalizedPrimaryContactPhone,
                 ubicacion: locationResolution.valueToPersist,
+                lead_origin: normalizeLeadOriginValue(formData.lead_origin) || 'sin_definir',
                 alcance_empresa: normalizeCompanyScopeValue(formData.alcance_empresa) || 'por_definir',
                 sede_objetivo: toInputString(formData.sede_objetivo).trim() || null,
                 sedes_sugeridas: normalizeSiteSuggestions(formData.sedes_sugeridas),
@@ -747,7 +839,7 @@ export default function CompanyModal({
                     <form id='company-form' onSubmit={handleSubmit} className='space-y-6'>
                         <div className='ah-required-note' role='note'>
                             <span className='ah-required-note-dot' aria-hidden='true' />
-                            Para el nuevo flujo con agente, empieza por Nombre y Sitio Web.
+                            Registro rápido: captura primero la información esencial. La sección avanzada y el autollenado siguen disponibles desde aquí.
                         </div>
 
                         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
@@ -783,12 +875,11 @@ export default function CompanyModal({
 
                             {/* Website */}
                             <div className='space-y-1.5'>
-                                <label className={`block text-sm font-medium text-[var(--text-primary)] ${!isEditMode ? 'ah-required-label' : ''}`}>
-                                    Sitio Web {!isEditMode && <span className='ah-required-asterisk'>*</span>}
+                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
+                                    Sitio Web (opcional)
                                 </label>
                                 <input
                                     type='text'
-                                    required={!isEditMode}
                                     placeholder='ej. https://empresa.com'
                                     value={toInputString(formData.website)}
                                     onChange={(e) => {
@@ -804,7 +895,7 @@ export default function CompanyModal({
                                     className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
                                 />
                                 <p className='text-[11px] text-[var(--text-secondary)]'>
-                                    Este dato ayuda al agente a completar automáticamente tamaño, ubicación e industria.
+                                    Este dato permite autollenar datos rápidos y avanzados (empresa, contacto, tamaño, ubicación, industria y alcance).
                                 </p>
                                 <div className='flex flex-wrap items-center gap-2'>
                                     <button
@@ -831,6 +922,7 @@ export default function CompanyModal({
                                         Sugerencia actual:
                                         {autofillSuggestion.ubicacion ? ` Ubicacion ${autofillSuggestion.ubicacion}.` : ''}
                                         {autofillSuggestion.telefono ? ` Telefono ${autofillSuggestion.telefono}.` : ''}
+                                        {autofillSuggestion.email ? ` Correo ${autofillSuggestion.email}.` : ''}
                                         {autofillSuggestion.alcance_empresa ? ` Alcance ${autofillSuggestion.alcance_empresa}.` : ''}
                                         {autofillSuggestion.sede_objetivo_sugerida ? ` Sede sugerida ${autofillSuggestion.sede_objetivo_sugerida}.` : ''}
                                         {autofillSuggestion.industria ? ` Industria ${autofillSuggestion.industria}.` : ''}
@@ -862,6 +954,132 @@ export default function CompanyModal({
                                 </p>
                             </div>
 
+                            <div className='space-y-1.5'>
+                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
+                                    Correo de la Empresa
+                                </label>
+                                <input
+                                    type='email'
+                                    placeholder='ej. contacto@empresa.com'
+                                    value={toInputString(formData.email_empresa)}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, email_empresa: e.target.value }))}
+                                    className='w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                />
+                                <p className='text-[11px] text-[var(--text-secondary)]'>
+                                    Correo corporativo general (no del contacto principal).
+                                </p>
+                            </div>
+
+                            <div className='space-y-1.5'>
+                                <label className='block text-sm font-medium text-[var(--text-primary)]'>
+                                    Origen del Lead / Suspect
+                                </label>
+                                <select
+                                    value={normalizeLeadOriginValue(formData.lead_origin) || 'sin_definir'}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, lead_origin: normalizeLeadOriginValue(e.target.value) || 'sin_definir' }))}
+                                    className='w-full px-3 py-2.5 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all'
+                                >
+                                    {LEAD_ORIGIN_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className='text-[11px] text-[var(--text-secondary)] leading-snug'>
+                                    {LEAD_ORIGIN_OPTIONS.find((option) => option.value === (normalizeLeadOriginValue(formData.lead_origin) || 'sin_definir'))?.description}
+                                </p>
+                            </div>
+
+                            <div className='col-span-1 md:col-span-2 rounded-2xl border border-[var(--card-border)] bg-[var(--hover-bg)] p-4 space-y-3'>
+                                <div className='flex flex-wrap items-center justify-between gap-2'>
+                                    <h3 className='text-[11px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-primary)' }}>
+                                        Contacto Principal
+                                    </h3>
+                                    <span className='text-[10px] font-bold' style={{ color: 'var(--text-secondary)' }}>
+                                        Datos de la persona, separados de la empresa
+                                    </span>
+                                </div>
+                                <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+                                    <div className='md:col-span-3'>
+                                        <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)]'>
+                                            Nombre del contacto
+                                        </label>
+                                        <input
+                                            type='text'
+                                            placeholder='Ej. Patricia de León'
+                                            value={toInputString(formData.contacto_principal_nombre)}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, contacto_principal_nombre: e.target.value }))}
+                                            className='mt-1 w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)]'>
+                                            Correo
+                                        </label>
+                                        <input
+                                            type='email'
+                                            placeholder='nombre@empresa.com'
+                                            value={toInputString(formData.contacto_principal_email)}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, contacto_principal_email: e.target.value }))}
+                                            className='mt-1 w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className='block text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)]'>
+                                            Teléfono / WhatsApp
+                                        </label>
+                                        <input
+                                            type='tel'
+                                            placeholder='+52 81 1234 5678'
+                                            value={toInputString(formData.contacto_principal_telefono)}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, contacto_principal_telefono: e.target.value }))}
+                                            className='mt-1 w-full px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-[var(--text-primary)] transition-all'
+                                        />
+                                    </div>
+                                    <div className='flex items-end'>
+                                        <div className='w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2'>
+                                            <p className='text-[10px] font-black uppercase tracking-wider' style={{ color: 'var(--text-secondary)' }}>
+                                                Tip
+                                            </p>
+                                            <p className='text-[11px] font-semibold leading-snug' style={{ color: 'var(--text-primary)' }}>
+                                                Si cambia el contacto, podrás agregar más desde el lead y juntas.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className='col-span-1 md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-3'>
+                                <div>
+                                    <p className='text-[11px] font-black uppercase tracking-[0.16em]' style={{ color: 'var(--text-primary)' }}>
+                                        Registro rápido
+                                    </p>
+                                    <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                                        Guarda primero lo básico y completa lo avanzado después.
+                                    </p>
+                                </div>
+                                <button
+                                    type='button'
+                                    onClick={() => setShowAdvancedSection((prev) => !prev)}
+                                    className='px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-[0.12em] transition-all cursor-pointer'
+                                    style={{
+                                        borderColor: showAdvancedSection
+                                            ? 'color-mix(in srgb, #2048FF 36%, var(--card-border))'
+                                            : 'var(--card-border)',
+                                        background: showAdvancedSection
+                                            ? 'color-mix(in srgb, #2048FF 12%, var(--card-bg))'
+                                            : 'var(--card-bg)',
+                                        color: showAdvancedSection
+                                            ? 'color-mix(in srgb, #2048FF 88%, var(--text-primary))'
+                                            : 'var(--text-secondary)'
+                                    }}
+                                >
+                                    {showAdvancedSection ? 'Ocultar sección avanzada' : 'Mostrar sección avanzada'}
+                                </button>
+                            </div>
+
+                            {showAdvancedSection && (
+                                <>
                             {/* Logo Upload Section */}
                             <div className='col-span-1 md:col-span-2 flex flex-col items-center justify-center space-y-4 p-6 border-2 border-dashed border-[var(--card-border)] rounded-xl bg-[var(--hover-bg)]'>
                                 <div className='relative w-32 h-32 rounded-full overflow-hidden border-4 border-[var(--card-bg)] shadow-lg bg-[var(--input-bg)] flex items-center justify-center group'>
@@ -1350,6 +1568,8 @@ export default function CompanyModal({
                                     className='w-full px-4 py-3 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2048FF] focus:border-transparent text-sm font-bold text-[var(--text-primary)] transition-all resize-none'
                                 />
                             </div>
+                                </>
+                            )}
                         </div>
                     </form>
                 </div>

@@ -335,6 +335,7 @@ export type Database = {
                     logo_url: string | null
                     converted_at: string | null
                     converted_by: string | null
+                    lead_origin: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                 }
                 Insert: {
                     id?: number
@@ -355,6 +356,7 @@ export type Database = {
                     logo_url?: string | null
                     converted_at?: string | null
                     converted_by?: string | null
+                    lead_origin?: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                 }
                 Update: {
                     id?: number
@@ -377,6 +379,7 @@ export type Database = {
                     logo_url?: string | null
                     converted_at?: string | null
                     converted_by?: string | null
+                    lead_origin?: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                 }
             }
             tareas: {
@@ -426,7 +429,7 @@ export type Database = {
                     meeting_sequence_number: number | null
                     start_time: string
                     duration_minutes: number
-                    meeting_type: 'presencial' | 'llamada' | 'video'
+                    meeting_type: 'presencial' | 'visita_empresa' | 'llamada' | 'video'
                     notes: string | null
                     attendees: string[] | null
                     primary_company_contact_id: string | null
@@ -454,7 +457,7 @@ export type Database = {
                     meeting_sequence_number?: number | null
                     start_time: string
                     duration_minutes?: number
-                    meeting_type: 'presencial' | 'llamada' | 'video'
+                    meeting_type: 'presencial' | 'visita_empresa' | 'llamada' | 'video'
                     notes?: string | null
                     attendees?: string[] | null
                     primary_company_contact_id?: string | null
@@ -482,7 +485,7 @@ export type Database = {
                     meeting_sequence_number?: number | null
                     start_time?: string
                     duration_minutes?: number
-                    meeting_type?: 'presencial' | 'llamada' | 'video'
+                    meeting_type?: 'presencial' | 'visita_empresa' | 'llamada' | 'video'
                     notes?: string | null
                     attendees?: string[] | null
                     primary_company_contact_id?: string | null
@@ -885,10 +888,12 @@ export type Database = {
                     industria: string | null
                     ubicacion: string | null
                     sitio_web: string | null
+                    email: string | null
                     tamano: number | null
                     owner_id: string | null
                     industria_id: string | null
                     tags: string[]
+                    lead_origin: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                     created_at: string
                     updated_at: string
                 }
@@ -898,10 +903,12 @@ export type Database = {
                     industria?: string | null
                     ubicacion?: string | null
                     sitio_web?: string | null
+                    email?: string | null
                     tamano?: number | null
                     owner_id?: string | null
                     industria_id?: string | null
                     tags?: string[]
+                    lead_origin?: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -911,10 +918,12 @@ export type Database = {
                     industria?: string | null
                     ubicacion?: string | null
                     sitio_web?: string | null
+                    email?: string | null
                     tamano?: number | null
                     owner_id?: string | null
                     industria_id?: string | null
                     tags?: string[]
+                    lead_origin?: 'contacto_propio' | 'referido' | 'inbound_marketing' | 'outbound_prospeccion' | 'evento_networking' | 'alianza_partner' | 'base_datos' | 'visita_puerta_fria' | 'cliente_existente' | 'otro' | 'sin_definir' | null
                     created_at?: string
                     updated_at?: string
                 }

@@ -30,7 +30,7 @@ CREATE TABLE meetings (
     title VARCHAR(255) NOT NULL,
     start_time TIMESTAMPTZ NOT NULL,
     duration_minutes INTEGER NOT NULL DEFAULT 60,
-    meeting_type VARCHAR(50) NOT NULL CHECK (meeting_type IN ('presencial', 'llamada', 'video')),
+    meeting_type VARCHAR(50) NOT NULL CHECK (meeting_type IN ('presencial', 'visita_empresa', 'llamada', 'video')),
     notes TEXT,
     attendees TEXT[],
     calendar_provider VARCHAR(50), -- 'google', 'outlook', etc.
@@ -55,7 +55,7 @@ CREATE TABLE meeting_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    alert_type VARCHAR(50) NOT NULL CHECK (alert_type IN ('24h', '2h', '15min', 'overdue')),
+    alert_type VARCHAR(50) NOT NULL CHECK (alert_type IN ('24h', '2h', '15min', '5min', 'overdue')),
     alert_time TIMESTAMPTZ NOT NULL,
     sent BOOLEAN DEFAULT FALSE,
     sent_at TIMESTAMPTZ,
@@ -137,9 +137,31 @@ CREATE POLICY "System can insert snapshots" ON forecast_snapshots
 -- Trigger para crear alertas automáticamente
 CREATE OR REPLACE FUNCTION create_meeting_alerts()
 RETURNS TRIGGER AS $$
+DECLARE
+  should_schedule BOOLEAN;
 BEGIN
-  -- Solo crear alertas para juntas futuras
-  IF NEW.start_time > NOW() THEN
+  -- Si hubo cambios de agenda/estatus, retirar alertas pendientes anteriores
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.start_time IS NOT DISTINCT FROM OLD.start_time
+       AND NEW.seller_id IS NOT DISTINCT FROM OLD.seller_id
+       AND NEW.status IS NOT DISTINCT FROM OLD.status
+       AND NEW.meeting_status IS NOT DISTINCT FROM OLD.meeting_status THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  UPDATE meeting_alerts
+  SET dismissed = TRUE,
+      dismissed_at = COALESCE(dismissed_at, NOW())
+  WHERE meeting_id = NEW.id
+    AND sent = FALSE
+    AND dismissed = FALSE;
+
+  should_schedule := NEW.start_time > NOW()
+    AND LOWER(COALESCE(NEW.status, '')) = 'scheduled'
+    AND LOWER(COALESCE(NEW.meeting_status, '')) IN ('scheduled', 'pending_confirmation');
+
+  IF should_schedule THEN
     -- 24h
     IF (NEW.start_time - INTERVAL '24 hours') > NOW() THEN
       INSERT INTO meeting_alerts (meeting_id, user_id, alert_type, alert_time)
@@ -155,13 +177,19 @@ BEGIN
       INSERT INTO meeting_alerts (meeting_id, user_id, alert_type, alert_time)
       VALUES (NEW.id, NEW.seller_id, '15min', NEW.start_time - INTERVAL '15 minutes');
     END IF;
+    -- 5min
+    IF (NEW.start_time - INTERVAL '5 minutes') > NOW() THEN
+      INSERT INTO meeting_alerts (meeting_id, user_id, alert_type, alert_time)
+      VALUES (NEW.id, NEW.seller_id, '5min', NEW.start_time - INTERVAL '5 minutes');
+    END IF;
   END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_create_meeting_alerts
-AFTER INSERT ON meetings
+AFTER INSERT OR UPDATE OF start_time, seller_id, status, meeting_status ON meetings
 FOR EACH ROW
 EXECUTE FUNCTION create_meeting_alerts();
 

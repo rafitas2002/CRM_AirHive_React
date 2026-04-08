@@ -42,6 +42,22 @@ type CompanyCode =
     | { kind: 'dot'; color: string; tooltip: string }
     | { kind: 'token'; value: string; tooltip: string }
 
+type PipelineStepStatus = 'completed' | 'current' | 'pending'
+
+type CompanyPipelineStep = {
+    label: string
+    status: PipelineStepStatus
+}
+
+type CompanyPipelineStatus = {
+    steps: CompanyPipelineStep[]
+    hasPendingAction: boolean
+    requiresNextAction: boolean
+    isMissingRequiredAction: boolean
+    actionLabel: string
+    nextActionAtLabel: string | null
+}
+
 const SIZE_CODE_LABELS: Record<string, string> = {
     '1': 'Micro',
     '2': 'Pequeña',
@@ -57,6 +73,8 @@ const LOCATION_CODE_LABELS: Record<string, string> = {
     I: 'Internacional',
     '-': 'Sin dato'
 }
+
+const PIPELINE_STEP_LABELS = ['Empresa', 'Junta', 'Seguimiento', 'Cierre'] as const
 
 const CODE_LEGEND_ROWS: CodeLegendRow[] = [
     {
@@ -105,22 +123,37 @@ const CODE_LEGEND_ROWS: CodeLegendRow[] = [
         title: 'Círculo 5: Próxima acción',
         marker: 'dot',
         items: [
-            { color: '#16a34a', label: 'Tiene acción pendiente' },
-            { color: '#9ca3af', label: 'Sin acción pendiente' }
+            { color: '#16a34a', label: 'Acción programada' },
+            { color: '#dc2626', label: 'Acción obligatoria pendiente' },
+            { color: '#9ca3af', label: 'Sin acción obligatoria' }
         ]
     }
 ]
 
+function parseDateMs(value?: string | null): number {
+    const raw = String(value || '').trim()
+    if (!raw) return Number.NaN
+    const ms = new Date(raw).getTime()
+    return Number.isFinite(ms) ? ms : Number.NaN
+}
+
+function formatActionDate(value?: string | null): string | null {
+    const ms = parseDateMs(value)
+    if (!Number.isFinite(ms)) return null
+    return new Date(ms).toLocaleString('es-MX', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+}
+
 function resolveLifecycle(company: CompanyWithProjects): LifecycleStage {
     if (Number(company.activeProjects || 0) > 0) return 'client'
+    const heldMeetingsCount = Number(company.held_meetings_count || 0)
+    if (heldMeetingsCount > 0) return 'lead'
     const lifecycle = String(company.lifecycle_stage || '').toLowerCase()
-    const sourceChannel = String(company.source_channel || '').toLowerCase()
-    const preLeadsCount = Number(company.pre_leads_count || 0)
-    const leadsCount = Number(company.leads_count || 0)
-    if (lifecycle === 'pre_lead' || sourceChannel === 'pre_lead' || (preLeadsCount > 0 && leadsCount === 0)) {
-        return 'pre_lead'
-    }
-    return 'lead'
+    return lifecycle === 'lead' ? 'lead' : 'pre_lead'
 }
 
 function resolveLocationBand(company: CompanyWithProjects): 'monterrey' | 'mexico' | 'international' | 'unknown' {
@@ -171,7 +204,62 @@ function resolveLocationCode(company: CompanyWithProjects): string {
     return '-'
 }
 
-function buildCompanyCodes(company: CompanyWithProjects): CompanyCode[] {
+function resolveCompanyPipelineStatus(company: CompanyWithProjects, lifecycle: LifecycleStage): CompanyPipelineStatus {
+    const heldMeetings = Number(company.held_meetings_count || 0)
+    const processProjects = Number(company.processProjects || 0)
+    const activeProjects = Number(company.activeProjects || 0)
+    const lostProjects = Number(company.lostProjects || 0)
+
+    const nextActionType = company.next_action_type === 'task' || company.next_action_type === 'meeting'
+        ? company.next_action_type
+        : 'none'
+    const hasPendingAction = nextActionType === 'task' || nextActionType === 'meeting'
+
+    const hasMeetingProgress = heldMeetings > 0 || nextActionType === 'meeting'
+    const hasFollowUpProgress =
+        processProjects > 0
+        || activeProjects > 0
+        || lostProjects > 0
+        || Boolean(company.last_contact_at)
+        || nextActionType === 'task'
+    const hasClosureProgress = activeProjects > 0 || lostProjects > 0
+
+    let activeStepIndex = 0
+    if (hasClosureProgress) activeStepIndex = 3
+    else if (hasFollowUpProgress) activeStepIndex = 2
+    else if (hasMeetingProgress) activeStepIndex = 1
+
+    const steps = PIPELINE_STEP_LABELS.map((label, index): CompanyPipelineStep => ({
+        label,
+        status: index < activeStepIndex
+            ? 'completed'
+            : index === activeStepIndex
+                ? 'current'
+                : 'pending'
+    }))
+
+    const requiresNextAction = lifecycle !== 'client' || processProjects > 0
+    const isMissingRequiredAction = requiresNextAction && !hasPendingAction
+    const nextActionText = String(company.next_action_label || '').trim()
+
+    let actionLabel = 'Sin acción obligatoria'
+    if (isMissingRequiredAction) {
+        actionLabel = 'Siguiente acción obligatoria pendiente'
+    } else if (hasPendingAction) {
+        actionLabel = nextActionText || 'Siguiente acción programada'
+    }
+
+    return {
+        steps,
+        hasPendingAction,
+        requiresNextAction,
+        isMissingRequiredAction,
+        actionLabel,
+        nextActionAtLabel: formatActionDate(company.next_action_at)
+    }
+}
+
+function buildCompanyCodes(company: CompanyWithProjects, pipelineStatus: CompanyPipelineStatus): CompanyCode[] {
     const sizeCode = resolveSizeCode(company)
     const locationCode = resolveLocationCode(company)
     const openLeads = Number(company.processProjects || 0)
@@ -192,11 +280,14 @@ function buildCompanyCodes(company: CompanyWithProjects): CompanyCode[] {
                 ? '#6366f1'
                 : '#7c3aed'
 
-    const hasPendingAction = company.next_action_type === 'task' || company.next_action_type === 'meeting'
-    const nextActionColor = hasPendingAction ? '#16a34a' : '#9ca3af'
-    const nextActionLabel = hasPendingAction
-        ? `Tiene acción pendiente${company.next_action_label ? `: ${company.next_action_label}` : ''}`
-        : 'Sin acción pendiente'
+    const nextActionColor = pipelineStatus.isMissingRequiredAction
+        ? '#dc2626'
+        : pipelineStatus.hasPendingAction
+            ? '#16a34a'
+            : '#9ca3af'
+    const nextActionLabel = pipelineStatus.isMissingRequiredAction
+        ? 'Acción obligatoria pendiente'
+        : pipelineStatus.actionLabel
 
     return [
         {
@@ -222,9 +313,55 @@ function buildCompanyCodes(company: CompanyWithProjects): CompanyCode[] {
         {
             kind: 'dot',
             color: nextActionColor,
-            tooltip: `Próxima acción: ${nextActionLabel}`
+            tooltip: `Próxima acción: ${nextActionLabel}${pipelineStatus.nextActionAtLabel ? ` (${pipelineStatus.nextActionAtLabel})` : ''}`
         }
     ]
+}
+
+function resolvePipelineStepVisual(status: PipelineStepStatus) {
+    if (status === 'completed') {
+        return {
+            dotColor: '#16a34a',
+            labelColor: 'color-mix(in srgb, var(--text-primary) 78%, #166534)',
+            labelOpacity: 1
+        }
+    }
+    if (status === 'current') {
+        return {
+            dotColor: '#2048FF',
+            labelColor: 'color-mix(in srgb, var(--text-primary) 80%, #1e40af)',
+            labelOpacity: 1
+        }
+    }
+    return {
+        dotColor: '#94a3b8',
+        labelColor: 'var(--text-secondary)',
+        labelOpacity: 0.75
+    }
+}
+
+function resolvePipelineActionTone(pipelineStatus: CompanyPipelineStatus): CSSProperties {
+    if (pipelineStatus.isMissingRequiredAction) {
+        return {
+            background: 'color-mix(in srgb, #dc2626 8%, var(--card-bg))',
+            borderColor: 'color-mix(in srgb, #dc2626 24%, var(--card-border))',
+            color: 'color-mix(in srgb, #7f1d1d 84%, var(--text-primary))'
+        }
+    }
+
+    if (pipelineStatus.hasPendingAction) {
+        return {
+            background: 'color-mix(in srgb, #16a34a 8%, var(--card-bg))',
+            borderColor: 'color-mix(in srgb, #16a34a 24%, var(--card-border))',
+            color: 'color-mix(in srgb, #166534 80%, var(--text-primary))'
+        }
+    }
+
+    return {
+        background: 'var(--hover-bg)',
+        borderColor: 'var(--card-border)',
+        color: 'var(--text-secondary)'
+    }
 }
 
 function resolveStageVisual(lifecycle: LifecycleStage) {
@@ -325,6 +462,7 @@ export default function CompaniesTable({
     onQuickUpdateTags
 }: CompaniesTableProps) {
     const [isLegendOpen, setIsLegendOpen] = useState(false)
+    const [showPipelineFlow, setShowPipelineFlow] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [tagDraftByCompany, setTagDraftByCompany] = useState<Record<string, string>>({})
     const [savingTagsByCompany, setSavingTagsByCompany] = useState<Record<string, boolean>>({})
@@ -396,8 +534,16 @@ export default function CompaniesTable({
 
     if (rows.length === 0) {
         return (
-            <div className='w-full p-8 text-center bg-white rounded-2xl border border-gray-200 shadow-sm'>
-                <p className='text-gray-500 text-lg'>No hay empresas registradas.</p>
+            <div
+                className='w-full rounded-[30px] border px-8 py-12 text-center shadow-sm'
+                style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}
+            >
+                <p className='text-2xl font-black tracking-tight' style={{ color: 'var(--text-primary)' }}>
+                    No hay empresas registradas
+                </p>
+                <p className='mt-2 text-sm font-semibold' style={{ color: 'var(--text-secondary)' }}>
+                    Crea una empresa para comenzar a gestionar el pipeline.
+                </p>
             </div>
         )
     }
@@ -410,6 +556,21 @@ export default function CompaniesTable({
                         <tr>
                             {isEditingMode && <th className='px-2 py-5 whitespace-nowrap w-[40px] text-center'>Edit</th>}
                             <th className='px-4 py-5 w-[240px] max-w-[240px]'>Empresa</th>
+                            <th className={`px-4 py-5 ${showPipelineFlow ? 'w-[340px] max-w-[340px]' : 'w-[280px] max-w-[280px]'}`}>
+                                <div className='flex items-center justify-between gap-2'>
+                                    <span>Avance</span>
+                                    <button
+                                        type='button'
+                                        onClick={() => setShowPipelineFlow((prev) => !prev)}
+                                        className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.1em] transition-colors cursor-pointer ${showPipelineFlow
+                                            ? 'border-[#2048FF]/45 bg-[#2048FF]/10 text-[#2048FF] hover:bg-[#2048FF]/15'
+                                            : 'border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-secondary)] hover:border-[var(--input-focus)] hover:text-[var(--text-primary)]'
+                                            }`}
+                                    >
+                                        {showPipelineFlow ? 'Ocultar flujo' : 'Mostrar flujo'}
+                                    </button>
+                                </div>
+                            </th>
                             <th className='px-4 py-5 w-[170px] max-w-[170px]'>Industria</th>
                             <th className='px-6 py-5'>Responsable</th>
                             <th className='px-4 py-5 w-[260px] max-w-[260px]'>Tags</th>
@@ -430,7 +591,8 @@ export default function CompaniesTable({
                         {rows.map(({ company, lifecycle }) => {
                             const companyId = String(company.id || company.nombre || '')
                             const stageVisual = resolveStageVisual(lifecycle)
-                            const companyCodes = buildCompanyCodes(company)
+                            const pipelineStatus = resolveCompanyPipelineStatus(company, lifecycle)
+                            const companyCodes = buildCompanyCodes(company, pipelineStatus)
                             const isHighlighted = Boolean(highlightedCompanyId && companyId === highlightedCompanyId)
                             const isRecent = recentCompanyIds.has(companyId)
                             const responsibleName =
@@ -442,7 +604,7 @@ export default function CompaniesTable({
                             const canQuickEditTags =
                                 Boolean(onQuickUpdateTags)
                                 && Boolean(companyId)
-                                && checkPermission(company, currentUserProfile)
+                                && Boolean(currentUserProfile?.id)
                             const isTagSaving = Boolean(savingTagsByCompany[companyId])
                             const tagDraft = tagDraftByCompany[companyId] || ''
                             const selectedTagKeys = new Set(companyTags.map((tag) => tag.toLocaleLowerCase('es-MX')))
@@ -454,6 +616,19 @@ export default function CompaniesTable({
                                 })
                                 .filter((tag) => !normalizedDraft || tag.toLocaleLowerCase('es-MX').includes(normalizedDraft))
                                 .slice(0, 6)
+                            const actionTone = resolvePipelineActionTone(pipelineStatus)
+                            const firstCurrentIndex = pipelineStatus.steps.findIndex((step) => step.status === 'current')
+                            const lastCompletedIndex = pipelineStatus.steps.reduce(
+                                (lastIndex, step, index) => (step.status === 'completed' ? index : lastIndex),
+                                -1
+                            )
+                            const currentStepIndex = firstCurrentIndex >= 0
+                                ? firstCurrentIndex
+                                : (lastCompletedIndex >= 0 ? lastCompletedIndex : 0)
+                            const currentStepLabel = pipelineStatus.steps[currentStepIndex]?.label || PIPELINE_STEP_LABELS[0]
+                            const progressPercent = pipelineStatus.steps.length > 1
+                                ? (currentStepIndex / (pipelineStatus.steps.length - 1)) * 100
+                                : 0
 
                             return (
                                 <tr
@@ -521,6 +696,117 @@ export default function CompaniesTable({
                                                 {stageVisual.label}
                                             </span>
                                         </div>
+                                    </td>
+
+                                    <td className={`px-4 py-5 ${showPipelineFlow ? 'w-[340px] max-w-[340px]' : 'w-[280px] max-w-[280px]'}`}>
+                                        {showPipelineFlow ? (
+                                            <div className='flex flex-col gap-2.5 min-w-0'>
+                                                <div
+                                                    className='rounded-xl border px-3 py-2.5'
+                                                    style={{
+                                                        background: 'color-mix(in srgb, var(--card-bg) 95%, #0f172a)',
+                                                        borderColor: 'color-mix(in srgb, var(--card-border) 88%, #334155)'
+                                                    }}
+                                                >
+                                                    <div className='flex items-center justify-between gap-2 mb-2'>
+                                                        <span
+                                                            className='text-[9px] font-black uppercase tracking-[0.12em]'
+                                                            style={{ color: 'color-mix(in srgb, var(--text-secondary) 88%, #64748b)' }}
+                                                        >
+                                                            Flujo comercial
+                                                        </span>
+                                                        <span
+                                                            className='text-[9px] font-black uppercase tracking-[0.12em]'
+                                                            style={{ color: 'color-mix(in srgb, var(--text-primary) 80%, #2048FF)' }}
+                                                        >
+                                                            {currentStepLabel}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className='relative px-1'>
+                                                        <div
+                                                            className='absolute left-[8px] right-[8px] top-[7px] h-[2px] rounded-full'
+                                                            style={{ background: 'color-mix(in srgb, var(--card-border) 85%, #64748b)' }}
+                                                        />
+                                                        <div
+                                                            className='absolute left-[8px] top-[7px] h-[2px] rounded-full'
+                                                            style={{
+                                                                width: `calc((100% - 16px) * ${Math.max(0, Math.min(100, progressPercent)) / 100})`,
+                                                                background: 'linear-gradient(90deg, #2048FF 0%, #22c55e 100%)'
+                                                            }}
+                                                        />
+
+                                                        <div className='relative grid grid-cols-4 gap-1'>
+                                                            {pipelineStatus.steps.map((step) => {
+                                                                const visual = resolvePipelineStepVisual(step.status)
+                                                                return (
+                                                                    <div key={`${companyId}-workflow-${step.label}`} className='flex flex-col items-center gap-1 text-center'>
+                                                                        <span
+                                                                            className='h-[14px] w-[14px] rounded-full border-2'
+                                                                            style={{
+                                                                                background: 'var(--card-bg)',
+                                                                                borderColor: visual.dotColor,
+                                                                                boxShadow: step.status === 'current'
+                                                                                    ? '0 0 0 3px color-mix(in srgb, #2048FF 18%, transparent)'
+                                                                                    : 'none'
+                                                                            }}
+                                                                        />
+                                                                        <span
+                                                                            className='text-[8px] font-black uppercase tracking-[0.08em] leading-[1.1]'
+                                                                            style={{ color: visual.labelColor, opacity: visual.labelOpacity }}
+                                                                        >
+                                                                            {step.label}
+                                                                        </span>
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className='flex items-start justify-between gap-2'>
+                                                    <span
+                                                        className='inline-flex min-w-0 max-w-full items-center rounded-lg border px-2 py-1 text-[10px] font-semibold'
+                                                        style={actionTone}
+                                                        title={pipelineStatus.requiresNextAction
+                                                            ? 'La empresa requiere próxima acción para mantener el avance comercial.'
+                                                            : 'Actualmente no hay una acción obligatoria configurada para esta empresa.'}
+                                                    >
+                                                        <span className='truncate'>{pipelineStatus.actionLabel}</span>
+                                                    </span>
+                                                    {pipelineStatus.nextActionAtLabel && (
+                                                        <span
+                                                            className='shrink-0 inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-semibold'
+                                                            style={{
+                                                                borderColor: 'var(--card-border)',
+                                                                background: 'var(--hover-bg)',
+                                                                color: 'var(--text-secondary)'
+                                                            }}
+                                                        >
+                                                            {pipelineStatus.nextActionAtLabel}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className='min-w-0 space-y-1.5'>
+                                                <p className='text-[9px] font-black uppercase tracking-[0.12em]' style={{ color: 'var(--text-secondary)' }}>
+                                                    Etapa actual
+                                                </p>
+                                                <p className='text-sm font-black truncate' style={{ color: 'var(--text-primary)' }} title={currentStepLabel}>
+                                                    {currentStepLabel}
+                                                </p>
+                                                <span
+                                                    className='inline-flex max-w-full items-center rounded-lg border px-2 py-1 text-[10px] font-semibold'
+                                                    style={actionTone}
+                                                    title={pipelineStatus.requiresNextAction
+                                                        ? 'La empresa requiere próxima acción para mantener el avance comercial.'
+                                                        : 'Actualmente no hay una acción obligatoria configurada para esta empresa.'}
+                                                >
+                                                    <span className='truncate'>{pipelineStatus.actionLabel}</span>
+                                                </span>
+                                            </div>
+                                        )}
                                     </td>
 
                                     <td className='px-4 py-5 w-[170px] max-w-[170px]'>

@@ -10,8 +10,170 @@ type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
 type SnapshotInsert = Database['public']['Tables']['forecast_snapshots']['Insert']
 type Lead = Database['public']['Tables']['clientes']['Row']
 type MeetingStatusLike = Pick<Meeting, 'status' | 'meeting_status'>
+type MeetingRescheduleReasonInput = {
+    reasonId?: string | null
+    reasonCustom?: string | null
+    responsibility?: 'propia' | 'ajena' | null
+    notes?: string | null
+}
 
 const supabase = createClient()
+
+function isUnknownColumnError(error: any): boolean {
+    if (!error) return false
+    if (String(error?.code || '') === '42703') return true
+    const message = String(error?.message || '').toLowerCase()
+    return message.includes('column') && (
+        message.includes('does not exist')
+        || message.includes('could not find')
+        || message.includes('unknown')
+    )
+}
+
+const MEETING_ALERT_DEFINITIONS: Array<{ type: string; minutesBefore: number }> = [
+    { type: '24h', minutesBefore: 24 * 60 },
+    { type: '2h', minutesBefore: 2 * 60 },
+    { type: '15min', minutesBefore: 15 },
+    { type: '5min', minutesBefore: 5 }
+]
+
+function shouldScheduleMeetingAlerts(startTimeIso: string, status: string, meetingStatus: string) {
+    const normalizedStatus = String(status || '').trim().toLowerCase()
+    const normalizedMeetingStatus = String(meetingStatus || '').trim().toLowerCase()
+    const startTimeMs = new Date(String(startTimeIso || '')).getTime()
+
+    if (!Number.isFinite(startTimeMs)) return false
+    if (startTimeMs <= Date.now()) return false
+    if (normalizedStatus !== 'scheduled') return false
+    if (normalizedMeetingStatus && normalizedMeetingStatus !== 'scheduled' && normalizedMeetingStatus !== 'pending_confirmation') return false
+    return true
+}
+
+function buildDesiredMeetingAlertSchedule(startTimeIso: string, nowMs: number = Date.now()) {
+    const startTimeMs = new Date(String(startTimeIso || '')).getTime()
+    if (!Number.isFinite(startTimeMs)) return new Map<string, string>()
+
+    const schedule = new Map<string, string>()
+    for (const item of MEETING_ALERT_DEFINITIONS) {
+        const alertMs = startTimeMs - (item.minutesBefore * 60 * 1000)
+        if (alertMs > nowMs) {
+            schedule.set(item.type, new Date(alertMs).toISOString())
+        }
+    }
+    return schedule
+}
+
+async function syncMeetingAlertsForUpdatedSchedule(params: {
+    meetingId: string
+    sellerId: string
+    startTimeIso: string
+    status: string
+    meetingStatus: string
+}) {
+    const meetingId = String(params.meetingId || '').trim()
+    const sellerId = String(params.sellerId || '').trim()
+    if (!meetingId || !sellerId) return
+
+    const { data: existingAlerts, error: existingAlertsError } = await (supabase
+        .from('meeting_alerts') as any)
+        .select('id, alert_type, alert_time, sent, dismissed')
+        .eq('meeting_id', meetingId)
+        .eq('sent', false)
+
+    if (existingAlertsError) {
+        console.warn('[MeetingAlerts] Could not load existing alerts while syncing reschedule:', existingAlertsError)
+        return
+    }
+
+    const alertRows = Array.isArray(existingAlerts) ? existingAlerts : []
+    const shouldSchedule = shouldScheduleMeetingAlerts(params.startTimeIso, params.status, params.meetingStatus)
+
+    if (!shouldSchedule) {
+        for (const row of alertRows) {
+            const id = String(row?.id || '').trim()
+            if (!id || Boolean(row?.dismissed)) continue
+            const { error: dismissError } = await (supabase
+                .from('meeting_alerts') as any)
+                .update({
+                    dismissed: true,
+                    dismissed_at: new Date().toISOString()
+                })
+                .eq('id', id)
+
+            if (dismissError) {
+                console.warn(`[MeetingAlerts] Could not dismiss alert ${id}:`, dismissError)
+            }
+        }
+        return
+    }
+
+    const desiredSchedule = buildDesiredMeetingAlertSchedule(params.startTimeIso)
+    const toleranceMs = 60 * 1000
+
+    for (const row of alertRows) {
+        const id = String(row?.id || '').trim()
+        const alertType = String(row?.alert_type || '').trim()
+        if (!id || !alertType) continue
+
+        const desiredAlertTime = desiredSchedule.get(alertType) || null
+        if (!desiredAlertTime) {
+            if (!row?.dismissed) {
+                const { error: dismissError } = await (supabase
+                    .from('meeting_alerts') as any)
+                    .update({
+                        dismissed: true,
+                        dismissed_at: new Date().toISOString()
+                    })
+                    .eq('id', id)
+                if (dismissError) {
+                    console.warn(`[MeetingAlerts] Could not dismiss obsolete alert ${id}:`, dismissError)
+                }
+            }
+            continue
+        }
+
+        desiredSchedule.delete(alertType)
+
+        const currentAlertMs = new Date(String(row?.alert_time || '')).getTime()
+        const desiredAlertMs = new Date(desiredAlertTime).getTime()
+        const shouldUpdateTime = !Number.isFinite(currentAlertMs) || Math.abs(currentAlertMs - desiredAlertMs) > toleranceMs
+        const shouldResetDismissState = Boolean(row?.dismissed)
+
+        if (!shouldUpdateTime && !shouldResetDismissState) continue
+
+        const { error: updateError } = await (supabase
+            .from('meeting_alerts') as any)
+            .update({
+                alert_time: desiredAlertTime,
+                dismissed: false,
+                dismissed_at: null,
+                sent: false,
+                sent_at: null
+            })
+            .eq('id', id)
+
+        if (updateError) {
+            console.warn(`[MeetingAlerts] Could not refresh alert ${id}:`, updateError)
+        }
+    }
+
+    for (const [alertType, alertTime] of desiredSchedule.entries()) {
+        const { error: insertError } = await (supabase
+            .from('meeting_alerts') as any)
+            .insert({
+                meeting_id: meetingId,
+                user_id: sellerId,
+                alert_type: alertType,
+                alert_time: alertTime,
+                sent: false,
+                dismissed: false
+            })
+
+        if (insertError) {
+            console.warn(`[MeetingAlerts] Could not create missing ${alertType} alert for meeting ${meetingId}:`, insertError)
+        }
+    }
+}
 
 /**
  * Meeting Management Service
@@ -108,7 +270,11 @@ export async function createMeeting(meetingData: MeetingInsert) {
     return createdMeeting
 }
 
-export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
+export async function updateMeeting(
+    meetingId: string,
+    updates: MeetingUpdate,
+    rescheduleReason?: MeetingRescheduleReasonInput | null
+) {
     const { data: previousMeeting } = await (supabase
         .from('meetings') as any)
         .select('*')
@@ -127,6 +293,29 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
         throw error
     }
 
+    if (data) {
+        const shouldSyncAlerts = (
+            updates.start_time !== undefined
+            || updates.seller_id !== undefined
+            || updates.status !== undefined
+            || updates.meeting_status !== undefined
+        )
+
+        if (shouldSyncAlerts) {
+            try {
+                await syncMeetingAlertsForUpdatedSchedule({
+                    meetingId: String(data.id || meetingId),
+                    sellerId: String(data.seller_id || ''),
+                    startTimeIso: String(data.start_time || ''),
+                    status: String(data.status || ''),
+                    meetingStatus: String(data.meeting_status || '')
+                })
+            } catch (alertSyncError) {
+                console.warn('[MeetingAlerts] Could not sync alerts after meeting update:', alertSyncError)
+            }
+        }
+    }
+
     // Google Calendar Sync - Handled via Server Actions separately
 
     // If start_time changed, update lead's next_meeting_id
@@ -139,17 +328,63 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
 
         if (wasRescheduled) {
             try {
-                await (supabase
+                const normalizedReasonId = String(rescheduleReason?.reasonId || '').trim() || null
+                const normalizedReasonCustom = String(rescheduleReason?.reasonCustom || '').trim() || null
+                const normalizedResponsibility =
+                    rescheduleReason?.responsibility === 'propia' || rescheduleReason?.responsibility === 'ajena'
+                        ? rescheduleReason.responsibility
+                        : null
+                const normalizedNotes = String(rescheduleReason?.notes || '').trim() || null
+
+                let normalizedReasonText = normalizedReasonCustom
+                if (!normalizedReasonText && normalizedReasonId) {
+                    const { data: reasonRow, error: reasonError } = await (supabase
+                        .from('meeting_cancellation_reasons') as any)
+                        .select('label')
+                        .eq('id', normalizedReasonId)
+                        .maybeSingle()
+
+                    if (!reasonError && reasonRow?.label) {
+                        normalizedReasonText = String(reasonRow.label || '').trim() || null
+                    }
+                }
+
+                if (!normalizedReasonText && normalizedReasonId) {
+                    normalizedReasonText = `catalog:${normalizedReasonId}`
+                }
+                if (!normalizedReasonText) normalizedReasonText = 'manual_update'
+
+                const baseAuditPayload = {
+                    meeting_id: meetingId,
+                    lead_id: data.lead_id,
+                    seller_id: data.seller_id,
+                    old_start_time: prevStart,
+                    new_start_time: newStart,
+                    changed_by: data.seller_id,
+                    reason: normalizedReasonText
+                }
+
+                const { error: structuredAuditError } = await (supabase
                     .from('meeting_reschedule_events') as any)
                     .insert({
-                        meeting_id: meetingId,
-                        lead_id: data.lead_id,
-                        seller_id: data.seller_id,
-                        old_start_time: prevStart,
-                        new_start_time: newStart,
-                        changed_by: data.seller_id,
-                        reason: 'manual_update'
+                        ...baseAuditPayload,
+                        reason_catalog_id: normalizedReasonId,
+                        reason_custom: normalizedReasonCustom,
+                        responsibility: normalizedResponsibility,
+                        notes: normalizedNotes
                     })
+
+                if (structuredAuditError) {
+                    if (isUnknownColumnError(structuredAuditError)) {
+                        const { error: fallbackAuditError } = await (supabase
+                            .from('meeting_reschedule_events') as any)
+                            .insert(baseAuditPayload)
+
+                        if (fallbackAuditError) throw fallbackAuditError
+                    } else {
+                        throw structuredAuditError
+                    }
+                }
             } catch (auditError) {
                 // Non-blocking telemetry
                 console.warn('[MeetingRescheduleAudit] Could not persist audit event:', auditError)
@@ -163,7 +398,10 @@ export async function updateMeeting(meetingId: string, updates: MeetingUpdate) {
                 metadata: {
                     lead_id: data.lead_id,
                     old_start_time: prevStart,
-                    new_start_time: newStart
+                    new_start_time: newStart,
+                    reason_id: String(rescheduleReason?.reasonId || '').trim() || null,
+                    reason_custom: String(rescheduleReason?.reasonCustom || '').trim() || null,
+                    responsibility: rescheduleReason?.responsibility || null
                 }
             })
         }

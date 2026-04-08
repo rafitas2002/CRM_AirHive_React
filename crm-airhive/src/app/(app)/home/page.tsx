@@ -1066,7 +1066,7 @@ function AdminDashboardView({ displayName }: { displayName: string }) {
                                     </p>
                                     <div className='mt-3 flex flex-wrap gap-2'>
                                         <a
-                                            href='/clientes'
+                                            href='/empresas?view=leads'
                                             className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] ${toneChipHoverButtonClassName}`}
                                             style={toneVars('blue')}
                                         >
@@ -1314,7 +1314,7 @@ function SellerHomeView({ displayName }: { displayName: string }) {
                             </h2>
                             <div className='grid grid-cols-2 gap-4'>
                                 <a
-                                    href='/clientes'
+                                    href='/empresas?view=leads'
                                     className='p-4 rounded-xl transition-all border-2 hover:scale-105'
                                     style={{ background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}
                                 >

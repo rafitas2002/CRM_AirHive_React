@@ -247,7 +247,7 @@ export const COMMERCIAL_METRICS_DICTIONARY: Dict = {
         periodRule: 'Estado actual de leads en Negociación.',
         includes: ['Leads en etapa Negociación'],
         excludes: ['Prospección y cerrados'],
-        updateFrequency: 'Tiempo real en /clientes',
+        updateFrequency: 'Tiempo real en /empresas (vista leads)',
         owner: 'Dirección Comercial',
         shortHelp: 'Días desde la última entrada del lead a Negociación.'
     },
@@ -261,7 +261,7 @@ export const COMMERCIAL_METRICS_DICTIONARY: Dict = {
         periodRule: 'Estado actual (ventana móvil de actividad configurada en vista).',
         includes: ['Aging >= 14d, 7d sin actividad, sin próxima junta y sin tareas pendientes (regla MVP actual)'],
         excludes: ['Negociaciones con próxima acción activa'],
-        updateFrequency: 'Tiempo real en /clientes',
+        updateFrequency: 'Tiempo real en /empresas (vista leads)',
         owner: 'Dirección Comercial',
         shortHelp: 'Negociaciones con alta probabilidad de estancamiento según regla operativa.'
     }
