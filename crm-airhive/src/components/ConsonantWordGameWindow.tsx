@@ -43,6 +43,26 @@ type CatalogPayload = {
     commonWords: string[]
 }
 
+type ChallengeApiPayload = {
+    ok?: boolean
+    message?: string
+    challenge?: GameChallenge
+}
+
+type CatalogApiPayload = {
+    ok?: boolean
+    message?: string
+    words?: string[]
+    commonWords?: string[]
+}
+
+type ValidateApiPayload = {
+    ok?: boolean
+    message?: string
+    tone?: AttemptTone
+    normalizedWord?: string | null
+}
+
 const formatSeconds = (value: number) => {
     const safeValue = Math.max(0, value)
     const minutes = Math.floor(safeValue / 60).toString().padStart(2, '0')
@@ -58,7 +78,7 @@ const getFeedbackClasses = (tone: AttemptTone) => {
 
 const sortWords = (words: string[]) => [...words].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
 
-const fetchJsonWithTimeout = async ({
+const fetchJsonWithTimeout = async <TPayload = Record<string, unknown>>({
     url,
     init,
     timeoutMessage,
@@ -68,17 +88,17 @@ const fetchJsonWithTimeout = async ({
     init: RequestInit
     timeoutMessage: string
     timeoutMs?: number
-}) => {
+}): Promise<{ response: Response; payload: TPayload | null }> => {
     const controller = new AbortController()
     const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
 
     try {
         const response = await fetch(url, { ...init, signal: controller.signal })
         const contentType = String(response.headers.get('content-type') || '').toLowerCase()
-        let payload: unknown = null
+        let payload: TPayload | null = null
 
         if (contentType.includes('application/json')) {
-            payload = await response.json().catch(() => null)
+            payload = await response.json().catch(() => null) as TPayload | null
         } else {
             const rawText = await response.text().catch(() => '')
             if (!response.ok) {
@@ -111,7 +131,7 @@ const fetchChallenge = async ({
     const params = new URLSearchParams({ action: 'challenge' })
     if (exclude) params.set('exclude', exclude)
     if (consonants) params.set('consonants', consonants)
-    const { response, payload } = await fetchJsonWithTimeout({
+    const { response, payload } = await fetchJsonWithTimeout<ChallengeApiPayload>({
         url: `/api/games/consonants?${params.toString()}`,
         init: { method: 'GET', cache: 'no-store' },
         timeoutMessage: 'El servidor tardo demasiado en cargar el reto. Intenta de nuevo.'
@@ -124,7 +144,7 @@ const fetchChallenge = async ({
 
 const fetchCatalog = async (consonants: string): Promise<CatalogPayload> => {
     const params = new URLSearchParams({ action: 'catalog', consonants })
-    const { response, payload } = await fetchJsonWithTimeout({
+    const { response, payload } = await fetchJsonWithTimeout<CatalogApiPayload>({
         url: `/api/games/consonants?${params.toString()}`,
         init: { method: 'GET', cache: 'no-store' },
         timeoutMessage: 'El servidor tardo demasiado en cargar el catalogo.'
@@ -145,7 +165,7 @@ const validateWord = async ({
     consonants: string
     word: string
 }): Promise<ValidationResponse> => {
-    const { response, payload } = await fetchJsonWithTimeout({
+    const { response, payload } = await fetchJsonWithTimeout<ValidateApiPayload>({
         url: '/api/games/consonants',
         init: {
             method: 'POST',

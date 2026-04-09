@@ -149,7 +149,7 @@ async function resolveInternalAttendeeEmails(rawAttendees: string[]): Promise<st
             if (isValidEmail(normalizedIdentifier)) return normalizedIdentifier
             return deriveEmailFromUsername(normalizedIdentifier)
         })
-        .filter((value): value is string => Boolean(value) && isValidEmail(value))
+        .filter((value): value is string => typeof value === 'string' && isValidEmail(value))
 
     return Array.from(new Set([...directEmails, ...resolvedFromIdentifiers]))
 }
@@ -167,7 +167,7 @@ async function collectInviteEmails(meeting: any): Promise<string[]> {
         : []
 
     return Array.from(new Set(
-        [...internal, ...external.map((value) => String(value || '').trim().toLowerCase())]
+        [...internal, ...external.map((value: string) => String(value || '').trim().toLowerCase())]
             .filter((value) => isValidEmail(value))
     ))
 }
@@ -631,16 +631,26 @@ export async function listGoogleCalendarEventsAction(
                 .eq('seller_id', userId)
                 .in('calendar_event_id', googleEventIds)
 
-            linkedMap = new Map(
-                (linkedMeetings || [])
-                    .map((meeting: any) => [String(meeting.calendar_event_id || '').trim(), {
+            const mappedLinkedEntries: Array<[string, {
+                id: string
+                lead_id: number
+                title: string
+                meeting_status: string
+                status: string
+            }]> = (linkedMeetings || [])
+                .map((meeting: any) => [
+                    String(meeting.calendar_event_id || '').trim(),
+                    {
                         id: String(meeting.id || ''),
                         lead_id: Number(meeting.lead_id || 0),
                         title: String(meeting.title || ''),
                         meeting_status: String(meeting.meeting_status || ''),
                         status: String(meeting.status || '')
-                    }])
-                    .filter(([eventId]) => Boolean(eventId))
+                    }
+                ])
+
+            linkedMap = new Map(
+                mappedLinkedEntries.filter((entry) => Boolean(entry[0]))
             )
         }
 

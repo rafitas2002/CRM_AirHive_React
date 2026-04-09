@@ -1124,11 +1124,11 @@ const buildChallengeFromTriplet = (triplet: string): GameChallenge | null => {
 
 const getAllValidChallengeTriplets = () => {
     ensureTripletCatalogsBuilt()
-    if (allValidChallengeTripletsCache) return allValidChallengeTripletsCache
-    if (!allValidChallengeTripletsCache || allValidChallengeTripletsCache.length === 0) {
+    const discoveredTriplets = allValidChallengeTripletsCache || []
+    if (discoveredTriplets.length === 0) {
         throw new Error('[consonantWordGameServer] Failed to discover valid challenge triplets.')
     }
-    return allValidChallengeTripletsCache
+    return discoveredTriplets
 }
 
 const refillChallengeTripletRotationQueue = (blocked: string) => {
