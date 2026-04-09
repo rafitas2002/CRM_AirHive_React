@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { createClient } from '@/lib/supabase'
@@ -8,11 +8,10 @@ import CompaniesTable from '@/components/CompaniesTable'
 import CompanyModal, { CompanyData } from '@/components/CompanyModal'
 import AdminCompanyDetailView from '@/components/AdminCompanyDetailView'
 import ConfirmModal from '@/components/ConfirmModal'
-import { Search, Table as TableIcon, Building2 } from 'lucide-react'
+import { Search, Table as TableIcon, Building2, Plus, ChevronDown } from 'lucide-react'
 import { getLocationFilterFacet, getLocationFilterFacetFromStructured, normalizeLocationDuplicateKey, normalizeLocationFilterKey, sortMonterreyMunicipalityLabels } from '@/lib/locationUtils'
 import { companyHasTag, normalizeCompanyTags } from '@/lib/companyTags'
 import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
-import { enrichMissingCompanies } from '@/app/actions/company-enrichment'
 import { normalizeLeadOriginValue } from '@/lib/leadOrigin'
 
 import RichardDawkinsFooter from '@/components/RichardDawkinsFooter'
@@ -143,6 +142,18 @@ function isClosedLeadStage(stage: unknown) {
         || normalized === 'cerrada perdida'
 }
 
+function normalizeEmailInput(value: unknown) {
+    const normalized = String(value || '').trim().toLowerCase()
+    if (!normalized) return null
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalized)) return null
+    return normalized
+}
+
+function normalizePhoneInput(value: unknown) {
+    const normalized = String(value || '').trim()
+    return normalized || null
+}
+
 export default function EmpresasPage() {
     const auth = useAuth()
     const router = useRouter()
@@ -158,6 +169,8 @@ export default function EmpresasPage() {
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
     const [modalCompanyData, setModalCompanyData] = useState<CompanyWithProjects | null>(null)
     const [isEditingMode, setIsEditingMode] = useState(false)
+    const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
+    const createMenuRef = useRef<HTMLDivElement | null>(null)
 
     // Filtering State
     // Filtering State
@@ -173,8 +186,7 @@ export default function EmpresasPage() {
     const [sortBy, setSortBy] = useState('alphabetical') // 'alphabetical', 'antiquity', 'projectAntiquity'
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
     const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now())
-    const [isEnrichingMissing, setIsEnrichingMissing] = useState(false)
-    const [enrichmentSummary, setEnrichmentSummary] = useState('')
+    const autoCreateCompanyHandledRef = useRef<string | null>(null)
     const [preLeadColumns, setPreLeadColumns] = useState<Record<string, boolean>>({
         empresa_id: true,
         industria_id: true,
@@ -214,6 +226,55 @@ export default function EmpresasPage() {
         const nextView = normalizeCompanyViewParam(searchParams.get('view'))
         setCompanyView((prev) => (prev === nextView ? prev : nextView))
     }, [searchParams])
+
+    useEffect(() => {
+        const isLegacyLeadCreateFlow = Boolean(searchParams.get('createLead') || searchParams.get('newLead'))
+        const createCompanyParamRaw = String(
+            searchParams.get('createCompany')
+            || searchParams.get('newCompany')
+            || searchParams.get('createLead')
+            || searchParams.get('newLead')
+            || ''
+        ).trim().toLowerCase()
+
+        if (!createCompanyParamRaw) {
+            autoCreateCompanyHandledRef.current = null
+            return
+        }
+        if (autoCreateCompanyHandledRef.current === createCompanyParamRaw) return
+
+        const shouldOpenCreateCompanyModal = ['1', 'true', 'yes', 'open'].includes(createCompanyParamRaw)
+        if (!shouldOpenCreateCompanyModal) return
+        if (loading) return
+
+        autoCreateCompanyHandledRef.current = createCompanyParamRaw
+        setIsDetailOpen(false)
+        setSelectedCompany(null)
+        setModalCompanyData(null)
+        setIsCompanyModalOpen(true)
+
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.delete('createCompany')
+        nextParams.delete('newCompany')
+        nextParams.delete('createLead')
+        nextParams.delete('newLead')
+        if (isLegacyLeadCreateFlow && !nextParams.get('view')) {
+            nextParams.set('view', 'leads')
+        }
+        const query = nextParams.toString()
+        router.replace(query ? `/empresas?${query}` : '/empresas')
+    }, [searchParams, loading, router])
+
+    useEffect(() => {
+        const onClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node
+            if (!createMenuRef.current?.contains(target)) {
+                setIsCreateMenuOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', onClickOutside)
+        return () => document.removeEventListener('mousedown', onClickOutside)
+    }, [])
 
     const handleCompanyViewChange = (nextView: CompanyUnifiedView) => {
         setCompanyView(nextView)
@@ -360,13 +421,16 @@ export default function EmpresasPage() {
             const normalized = String(value ?? '').trim()
             return normalized ? normalized : null
         }
+        const primaryContactName = normalizeOptionalText((companyData as any).contacto_principal_nombre)
+        const primaryContactEmail = normalizeEmailInput((companyData as any).contacto_principal_email)
+        const primaryContactPhone = normalizePhoneInput((companyData as any).contacto_principal_telefono)
         const sellerName = auth.profile?.full_name || auth.username || auth.user.email?.split('@')[0] || null
 
         const payload: Record<string, any> = {
             nombre_empresa: String(companyData.nombre || '').trim(),
-            nombre_contacto: null,
-            correos: [],
-            telefonos: [],
+            nombre_contacto: primaryContactName,
+            correos: primaryContactEmail ? [primaryContactEmail] : [],
+            telefonos: primaryContactPhone ? [primaryContactPhone] : [],
             ubicacion: normalizeOptionalText(companyData.ubicacion),
             giro_empresa: normalizeOptionalText(companyData.industria) || 'Sin clasificar',
             vendedor_id: auth.user.id,
@@ -550,14 +614,15 @@ export default function EmpresasPage() {
         return counts
     }, [filteredCompanies])
 
-    const missingCoreDataCount = useMemo(() => {
-        return companies.filter((company) => {
-            const missingSize = !Number(company.tamano || 0)
-            const missingIndustry = !String(company.industria || '').trim()
-            const missingLocation = !String(company.ubicacion || '').trim()
-            return missingSize || missingIndustry || missingLocation
-        }).length
-    }, [companies])
+    const missingRequiredActionCount = useMemo(() => {
+        return filteredCompanies.reduce((count, company) => {
+            const stage = resolveCompanyUnifiedStage(company)
+            const processProjects = Number(company.processProjects || 0)
+            const hasPendingAction = company.next_action_type === 'task' || company.next_action_type === 'meeting'
+            const requiresNextAction = stage !== 'client' || processProjects > 0
+            return requiresNextAction && !hasPendingAction ? count + 1 : count
+        }, 0)
+    }, [filteredCompanies])
 
     // Get unique data for filter dropdowns
     const uniqueIndustries = useMemo(() => {
@@ -1120,11 +1185,6 @@ export default function EmpresasPage() {
         }
     }
 
-    const openCreateModal = () => {
-        setModalCompanyData(null)
-        setIsCompanyModalOpen(true)
-    }
-
     const syncCompanyIndustries = async (companyId: string, companyData: CompanyData) => {
         const fallbackPrimary = (companyData.industria_ids || [])[0] || ''
         const primaryIndustryId = companyData.industria_id || fallbackPrimary
@@ -1158,6 +1218,94 @@ export default function EmpresasPage() {
 
         if (insertError) {
             throw insertError
+        }
+    }
+
+    const syncPrimaryCompanyContact = async (companyId: string, companyData: CompanyData) => {
+        const safeCompanyId = String(companyId || '').trim()
+        if (!safeCompanyId) return
+
+        const contactNameRaw = String((companyData as any).contacto_principal_nombre || '').trim()
+        const contactEmail = normalizeEmailInput((companyData as any).contacto_principal_email)
+        const contactPhone = normalizePhoneInput((companyData as any).contacto_principal_telefono)
+
+        if (!contactNameRaw && !contactEmail && !contactPhone) return
+
+        const contactName = contactNameRaw || 'Contacto principal'
+
+        const { data: activeRows, error: activeRowsError } = await (supabase.from('company_contacts') as any)
+            .select('id, full_name, email, phone, is_primary')
+            .eq('empresa_id', safeCompanyId)
+            .eq('is_active', true)
+            .order('is_primary', { ascending: false })
+            .order('updated_at', { ascending: false })
+
+        if (activeRowsError) {
+            console.warn('No se pudo consultar company_contacts para sincronizar contacto principal:', activeRowsError)
+            return
+        }
+
+        const activeList = Array.isArray(activeRows) ? activeRows : []
+        const currentPrimary = activeList.find((row: any) => Boolean(row?.is_primary)) || activeList[0] || null
+
+        if (currentPrimary?.id) {
+            const updatePayload: Record<string, any> = {
+                full_name: contactName,
+                email: contactEmail,
+                phone: contactPhone,
+                is_primary: true,
+                is_active: true
+            }
+            const { error: updateError } = await (supabase.from('company_contacts') as any)
+                .update(updatePayload)
+                .eq('id', String(currentPrimary.id))
+                .eq('empresa_id', safeCompanyId)
+
+            if (updateError) {
+                console.warn('No se pudo actualizar contacto principal de empresa:', updateError)
+                return
+            }
+
+            const { error: demoteError } = await (supabase.from('company_contacts') as any)
+                .update({ is_primary: false })
+                .eq('empresa_id', safeCompanyId)
+                .eq('is_active', true)
+                .neq('id', String(currentPrimary.id))
+            if (demoteError) {
+                console.warn('No se pudo normalizar contactos primarios de empresa:', demoteError)
+            }
+            return
+        }
+
+        const { data: insertedRow, error: insertError } = await (supabase.from('company_contacts') as any)
+            .insert({
+                empresa_id: safeCompanyId,
+                full_name: contactName,
+                email: contactEmail,
+                phone: contactPhone,
+                is_primary: true,
+                is_active: true,
+                source: 'manual',
+                created_by: auth.user?.id || null
+            })
+            .select('id')
+            .single()
+
+        if (insertError) {
+            console.warn('No se pudo crear contacto principal de empresa:', insertError)
+            return
+        }
+
+        const insertedId = String(insertedRow?.id || '').trim()
+        if (!insertedId) return
+
+        const { error: demoteError } = await (supabase.from('company_contacts') as any)
+            .update({ is_primary: false })
+            .eq('empresa_id', safeCompanyId)
+            .eq('is_active', true)
+            .neq('id', insertedId)
+        if (demoteError) {
+            console.warn('No se pudo normalizar contactos primarios de empresa tras inserción:', demoteError)
         }
     }
 
@@ -1209,6 +1357,7 @@ export default function EmpresasPage() {
         }
         const websiteValue = ((companyData as any)?.website ?? (companyData as any)?.sitio_web ?? '').toString().trim() || null
         const companyPhoneValue = normalizeOptionalText((companyData as any)?.telefono)
+        const companyEmailValue = normalizeEmailInput((companyData as any)?.email_empresa ?? (companyData as any)?.email)
 
         const getPayloadCandidates = () => {
             const candidates: any[] = []
@@ -1242,12 +1391,21 @@ export default function EmpresasPage() {
                         corePayloadWithLeadOrigin
                     ]
 
-                    for (const payloadVariant of corePayloadVariantsWithPhone) {
-                        if (websiteValue !== null) {
-                            candidates.push({ ...payloadVariant, website: websiteValue })
-                            candidates.push({ ...payloadVariant, sitio_web: websiteValue })
+                    for (const payloadVariantWithPhone of corePayloadVariantsWithPhone) {
+                        const payloadVariantsWithEmail = companyEmailValue
+                            ? [
+                                { ...payloadVariantWithPhone, email: companyEmailValue },
+                                payloadVariantWithPhone
+                            ]
+                            : [payloadVariantWithPhone]
+
+                        for (const payloadVariant of payloadVariantsWithEmail) {
+                            if (websiteValue !== null) {
+                                candidates.push({ ...payloadVariant, website: websiteValue })
+                                candidates.push({ ...payloadVariant, sitio_web: websiteValue })
+                            }
+                            candidates.push(payloadVariant)
                         }
-                        candidates.push(payloadVariant)
                     }
                 }
             }
@@ -1295,6 +1453,12 @@ export default function EmpresasPage() {
                 }
             }
 
+            try {
+                await syncPrimaryCompanyContact(modalCompanyData.id!, companyData)
+            } catch (contactError: any) {
+                console.error('Error syncing primary company contact:', contactError)
+            }
+
             setSelectedCompany((prev) => (
                 prev && prev.id === modalCompanyData.id
                     ? {
@@ -1307,6 +1471,10 @@ export default function EmpresasPage() {
                         tags: normalizeCompanyTags(companyData.tags || prev.tags),
                         website: companyData.website,
                         telefono: companyData.telefono,
+                        email_empresa: (companyData as any).email_empresa || (companyData as any).email || null,
+                        contacto_principal_nombre: (companyData as any).contacto_principal_nombre || null,
+                        contacto_principal_email: (companyData as any).contacto_principal_email || null,
+                        contacto_principal_telefono: (companyData as any).contacto_principal_telefono || null,
                         lead_origin: normalizeLeadOriginValue((companyData as any).lead_origin) || prev.lead_origin || 'sin_definir',
                         alcance_empresa: normalizeCompanyScopeValue((companyData as any).alcance_empresa) || prev.alcance_empresa || 'por_definir',
                         sede_objetivo: ((companyData as any).sede_objetivo ?? prev.sede_objetivo ?? null),
@@ -1355,6 +1523,14 @@ export default function EmpresasPage() {
 
             try {
                 if (createdCompany?.id) {
+                    await syncPrimaryCompanyContact(createdCompany.id, companyData)
+                }
+            } catch (contactError: any) {
+                console.error('Error syncing primary company contact on create:', contactError)
+            }
+
+            try {
+                if (createdCompany?.id) {
                     await ensureCompanyHasSuspect(createdCompany.id, companyData)
                 }
             } catch (suspectError: any) {
@@ -1366,38 +1542,6 @@ export default function EmpresasPage() {
 
         setIsCompanyModalOpen(false)
         await fetchCompanies()
-    }
-
-    const handleEnrichMissingCompanies = async () => {
-        if (isEnrichingMissing) return
-        setIsEnrichingMissing(true)
-        setEnrichmentSummary('')
-
-        try {
-            const result = await enrichMissingCompanies({
-                limit: 8,
-                applyMode: 'fill_missing',
-                autoApply: true
-            })
-
-            if (!result.success) {
-                const msg = String(result.error || 'No se pudo enriquecer empresas faltantes.')
-                setEnrichmentSummary(`Error: ${msg}`)
-                alert(msg)
-                return
-            }
-
-            const data = result.data
-            const summary = `Procesadas ${data.processed} • Aplicadas ${data.applied} • Listas para revisar ${data.ready} • Fallidas ${data.failed}`
-            setEnrichmentSummary(summary)
-            await fetchCompanies()
-        } catch (error: any) {
-            const msg = parseSupabaseError(error, 'No se pudo ejecutar enriquecimiento en lote.')
-            setEnrichmentSummary(`Error: ${msg}`)
-            alert(msg)
-        } finally {
-            setIsEnrichingMissing(false)
-        }
     }
 
     useEffect(() => {
@@ -1449,22 +1593,6 @@ export default function EmpresasPage() {
 
                     <div className='flex items-center gap-4 p-2 rounded-2xl shadow-sm border' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
                         <button
-                            onClick={handleEnrichMissingCompanies}
-                            disabled={isEnrichingMissing || missingCoreDataCount === 0}
-                            className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${isEnrichingMissing || missingCoreDataCount === 0
-                                ? 'cursor-not-allowed opacity-50'
-                                : 'cursor-pointer hover:scale-105 active:scale-95'
-                                }`}
-                            style={{
-                                borderColor: 'color-mix(in srgb, #16a34a 40%, var(--card-border))',
-                                background: 'color-mix(in srgb, #16a34a 10%, var(--card-bg))',
-                                color: 'color-mix(in srgb, #166534 70%, var(--text-primary))'
-                            }}
-                            title={missingCoreDataCount === 0 ? 'No hay empresas con datos incompletos' : 'Enriquece automáticamente tamaño, ubicación e industria faltantes'}
-                        >
-                            {isEnrichingMissing ? 'Enriqueciendo...' : `Enriquecer faltantes (${missingCoreDataCount})`}
-                        </button>
-                        <button
                             onClick={() => setIsEditingMode(!isEditingMode)}
                             className={`px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 cursor-pointer ${isEditingMode
                                 ? 'bg-rose-600 border-rose-600 text-white shadow-none hover:bg-rose-800 hover:scale-105'
@@ -1489,36 +1617,55 @@ export default function EmpresasPage() {
                                 )}
                             </div>
                         </button>
-                        <button
-                            onClick={() => {
-                                setModalCompanyData(null)
-                                setIsCompanyModalOpen(true)
-                            }}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
-                        >
-                            + Nueva Empresa (Suspect)
-                        </button>
-                        <button
-                            onClick={() => router.push('/clientes?createLead=1')}
-                            className='px-8 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
-                        >
-                            + Nuevo Lead
-                        </button>
+                        <div ref={createMenuRef} className='relative'>
+                            <button
+                                type='button'
+                                onClick={() => setIsCreateMenuOpen((prev) => !prev)}
+                                className='inline-flex items-center gap-2 px-7 py-3 bg-[#2048FF] text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-[#1b3de6] hover:scale-105 active:scale-95 transition-all cursor-pointer'
+                                aria-haspopup='menu'
+                                aria-expanded={isCreateMenuOpen}
+                                aria-label='Crear nuevo registro'
+                            >
+                                <Plus size={14} strokeWidth={2.4} />
+                                Nuevo
+                                <ChevronDown
+                                    size={14}
+                                    strokeWidth={2.4}
+                                    className={`transition-transform duration-200 ${isCreateMenuOpen ? 'rotate-180' : ''}`}
+                                />
+                            </button>
+
+                            {isCreateMenuOpen && (
+                                <div className='absolute right-0 top-[120%] min-w-[290px] rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl z-[120] overflow-hidden p-1.5'>
+                                    <button
+                                        type='button'
+                                        onClick={() => {
+                                            setIsCreateMenuOpen(false)
+                                            setModalCompanyData(null)
+                                            setIsCompanyModalOpen(true)
+                                        }}
+                                        className='w-full text-left px-4 py-3 rounded-xl border border-transparent hover:border-[var(--card-border)] hover:bg-[var(--hover-bg)] transition-colors cursor-pointer'
+                                    >
+                                        <p className='text-sm font-black' style={{ color: 'var(--text-primary)' }}>Nueva Empresa (Suspect)</p>
+                                        <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>Registrar empresa nueva en la mesa unificada</p>
+                                    </button>
+
+                                    <button
+                                        type='button'
+                                        onClick={() => {
+                                            setIsCreateMenuOpen(false)
+                                            router.push('/empresas?view=leads&createCompany=1')
+                                        }}
+                                        className='w-full text-left px-4 py-3 rounded-xl border border-transparent hover:border-[var(--card-border)] hover:bg-[var(--hover-bg)] transition-colors cursor-pointer'
+                                    >
+                                        <p className='text-sm font-black' style={{ color: 'var(--text-primary)' }}>Nuevo Lead</p>
+                                        <p className='text-[11px] font-semibold' style={{ color: 'var(--text-secondary)' }}>Abrir captura de lead en la vista de leads</p>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-
-                {enrichmentSummary && (
-                    <div
-                        className='px-5 py-3 rounded-2xl border text-xs font-bold'
-                        style={{
-                            borderColor: 'color-mix(in srgb, #16a34a 35%, var(--card-border))',
-                            background: 'color-mix(in srgb, #16a34a 8%, var(--card-bg))',
-                            color: 'var(--text-primary)'
-                        }}
-                    >
-                        {enrichmentSummary}
-                    </div>
-                )}
 
                 {/* Main Table Container */}
                 <div className='rounded-[40px] shadow-xl border overflow-hidden flex flex-col mb-6' style={{ background: 'var(--card-bg)', borderColor: 'var(--card-border)' }}>
@@ -1570,11 +1717,54 @@ export default function EmpresasPage() {
                                         <span className='ah-count-chip-subtitle'>Últimas 24h</span>
                                     </div>
                                 </div>
+                                <div
+                                    className='ah-count-chip'
+                                    style={{
+                                        background: missingRequiredActionCount > 0
+                                            ? 'color-mix(in srgb, #dc2626 10%, var(--card-bg))'
+                                            : undefined,
+                                        borderColor: missingRequiredActionCount > 0
+                                            ? 'color-mix(in srgb, #dc2626 30%, var(--card-border))'
+                                            : undefined
+                                    }}
+                                >
+                                    <span
+                                        className='ah-count-chip-number'
+                                        style={{
+                                            color: missingRequiredActionCount > 0
+                                                ? 'color-mix(in srgb, #b91c1c 84%, var(--text-primary))'
+                                                : undefined
+                                        }}
+                                    >
+                                        {missingRequiredActionCount}
+                                    </span>
+                                    <div className='ah-count-chip-meta'>
+                                        <span className='ah-count-chip-title'>Acción Pendiente</span>
+                                        <span className='ah-count-chip-subtitle'>Obligatoria</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <div className='ah-table-toolbar'>
                             <div className='flex flex-col gap-3 w-full'>
+                                {missingRequiredActionCount > 0 && (
+                                    <div
+                                        className='rounded-xl border px-3 py-2'
+                                        style={{
+                                            background: 'color-mix(in srgb, #dc2626 8%, var(--card-bg))',
+                                            borderColor: 'color-mix(in srgb, #dc2626 26%, var(--card-border))'
+                                        }}
+                                    >
+                                        <p
+                                            className='text-[11px] font-bold'
+                                            style={{ color: 'color-mix(in srgb, #991b1b 82%, var(--text-primary))' }}
+                                        >
+                                            Hay {missingRequiredActionCount} empresa(s) con acción obligatoria pendiente. Registra junta o tarea para mantener continuidad comercial.
+                                        </p>
+                                    </div>
+                                )}
+
                                 <div className='flex flex-wrap items-center justify-between gap-3'>
                                     <div className='inline-flex flex-wrap items-center gap-2 p-1 rounded-xl border border-[var(--card-border)] bg-[var(--hover-bg)]'>
                                         {([

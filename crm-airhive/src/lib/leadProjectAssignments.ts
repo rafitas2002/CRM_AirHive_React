@@ -80,10 +80,24 @@ function isMissingLeadAssignmentsTableError(error: any) {
 }
 
 function isUnknownColumnError(error: any, columnName?: string) {
-    const message = String(error?.message || '').toLowerCase()
-    if (!message) return false
-    if (!message.includes('column')) return false
-    if (!message.includes('does not exist')) return false
+    if (!error) return false
+
+    const code = String(error?.code || error?.error?.code || '').trim()
+    const message = String(error?.message || error?.error?.message || '').toLowerCase()
+    if (!message && code !== '42703') return false
+
+    const hasUnknownColumnSignal = code === '42703'
+        || (
+            message.includes('column')
+            && (
+                message.includes('does not exist')
+                || message.includes('could not find')
+                || message.includes('unknown')
+                || message.includes('schema cache')
+            )
+        )
+
+    if (!hasUnknownColumnSignal) return false
     if (!columnName) return true
     return message.includes(String(columnName).toLowerCase())
 }

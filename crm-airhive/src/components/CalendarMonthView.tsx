@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { MeetingWithUrgency } from '@/lib/confirmationService'
 import { ChevronLeft, ChevronRight, Clock3, Users2 } from 'lucide-react'
+import { meetingIncludesUser } from '@/lib/meetingParticipantUtils'
 
 interface CalendarMonthViewProps {
     meetings: MeetingWithUrgency[]
@@ -25,41 +26,6 @@ function toDateKey(value: Date): string {
 
 function isSameDate(a: Date, b: Date) {
     return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-}
-
-function extractEmailFromLabel(label: string): string | null {
-    const trimmed = String(label || '').trim()
-    if (!trimmed) return null
-    const angled = /<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>/.exec(trimmed)
-    if (angled?.[1]) return angled[1].trim().toLowerCase()
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return trimmed.toLowerCase()
-    return null
-}
-
-function meetingIncludesUser(
-    meeting: MeetingWithUrgency,
-    userId?: string | null,
-    userEmail?: string | null,
-    userUsername?: string | null
-) {
-    const normalizedEmail = String(userEmail || '').trim().toLowerCase()
-    const normalizedUserId = String(userId || '').trim().toLowerCase()
-    const normalizedUsername = String(userUsername || '').trim().toLowerCase()
-    const attendeeEmails = Array.isArray(meeting.attendees)
-        ? meeting.attendees.map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
-        : []
-    const externalEmails = Array.isArray(meeting.external_participants)
-        ? meeting.external_participants
-            .map(value => extractEmailFromLabel(String(value || '')))
-            .filter((value): value is string => Boolean(value))
-        : []
-
-    if (normalizedUserId && String(meeting.seller_id || '').trim().toLowerCase() === normalizedUserId) return true
-
-    if (normalizedEmail && (attendeeEmails.includes(normalizedEmail) || externalEmails.includes(normalizedEmail))) return true
-    if (normalizedUsername && attendeeEmails.includes(normalizedUsername)) return true
-    if (normalizedUserId && attendeeEmails.includes(normalizedUserId)) return true
-    return false
 }
 
 function getParticipantLabels(meeting: MeetingWithUrgency, currentUserId?: string | null, currentUserEmail?: string | null): string[] {
@@ -156,7 +122,7 @@ export default function CalendarMonthView({
                         {monthLabel}
                     </h3>
                     <p className='text-xs font-semibold' style={{ color: 'var(--text-secondary)' }}>
-                        Las juntas donde participas están resaltadas en azul.
+                        Azul: participas. Amarillo: no participas.
                     </p>
                 </div>
                 <div className='flex items-center gap-2'>
@@ -251,10 +217,10 @@ export default function CalendarMonthView({
                                             onClick={() => (isEditMode ? onEditMeeting(meeting) : undefined)}
                                             className={`w-full text-left rounded-xl border px-2.5 py-2 transition-colors ${isEditMode ? 'cursor-pointer hover:brightness-95' : 'cursor-default'} ${isUserMeeting ? '' : ''}`}
                                             style={{
-                                                borderColor: isUserMeeting ? 'rgba(37,99,235,0.45)' : 'var(--card-border)',
+                                                borderColor: isUserMeeting ? 'rgba(37,99,235,0.45)' : 'rgba(245,158,11,0.42)',
                                                 background: isUserMeeting
                                                     ? 'color-mix(in srgb, #DBEAFE 70%, var(--card-bg))'
-                                                    : 'var(--background)'
+                                                    : 'color-mix(in srgb, #FEF3C7 45%, var(--background))'
                                             }}
                                             title={participantPreview}
                                         >
@@ -262,7 +228,7 @@ export default function CalendarMonthView({
                                                 {meeting.title}
                                             </p>
                                             <div className='mt-1 flex items-center gap-1.5'>
-                                                <Clock3 size={11} className='text-blue-600 shrink-0' />
+                                                <Clock3 size={11} className={`${isUserMeeting ? 'text-blue-600' : 'text-amber-600'} shrink-0`} />
                                                 <p className='text-[10px] font-semibold truncate' style={{ color: 'var(--text-secondary)' }}>
                                                     {new Date(meeting.start_time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })}
                                                 </p>

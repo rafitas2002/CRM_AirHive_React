@@ -2687,7 +2687,7 @@ export default function AdminCompanyDetailView({
                         const leadId = Number((lead as any)?.id || 0)
                         if (!Number.isFinite(leadId) || leadId <= 0) return
                         setIsClientDetailOpen(false)
-                        router.push(`/clientes?editLeadId=${leadId}`)
+                        router.push('/empresas?view=leads')
                     }}
                     onEditCompany={() => { }}
                     onEmailClick={(email) => {

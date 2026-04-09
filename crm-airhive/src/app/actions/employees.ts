@@ -491,10 +491,14 @@ export async function getEmployeesList() {
             if (integrationError) {
                 console.warn('Could not fetch google integration emails for employees list:', integrationError)
             } else {
+                const integrationEntries = ((integrations || []) as Array<{ user_id: string; email: string | null }>)
+                    .map((entry): [string, string] => [
+                        String(entry.user_id || '').trim(),
+                        String(entry.email || '').trim().toLowerCase()
+                    ])
+                    .filter((entry): entry is [string, string] => Boolean(entry[0]) && isValidEmail(entry[1]))
                 integrationMap = new Map(
-                    ((integrations || []) as Array<{ user_id: string; email: string | null }>)
-                        .map((entry) => [String(entry.user_id || '').trim(), String(entry.email || '').trim().toLowerCase()])
-                        .filter((entry) => Boolean(entry[0]) && isValidEmail(entry[1]))
+                    integrationEntries
                 )
             }
         }

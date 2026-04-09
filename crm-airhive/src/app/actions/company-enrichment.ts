@@ -19,6 +19,7 @@ type EnrichmentCompanyRow = {
     website: string | null
     ubicacion: string | null
     telefono: string | null
+    email: string | null
     alcance_empresa: string | null
     sede_objetivo: string | null
     sedes_sugeridas: string[] | null
@@ -47,6 +48,7 @@ const OPTIONAL_EMPRESA_ENRICHMENT_COLUMNS = new Set([
     'enrichment_last_error',
     'enriched_at',
     'telefono',
+    'email',
     'alcance_empresa',
     'sede_objetivo',
     'sedes_sugeridas'
@@ -69,6 +71,7 @@ const ENRICHMENT_COMPANY_REQUIRED_COLUMNS = [
 
 const ENRICHMENT_COMPANY_OPTIONAL_COLUMNS = [
     'telefono',
+    'email',
     'alcance_empresa',
     'sede_objetivo',
     'sedes_sugeridas'
@@ -140,6 +143,13 @@ function normalizeCompanyPhone(rawPhone: unknown): string | null {
     if (compact.startsWith('+')) return `+${digits}`.slice(0, 18)
     if (digits.length === 12 && digits.startsWith('52')) return `+${digits}`.slice(0, 18)
     return digits.slice(0, 16)
+}
+
+function normalizeCompanyEmail(rawEmail: unknown): string | null {
+    const trimmed = String(rawEmail || '').trim().toLowerCase()
+    if (!trimmed) return null
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) return null
+    return trimmed.slice(0, 180)
 }
 
 function isLikelyWebsite(rawWebsite: string): boolean {
@@ -401,6 +411,7 @@ async function runEnrichmentForCompany(
             website: company.website,
             ubicacion: company.ubicacion,
             telefono: company.telefono,
+            email: company.email,
             industria: company.industria,
             descripcion: company.descripcion,
             tamano: company.tamano
@@ -439,6 +450,13 @@ async function runEnrichmentForCompany(
         if (canApplyPhone) {
             updatePayload.telefono = normalizedSuggestedPhone
             appliedFields.push('telefono')
+        }
+
+        const normalizedSuggestedEmail = normalizeCompanyEmail(suggestion.email)
+        const canApplyEmail = normalizedSuggestedEmail && (options.applyMode === 'overwrite' || isBlank(company.email))
+        if (canApplyEmail) {
+            updatePayload.email = normalizedSuggestedEmail
+            appliedFields.push('email')
         }
 
         const normalizedScope = normalizeCompanyScopeValue(suggestion.alcance_empresa)
@@ -591,6 +609,7 @@ export async function previewCompanyAutofillByWebsite(input: {
     nombre?: string | null
     ubicacion?: string | null
     telefono?: string | null
+    email?: string | null
     industria?: string | null
     descripcion?: string | null
     tamano?: number | null
@@ -609,6 +628,7 @@ export async function previewCompanyAutofillByWebsite(input: {
             website: normalizedWebsite,
             ubicacion: input?.ubicacion || null,
             telefono: input?.telefono || null,
+            email: input?.email || null,
             industria: input?.industria || null,
             descripcion: input?.descripcion || null,
             tamano: Number.isFinite(Number(input?.tamano)) ? Number(input?.tamano) : null
@@ -619,6 +639,7 @@ export async function previewCompanyAutofillByWebsite(input: {
             suggestion.industria ? 'industria' : null,
             suggestion.ubicacion ? 'ubicacion' : null,
             suggestion.telefono ? 'telefono' : null,
+            suggestion.email ? 'email' : null,
             suggestion.alcance_empresa ? 'alcance_empresa' : null,
             suggestion.sede_objetivo_sugerida ? 'sede_objetivo' : null,
             (suggestion.sedes_sugeridas || []).length > 0 ? 'sedes_sugeridas' : null,
@@ -667,7 +688,8 @@ export async function enrichMissingCompanies(options?: {
                 const missingSize = !Number(company.tamano || 0)
                 const missingLocation = isBlank(company.ubicacion)
                 const missingIndustry = isBlank(company.industria)
-                return missingSize || missingLocation || missingIndustry
+                const missingEmail = isBlank(company.email)
+                return missingSize || missingLocation || missingIndustry || missingEmail
             })
             .slice(0, limit)
 

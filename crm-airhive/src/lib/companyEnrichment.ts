@@ -7,6 +7,7 @@ export type CompanyEnrichmentInput = {
     website?: string | null
     ubicacion?: string | null
     telefono?: string | null
+    email?: string | null
     industria?: string | null
     descripcion?: string | null
     tamano?: number | null
@@ -25,6 +26,7 @@ export type CompanyEnrichmentSuggestion = {
     sedes_sugeridas: string[]
     ubicacion: string | null
     telefono: string | null
+    email: string | null
     industria: string | null
     confidence: number
     sources: string[]
@@ -278,6 +280,7 @@ function buildSearchBlob(input: CompanyEnrichmentInput, snapshot: WebsiteSnapsho
         input.industria,
         input.ubicacion,
         input.telefono,
+        input.email,
         snapshot?.title,
         snapshot?.description,
         snapshot?.bodyText
@@ -707,6 +710,96 @@ function normalizePhoneCandidate(raw: unknown): string {
     }
 
     return plusless.slice(0, 16)
+}
+
+function normalizeEmailCandidate(raw: unknown): string {
+    const trimmed = String(raw || '').trim().toLowerCase()
+    if (!trimmed) return ''
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) return ''
+    return trimmed
+}
+
+function inferEmailFromText(
+    searchBlob: string,
+    existingEmail: string,
+    website: string
+): { value: string | null; confidence: number; signal: string | null } {
+    const normalizedExisting = normalizeEmailCandidate(existingEmail)
+    if (normalizedExisting) {
+        return { value: normalizedExisting, confidence: 0.96, signal: 'email_actual' }
+    }
+
+    const normalizedBlob = String(searchBlob || '')
+    if (!normalizedBlob) {
+        return { value: null, confidence: 0, signal: null }
+    }
+
+    const websiteProfile = getWebsiteDomainProfile(website)
+    const emailMatches = normalizedBlob.matchAll(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi)
+    const seen = new Set<string>()
+
+    let bestValue: string | null = null
+    let bestScore = 0
+    let bestSignal: string | null = null
+
+    for (const match of emailMatches) {
+        const rawEmail = String(match?.[0] || '').trim()
+        const email = normalizeEmailCandidate(rawEmail)
+        if (!email || seen.has(email)) continue
+        seen.add(email)
+
+        const [localPartRaw, domainRaw] = email.split('@')
+        const localPart = String(localPartRaw || '')
+        const domain = String(domainRaw || '').toLowerCase()
+        if (!localPart || !domain) continue
+
+        const index = Number(match?.index || 0)
+        const context = normalizedBlob.slice(Math.max(0, index - 64), Math.min(normalizedBlob.length, index + rawEmail.length + 64))
+
+        let score = 0.46
+        if (['info', 'contacto', 'contact', 'ventas', 'soporte', 'support', 'hello'].some((token) => localPart.includes(token))) {
+            score += 0.1
+        }
+        if (['contacto', 'contact', 'email', 'correo', 'ventas', 'soporte', 'support'].some((keyword) => context.includes(keyword))) {
+            score += 0.18
+        }
+        if (/(noreply|no-reply|donotreply|do-not-reply|no_reply)/i.test(localPart)) {
+            score -= 0.26
+        }
+
+        if (websiteProfile?.hostname) {
+            if (domain === websiteProfile.hostname || domain.endsWith(`.${websiteProfile.hostname}`)) {
+                score += 0.2
+            } else {
+                const emailDomainProfile = profileDomain(domain)
+                if (emailDomainProfile?.stem && emailDomainProfile.stem === websiteProfile.stem) {
+                    score += 0.14
+                } else {
+                    score -= 0.12
+                }
+            }
+        }
+
+        const clampedScore = clampNumber(score, 0, 0.95)
+        if (clampedScore > bestScore) {
+            bestScore = clampedScore
+            bestValue = email
+            if (context.includes('ventas')) bestSignal = 'email_keyword_ventas'
+            else if (context.includes('soporte') || context.includes('support')) bestSignal = 'email_keyword_support'
+            else if (context.includes('contacto') || context.includes('contact')) bestSignal = 'email_keyword_contacto'
+            else bestSignal = 'email_patron_texto'
+        }
+    }
+
+    if (!bestValue || bestScore < 0.5) {
+        return { value: null, confidence: 0, signal: null }
+    }
+
+    return {
+        value: bestValue,
+        confidence: bestScore,
+        signal: bestSignal
+    }
 }
 
 function inferPhoneFromText(
@@ -1445,6 +1538,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
     const sizeInference = inferSizeFromText(searchBlob, input.tamano, normalizedWebsite)
     const locationInference = inferLocationFromText(searchBlob, String(input.ubicacion || ''), normalizedWebsite)
     const phoneInference = inferPhoneFromText(searchBlob, String(input.telefono || ''), normalizedWebsite)
+    const emailInference = inferEmailFromText(searchBlob, String(input.email || ''), normalizedWebsite)
     const industryInference = inferIndustryFromText(searchBlob, String(input.industria || ''))
     const rawSiteCandidates = extractSiteCandidates(searchBlob, locationInference.value)
     const scopeInference = inferCompanyScope(searchBlob, locationInference.value, rawSiteCandidates, normalizedWebsite)
@@ -1460,6 +1554,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         sizeInference.confidenceScore,
         locationInference.confidence,
         phoneInference.confidence,
+        emailInference.confidence,
         industryInference.confidence,
         scopeInference.confidence
     ].filter((value) => Number.isFinite(value) && value > 0)
@@ -1473,6 +1568,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         sizeInference.signal,
         locationInference.signal,
         phoneInference.signal,
+        emailInference.signal,
         industryInference.signal,
         scopeInference.signal
     ].filter((value): value is string => !!value)
@@ -1486,6 +1582,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         companyNameInference.value ? 1 : 0,
         sizeInference.size ? 1 : 0,
         locationInference.value ? 1 : 0,
+        emailInference.value ? 1 : 0,
         industryInference.value ? 1 : 0
     ].reduce((acc, value) => acc + value, 0)
 
@@ -1502,6 +1599,7 @@ export async function generateCompanyEnrichmentSuggestion(input: CompanyEnrichme
         sedes_sugeridas: siteCandidates,
         ubicacion: locationInference.value,
         telefono: phoneInference.value,
+        email: emailInference.value,
         industria: industryInference.value,
         confidence: Number(confidence.toFixed(4)),
         sources,

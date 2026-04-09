@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
+    // Este endpoint no toca datos sensibles del CRM; evitar auth middleware
+    // previene redirecciones HTML a /login dentro de fetch del juego.
+    if (request.nextUrl.pathname.startsWith('/api/games/consonants')) {
+        return NextResponse.next()
+    }
+
     let response = NextResponse.next({
         request: {
             headers: request.headers,

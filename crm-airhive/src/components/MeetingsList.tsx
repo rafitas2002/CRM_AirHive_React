@@ -6,10 +6,12 @@ import { createClient } from '@/lib/supabase'
 import { getLeadMeetings, getLeadSnapshots, cancelMeeting, getMeetingPostponeCancelForecastForLead, type MeetingPostponeCancelForecast } from '@/lib/meetingsService'
 import { deleteMeetingAction } from '@/app/actions/meetings'
 import ConfirmModal from './ConfirmModal'
-import { Building2, CalendarDays, Camera, CheckCircle2, Clock3, Hourglass, Phone, TriangleAlert, Video, Users } from 'lucide-react'
+import { Building2, CalendarDays, Camera, CheckCircle2, Clock3, Hourglass, MapPinned, Phone, TriangleAlert, Video, Users } from 'lucide-react'
 
 type Meeting = Database['public']['Tables']['meetings']['Row']
 type Snapshot = Database['public']['Tables']['forecast_snapshots']['Row']
+const OBJECTIVES_MARKER = '[OBJETIVOS]:'
+const MEET_LINK_MARKER = '[MEET_LINK]:'
 
 interface MeetingsListProps {
     leadId: number
@@ -153,9 +155,43 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
     const getMeetingIcon = (type: string) => {
         switch (type) {
             case 'presencial': return <Building2 size={18} />
+            case 'visita_empresa': return <MapPinned size={18} />
             case 'llamada': return <Phone size={18} />
             case 'video': return <Video size={18} />
             default: return <CalendarDays size={18} />
+        }
+    }
+
+    const parseMeetingNotes = (rawNotes: string | null) => {
+        const objectives: string[] = []
+        const details: string[] = []
+        String(rawNotes || '')
+            .split('\n')
+            .forEach((line) => {
+                const trimmed = String(line || '').trim()
+                if (!trimmed) {
+                    details.push('')
+                    return
+                }
+                if (trimmed.toUpperCase().startsWith(OBJECTIVES_MARKER)) {
+                    const payload = trimmed.slice(OBJECTIVES_MARKER.length).trim()
+                    payload
+                        .split(/[;,]+/g)
+                        .map((token) => String(token || '').trim())
+                        .filter(Boolean)
+                        .forEach((token) => {
+                            if (!objectives.includes(token)) objectives.push(token)
+                        })
+                    return
+                }
+                if (trimmed.toUpperCase().startsWith(MEET_LINK_MARKER)) {
+                    return
+                }
+                details.push(line)
+            })
+        return {
+            objectives,
+            details: details.join('\n').trim()
         }
     }
 
@@ -244,6 +280,7 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
             {meetings.filter(m => m.status !== 'cancelled').map((meeting) => {
                 const snapshot = getSnapshotForMeeting(meeting.id)
                 const startTime = new Date(meeting.start_time)
+                const notesMetadata = parseMeetingNotes(meeting.notes)
                 const isUpcoming = startTime > new Date()
                 const riskProbability = Number(meetingRiskForecast?.probabilityPct || 0)
                 const riskTone = riskProbability >= 45
@@ -322,11 +359,29 @@ export default function MeetingsList({ leadId, onEditMeeting, onRefresh }: Meeti
                                         </p>
                                     )}
 
-                                    {meeting.notes && (
+                                    {notesMetadata.objectives.length > 0 && (
+                                        <div className='mt-2 flex flex-wrap gap-1.5'>
+                                            {notesMetadata.objectives.map((objective) => (
+                                                <span
+                                                    key={`${meeting.id}-${objective}`}
+                                                    className='inline-flex items-center px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border'
+                                                    style={{
+                                                        color: 'color-mix(in srgb, #2048FF 78%, var(--text-primary))',
+                                                        borderColor: 'color-mix(in srgb, #2048FF 30%, var(--card-border))',
+                                                        background: 'color-mix(in srgb, #2048FF 9%, var(--card-bg))'
+                                                    }}
+                                                >
+                                                    {objective}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {notesMetadata.details && (
                                         <div className='mt-2'>
                                             <p className='text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1'>Notas de Preparación</p>
                                             <p className='text-xs italic p-2 rounded-lg border' style={{ color: 'var(--text-secondary)', background: 'var(--hover-bg)', borderColor: 'var(--card-border)' }}>
-                                                {meeting.notes}
+                                                {notesMetadata.details}
                                             </p>
                                         </div>
                                     )}

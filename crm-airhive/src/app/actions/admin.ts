@@ -500,6 +500,12 @@ export async function getAdminCorrelationData() {
             const normalizeMeetingType = (meeting: any) => String(meeting?.meeting_type || '').trim().toLowerCase()
             const normalizeMeetingStatus = (meeting: any) => String(meeting?.meeting_status || '').trim().toLowerCase()
             const normalizeLifecycleStatus = (meeting: any) => String(meeting?.status || '').trim().toLowerCase()
+            const isPhysicalMeeting = (meeting: any) => {
+                const mt = normalizeMeetingType(meeting)
+                return mt.includes('presencial')
+                    || mt.includes('visita_empresa')
+                    || (mt.includes('visita') && mt.includes('empresa'))
+            }
             const isHeldMeeting = (meeting: any) => {
                 const meetingStatus = normalizeMeetingStatus(meeting)
                 const lifecycleStatus = normalizeLifecycleStatus(meeting)
@@ -516,6 +522,7 @@ export async function getAdminCorrelationData() {
             }
             const meetingTypeBucket = (meeting: any): 'presencial' | 'llamada' | 'video' | 'other' => {
                 const mt = normalizeMeetingType(meeting)
+                if (mt.includes('visita_empresa') || (mt.includes('visita') && mt.includes('empresa'))) return 'presencial'
                 if (mt.includes('presencial')) return 'presencial'
                 if (mt.includes('llamada') || mt.includes('call')) return 'llamada'
                 if (mt.includes('video') || mt.includes('zoom') || mt.includes('meet')) return 'video'
@@ -564,7 +571,7 @@ export async function getAdminCorrelationData() {
             // Modal Impact
             const closedWithPhysical = closedWon.filter((c: any) => {
                 const clientMeetings = userMeetings.filter((m: any) => m.lead_id === c.id)
-                return clientMeetings.some((m: any) => m.meeting_type === 'presencial')
+                return clientMeetings.some((meeting: any) => isPhysicalMeeting(meeting))
             })
             const physicalCloseRate = closedWon.length > 0 ? (closedWithPhysical.length / closedWon.length) * 100 : 0
 
@@ -791,7 +798,12 @@ export async function getAdminCorrelationData() {
                     calificacion: Number(lead.calificacion || 0),
                     meetingsCount: leadMeetings.length,
                     responseHours,
-                    hasPhysicalMeeting: leadMeetings.some((m: any) => m.meeting_type === 'presencial') ? 1 : 0,
+                    hasPhysicalMeeting: leadMeetings.some((meeting: any) => {
+                        const mt = String(meeting?.meeting_type || '').trim().toLowerCase()
+                        return mt.includes('presencial')
+                            || mt.includes('visita_empresa')
+                            || (mt.includes('visita') && mt.includes('empresa'))
+                    }) ? 1 : 0,
                     fromPreLead: lead.original_pre_lead_id ? 1 : 0,
                     conversionLagDays,
                     closedOutcome
@@ -1814,7 +1826,12 @@ export async function getUserActivitySummary(targetUserId: string) {
         // 3.1 Modal Impact
         const closedWithPhysical = closedWon.filter((c: any) => {
             const clientMeetings = (meetings || []).filter((m: any) => m.lead_id === c.id)
-            return clientMeetings.some((m: any) => m.meeting_type === 'presencial')
+            return clientMeetings.some((meeting: any) => {
+                const mt = String(meeting?.meeting_type || '').trim().toLowerCase()
+                return mt.includes('presencial')
+                    || mt.includes('visita_empresa')
+                    || (mt.includes('visita') && mt.includes('empresa'))
+            })
         })
         const physicalCloseRate = closedWon.length > 0 ? (closedWithPhysical.length / closedWon.length) * 100 : 0
 

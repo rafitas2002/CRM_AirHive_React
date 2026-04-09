@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { normalizeCompanySizeConfidenceValue, normalizeCompanySizeEvidenceText, normalizeCompanySizeSourceValue } from '@/lib/companySizeUtils'
+import { normalizeLeadOriginValue } from '@/lib/leadOrigin'
 
 /**
  * Search for an existing company by name (case-insensitive)
@@ -45,6 +46,7 @@ export async function createCompanyFromPreLead(
         tamano_senal_principal?: string | null
         website?: string
         logo_url?: string
+        lead_origin?: string | null
     },
     userId: string
 ): Promise<{ id: string; nombre: string } | null> {
@@ -61,6 +63,7 @@ export async function createCompanyFromPreLead(
         tamano_senal_principal: normalizeCompanySizeEvidenceText(preLead.tamano_senal_principal),
         website: preLead.website || null,
         logo_url: preLead.logo_url || null,
+        lead_origin: normalizeLeadOriginValue(preLead.lead_origin) || 'sin_definir',
         source_channel: 'pre_lead',
         lifecycle_stage: 'pre_lead',
         created_by: userId,
@@ -87,6 +90,7 @@ export async function createCompanyFromPreLead(
             delete v.tamano_fuente
             delete v.tamano_confianza
             delete v.tamano_senal_principal
+            delete v.lead_origin
             return v
         })(),
         // Legacy minimal fallback
@@ -128,6 +132,7 @@ export async function findOrCreateCompany(
         tamano_senal_principal?: string | null
         website?: string
         logo_url?: string
+        lead_origin?: string | null
     },
     userId: string
 ): Promise<{ id: string; nombre: string; isNew: boolean } | null> {
